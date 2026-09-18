@@ -1,0 +1,28 @@
+name: devbox-edge
+services:
+  traefik:
+    image: ${TRAEFIK_IMAGE:-traefik:v3}
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --entrypoints.websecure.address=${TAILSCALE_IP:?Set the Linux host Tailscale IPv4}:${HTTPS_PORT:-443}
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=devbox-proxy
+      - --providers.file.filename=/etc/traefik/dynamic.yaml
+      - --api.dashboard=false
+      - --certificatesresolvers.dns.acme.email=${ACME_EMAIL:?Set ACME_EMAIL}
+      - --certificatesresolvers.dns.acme.storage=${ACME_STORAGE:-/certs/acme.json}
+      - --certificatesresolvers.dns.acme.caserver=${ACME_CA_SERVER:-https://acme-staging-v02.api.letsencrypt.org/directory}
+      - --certificatesresolvers.dns.acme.dnschallenge.provider=${ACME_DNS_PROVIDER:?Set the lego DNS provider}
+      - --certificatesresolvers.dns.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+    environment:
+      DEV_DOMAIN: ${DEV_DOMAIN:?Set DEV_DOMAIN}
+    env_file:
+      - dns-provider.env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - certificates:/certs
+      - ./dynamic.yaml:/etc/traefik/dynamic.yaml:ro
+volumes:
+  certificates:

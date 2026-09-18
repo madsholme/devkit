@@ -1,0 +1,25 @@
+# Keep this contract when adapting the sample to your application.
+set shell := ["sh", "-eu", "-c"]
+
+prepare:
+    @echo 'No host dependencies required by this sample.'
+
+check:
+    python3 -c 'import ast; from pathlib import Path; ast.parse(Path("app.py").read_text())'
+
+live:
+    devbox live
+
+build:
+    docker build --label "org.opencontainers.image.revision=$DEVBOX_COMMIT" --build-arg "DEVBOX_COMMIT=$DEVBOX_COMMIT" -t "$DEVBOX_IMAGE" .
+
+# The sample initializes its data with CREATE TABLE IF NOT EXISTS and INSERT OR IGNORE.
+# Real applications should implement an idempotent seed, gated on DB readiness.
+seed:
+    @echo 'Sample seeds on startup; existing data is retained.'
+
+# Fill in a registry + Dokploy adapter only after the destination is configured.
+# DEVBOX_IMAGE_ID is the exact locally reviewed image; DEVBOX_COMMIT is its source.
+publish:
+    @echo 'Team publishing is not configured. See docs/publishing.md in the kit.' >&2
+    @exit 1

@@ -1,0 +1,20 @@
+# Traefik's file provider expands these Go templates using DEV_DOMAIN.
+tls:
+  stores:
+    default:
+      defaultGeneratedCert:
+        resolver: dns
+        domain:
+          main: '*.{{ env "DEV_DOMAIN" }}'
+http:
+  routers:
+    t3:
+      rule: 'Host(`t3.{{ env "DEV_DOMAIN" }}`)'
+      entryPoints: [websecure]
+      service: t3
+      tls: {}
+  services:
+    t3:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:3773

@@ -1,0 +1,19 @@
+services:
+  web:
+    image: python:3.13-slim
+    working_dir: /app
+    command: [python, app.py]
+    environment:
+      DEVBOX_MODE: live
+      DEVBOX_COMMIT: working-files
+      DATA_DIR: /data
+    volumes:
+      - .:/app:ro
+      - data:/data
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+volumes:
+  data:

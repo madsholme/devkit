@@ -1,0 +1,9 @@
+{
+  "project": "demo",
+  "web_service": "web",
+  "web_port": 8000,
+  "compose": {
+    "live": "compose.live.yaml",
+    "review": "compose.review.yaml"
+  }
+}

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+dns-provider.env
+.DS_Store
+.env.*
+!.env.example
+acme*.json

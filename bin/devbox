@@ -1,0 +1,290 @@
+#!/usr/bin/env python3
+"""Small, single-host development workspace and preview runner."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+LABEL = "devbox.managed"
+
+
+def run(args, cwd=None, env=None, capture=False):
+    result = subprocess.run([str(a) for a in args], cwd=cwd, env=env,
+                            text=True, stdout=subprocess.PIPE if capture else None,
+                            check=True)
+    return result.stdout.strip() if capture else None
+
+
+def git(root, *args):
+    return run(["git", "-C", root, *args], capture=True)
+
+
+def fail(message):
+    raise ValueError(message)
+
+
+def slug(value, limit=22):
+    readable = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "task"
+    return readable[:limit].rstrip("-")
+
+
+def preview_name(project, identity, mode):
+    digest = hashlib.sha256((project + "\0" + identity + "\0" + mode).encode()).hexdigest()[:10]
+    return f"{slug(project, 14)}-{slug(identity, 20)}-{mode}-{digest}"
+
+
+def repository():
+    root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel"))
+    common = Path(git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+    return root, common
+
+
+def config(root):
+    path = root / "devbox.json"
+    if not path.is_file():
+        fail("Missing devbox.json. Adapt the project-template first.")
+    data = json.loads(path.read_text())
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,31}", data.get("project", "")):
+        fail("devbox.json project must be a unique lowercase project slug (1–32 characters).")
+    return data
+
+
+def domain():
+    value = os.environ.get("DEV_DOMAIN", "").lower().rstrip(".")
+    parts = value.split(".")
+    if len(parts) < 2 or len(value) > 180 or any(
+        not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", p) for p in parts
+    ):
+        fail("Set DEV_DOMAIN to your real preview domain, without a wildcard prefix.")
+    return value
+
+
+def recipe(root, name, env):
+    run(["just", "--justfile", root / "justfile", name], cwd=root, env=env)
+
+
+def docker_containers():
+    ids = run(["docker", "ps", "-aq", "--filter", f"label={LABEL}=true"], capture=True).split()
+    return json.loads(run(["docker", "inspect", *ids], capture=True)) if ids else []
+
+
+def containers_for(name):
+    return [c for c in docker_containers()
+            if c["Config"].get("Labels", {}).get("devbox.preview") == name]
+
+
+def assert_owner(name, common):
+    for c in containers_for(name):
+        if c["Config"]["Labels"].get("devbox.repository") != str(common):
+            fail("Preview name is used by another clone. Give clones distinct project names.")
+
+
+def compose(path, *args):
+    run(["docker", "compose", "--project-directory", path.parent,
+         "-f", path, "-p", path.parent.name, *args])
+
+
+def render(root, cfg, mode, env, metadata):
+    filename = cfg.get("compose", {}).get(mode, f"compose.{mode}.yaml")
+    source = (root / filename).resolve()
+    if not source.is_relative_to(root.resolve()):
+        fail("Compose file must be inside the worktree.")
+    result = json.loads(run(["docker", "compose", "--project-directory", root,
+                            "-f", source, "-p", env["DEVBOX_PREVIEW"],
+                            "config", "--format", "json"], cwd=root, env=env, capture=True))
+    services = result.get("services", {})
+    web = cfg.get("web_service", "web")
+    if web not in services:
+        fail(f"Compose file has no {web!r} web service.")
+    for service in services.values():
+        if service.get("container_name") or service.get("ports") or service.get("network_mode"):
+            fail("Task services must not set container_name, published ports, or network_mode.")
+        if mode == "review" and (service.get("build") or any(
+            v.get("type") == "bind" for v in service.get("volumes", [])
+        )):
+            fail("Review services must use built images and must not bind-mount host files.")
+        labels = service.setdefault("labels", {})
+        labels.update(metadata)
+        labels["traefik.enable"] = "false"
+    for volume in result.get("volumes", {}).values():
+        if volume.get("external") or not volume.get("name", "").startswith(env["DEVBOX_PREVIEW"] + "_"):
+            fail("Task volumes must be Compose-scoped; shared/external volumes are not allowed.")
+    for key, network in result.get("networks", {}).items():
+        if key != "proxy" and (network.get("external") or not network.get("name", "").startswith(env["DEVBOX_PREVIEW"] + "_")):
+            fail("Only the proxy network may be shared between previews.")
+    front = services[web]
+    front.setdefault("networks", {})["proxy"] = None
+    result.setdefault("networks", {})["proxy"] = {"external": True, "name": "devbox-proxy"}
+    router = env["DEVBOX_PREVIEW"]
+    front["labels"].update({
+        "traefik.enable": "true", "traefik.docker.network": "devbox-proxy",
+        f"traefik.http.routers.{router}.rule": f"Host(`{env['DEVBOX_HOST']}`)",
+        f"traefik.http.routers.{router}.entrypoints": "websecure",
+        f"traefik.http.routers.{router}.tls": "true",
+        f"traefik.http.routers.{router}.service": router,
+        f"traefik.http.services.{router}.loadbalancer.server.port": str(cfg.get("web_port", 8000)),
+    })
+    if mode == "review":
+        image = json.loads(run(["docker", "image", "inspect", env["DEVBOX_IMAGE"]], capture=True))[0]
+        # Run precisely the built web image even if its convenient tag is later changed.
+        front["image"] = image["Id"]
+        front["pull_policy"] = "never"
+        front["labels"]["devbox.image"] = image["Id"]
+    return result
+
+
+def prepare_preview(mode, ref=None):
+    root, common = repository()
+    cfg = config(root)
+    commit = git(root, "rev-parse", "--verify", "--end-of-options", (ref or "HEAD") + "^{commit}")
+    branch = git(root, "symbolic-ref", "--quiet", "--short", "HEAD") if mode == "live" and git(root, "rev-parse", "--abbrev-ref", "HEAD") != "HEAD" else ""
+    identity = (branch or "detached-" + hashlib.sha256(str(root).encode()).hexdigest()[:10]) if mode == "live" else commit
+    name = preview_name(cfg["project"], identity, mode)
+    state = common / "devbox" / "runs" / name
+    path = state / "compose.json"
+    assert_owner(name, common)
+    if path.exists():
+        # Reusing a preview never reseeds or rebuilds it. Destroy explicitly first.
+        compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+        saved = json.loads(path.read_text())
+        print(next(s["labels"]["devbox.url"] for s in saved["services"].values()))
+        return
+    state.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(state, 0o700)
+    checkout = None
+    checkout_created = False
+    try:
+        if mode == "review":
+            checkout = common / "devbox" / "checkouts" / name
+            checkout.parent.mkdir(parents=True, exist_ok=True)
+            if checkout.exists():
+                fail(f"Review checkout already exists: {checkout}. Inspect it before retrying.")
+            run(["git", "-C", root, "worktree", "add", "--detach", checkout, commit])
+            checkout_created = True
+            cfg_at_commit = config(checkout)
+            if cfg_at_commit["project"] != cfg["project"]:
+                fail("Selected commit has a different project name.")
+            cfg = cfg_at_commit
+            root = checkout
+        host = f"{name}.{domain()}"
+        env = os.environ.copy()
+        env.update(DEVBOX_PREVIEW=name, DEVBOX_HOST=host, DEVBOX_URL="https://" + host,
+                   DEVBOX_COMMIT=commit, DEVBOX_MODE=mode, DEVBOX_IMAGE=f"devbox/{cfg['project']}:{commit}",
+                   COMPOSE_PROJECT_NAME=name)
+        metadata = {LABEL: "true", "devbox.preview": name, "devbox.mode": mode,
+                    "devbox.project": cfg["project"], "devbox.repository": str(common),
+                    "devbox.commit": commit, "devbox.branch": branch,
+                    "devbox.url": env["DEVBOX_URL"]}
+        if mode == "review":
+            recipe(root, "prepare", env)
+            recipe(root, "check", env)
+            if git(root, "status", "--porcelain", "--untracked-files=all"):
+                fail("prepare/check changed the review checkout. Keep build inputs committed.")
+            recipe(root, "build", env)
+        else:
+            recipe(root, "prepare", env)
+        resolved = render(root, cfg, mode, env, metadata)
+        path.write_text(json.dumps(resolved, indent=2) + "\n")
+        os.chmod(path, 0o600)
+        compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+        print(env["DEVBOX_URL"])
+        print(f"preview={name} mode={mode} commit={commit}")
+    finally:
+        if checkout_created and checkout.exists():
+            # Never force removal of an altered worktree.
+            run(["git", "--git-dir", common, "worktree", "remove", checkout])
+
+
+def lifecycle(action, name):
+    _, common = repository()
+    if not re.fullmatch(r"[a-z0-9-]{1,63}", name):
+        fail("Use an exact preview ID from devbox ls.")
+    assert_owner(name, common)
+    path = common / "devbox" / "runs" / name / "compose.json"
+    if not path.is_file():
+        fail("No saved preview configuration in this repository.")
+    if action == "stop":
+        compose(path, "stop")
+    elif action == "start":
+        compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+    else:
+        compose(path, "down", "--volumes", "--remove-orphans")
+        path.unlink()
+        path.parent.rmdir()
+
+
+def listing():
+    seen = set()
+    print("PREVIEW\tMODE\tSTATUS\tCOMMIT\tURL")
+    for c in docker_containers():
+        labels = c["Config"]["Labels"]
+        if labels.get("traefik.enable") != "true" or labels["devbox.preview"] in seen:
+            continue
+        seen.add(labels["devbox.preview"])
+        state = c["State"]
+        status = state.get("Health", {}).get("Status", state["Status"])
+        print("\t".join([labels["devbox.preview"], labels["devbox.mode"], status,
+                         labels["devbox.commit"][:12], labels["devbox.url"]]))
+
+
+def publish(ref):
+    root, common = repository()
+    cfg = config(root)
+    commit = git(root, "rev-parse", "--verify", "--end-of-options", ref + "^{commit}")
+    name = preview_name(cfg["project"], commit, "review")
+    matches = [c for c in containers_for(name) if c["Config"]["Labels"].get("devbox.image")]
+    if len(matches) != 1:
+        fail("Build a local review first. publish requires its existing reviewed image.")
+    assert_owner(name, common)
+    image_id = matches[0]["Config"]["Labels"]["devbox.image"]
+    env = os.environ.copy()
+    env.update(DEVBOX_COMMIT=commit, DEVBOX_IMAGE_ID=image_id, DEVBOX_PREVIEW=name)
+    # An explicit per-project adapter owns registry and Dokploy configuration.
+    recipe(root, "publish", env)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("live", help="start or resume a preview of working files")
+    p = sub.add_parser("review", help="fresh build from a committed version")
+    p.add_argument("commit", nargs="?", default="HEAD")
+    p = sub.add_parser("publish", help="publish an existing reviewed image through the project recipe")
+    p.add_argument("commit", nargs="?", default="HEAD")
+    sub.add_parser("ls", help="list managed previews, including stopped ones")
+    for action in ("start", "stop", "destroy"):
+        p = sub.add_parser(action)
+        p.add_argument("preview")
+    p = sub.add_parser("new", help="create a branch/worktree without starting services")
+    p.add_argument("branch")
+    p.add_argument("--base", default="HEAD")
+    args = parser.parse_args()
+    if args.command in ("live", "review"):
+        prepare_preview(args.command, getattr(args, "commit", None))
+    elif args.command == "publish":
+        publish(args.commit)
+    elif args.command == "ls":
+        listing()
+    elif args.command == "new":
+        root, common = repository()
+        run(["git", "check-ref-format", "--branch", args.branch])
+        base = git(root, "rev-parse", "--verify", "--end-of-options", args.base + "^{commit}")
+        suffix = hashlib.sha256(args.branch.encode()).hexdigest()[:10]
+        path = common / "devbox" / "tasks" / f"{slug(args.branch)}-{suffix}"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        run(["git", "-C", root, "worktree", "add", "-b", args.branch, path, base])
+        print(path)
+    else:
+        lifecycle(args.command, args.preview)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, FileNotFoundError, subprocess.CalledProcessError) as exc:
+        print(f"devbox: {exc}", file=sys.stderr)
+        sys.exit(1)
