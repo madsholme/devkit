@@ -151,6 +151,23 @@ def current_preview(root, common):
     return candidates.pop()
 
 
+def restart_live(service):
+    # Live previews come back after a reboot; devbox stop still keeps them stopped.
+    # Services may override this, e.g. a one-shot seed service with restart: "no".
+    service.setdefault("restart", "unless-stopped")
+
+
+def up(path):
+    """Start a saved preview, adding the restart policy to live previews saved without it."""
+    saved = json.loads(path.read_text())
+    services = saved.get("services", {}).values()
+    if any(s.get("labels", {}).get("devbox.mode") == "live" and "restart" not in s for s in services):
+        for service in services:
+            restart_live(service)
+        path.write_text(json.dumps(saved, indent=2) + "\n")
+    compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+
+
 def compose(path, *args):
     run(["docker", "compose", "--project-directory", path.parent,
          "-f", path, "-p", path.parent.name, *args])
@@ -175,6 +192,8 @@ def render(root, cfg, mode, env, metadata):
             v.get("type") == "bind" for v in service.get("volumes", [])
         )):
             fail("Review services must use built images and must not bind-mount host files.")
+        if mode == "live":
+            restart_live(service)
         labels = service.setdefault("labels", {})
         labels.update(metadata)
         labels["traefik.enable"] = "false"
@@ -223,7 +242,7 @@ def prepare_preview(mode, ref=None):
         print(f"Rebinding {name} from removed worktree {previous}.", file=sys.stderr)
     elif path.exists():
         # Reusing a preview never reseeds or rebuilds it. Destroy explicitly first.
-        compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+        up(path)
         saved = json.loads(path.read_text())
         print(next(s["labels"]["devbox.url"] for s in saved["services"].values()))
         return
@@ -292,7 +311,7 @@ def lifecycle(action, name=None):
     if action == "stop":
         compose(path, "stop")
     elif action == "start":
-        compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+        up(path)
     else:
         destroy(path)
     print(f"{action}: {name}")

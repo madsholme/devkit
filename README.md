@@ -50,7 +50,10 @@ Branches are retained until you explicitly delete them.
 
 - Live: source bind mount, independent task data. The sample rereads `message.txt`
   on every request. Python code edits need a restart; adapt the recipe to your
-  real application's hot-reload server.
+  real application's hot-reload server. Live services get `restart: unless-stopped`,
+  so running live previews come back after a host reboot (with Traefik, which uses the
+  same policy); stopped ones stay stopped. Previews saved before this policy existed
+  gain it the next time `devbox live` or `devbox start` brings them up.
 - Local review: a detached checkout of an exact commit supplies build inputs.
   The web image is resolved to a Docker image ID; no review service may bind-mount
   host files. The temporary checkout is removed after the build. Test data remains
@@ -145,7 +148,9 @@ an allowlist for the sample. Rendered Compose config may contain environment sec
 it is stored privately at `<git-common-dir>/devbox/runs/<preview>/compose.json`.
 These are per-preview execution artifacts for restart/cleanup, not a task registry.
 
-Seed data must be idempotent and wait for database readiness. The sample does this
+Seed data must be idempotent and wait for database readiness. A one-shot service
+(such as a separate seed job) must set `restart: "no"` in the live Compose file, or
+the live restart policy would rerun it whenever it exits. The sample does this
 on startup without resetting existing data. For a separate seed service, gate app
 startup on its successful completion and make it safe to rerun.
 

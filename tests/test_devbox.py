@@ -61,6 +61,26 @@ class ComposeContract(unittest.TestCase):
         output = dbx.render(root, dbx.config(root), "live", self.env(), {})
         binds = [v for v in output["services"]["web"]["volumes"] if v["type"] == "bind"]
         self.assertEqual(binds[0]["source"], str(root))
+        self.assertEqual(output["services"]["web"]["restart"], "unless-stopped")
+
+    def test_review_has_no_restart_policy(self):
+        run = lambda args, **kwargs: (json.dumps([{"Id": "sha256:x"}]) if args[:3] == ["docker", "image", "inspect"]
+                                      else json.dumps({"services": {"web": {}}}))
+        with patch.object(dbx, "run", side_effect=run):
+            output = dbx.render(KIT / "project-template", {"project": "demo"}, "review", self.env(), {})
+        self.assertNotIn("restart", output["services"]["web"])
+
+    def test_saved_live_preview_gains_restart_policy(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "compose.json"
+            path.write_text(json.dumps({"services": {
+                "web": {"labels": {"devbox.mode": "live"}},
+                "seed": {"labels": {"devbox.mode": "live"}, "restart": "no"}}}))
+            with patch.object(dbx, "compose"):
+                dbx.up(path)
+            services = json.loads(path.read_text())["services"]
+            self.assertEqual(services["web"]["restart"], "unless-stopped")
+            self.assertEqual(services["seed"]["restart"], "no")
 
     def test_refuse_source_mounts_in_review_and_shared_data(self):
         cases = [
