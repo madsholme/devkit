@@ -6,3 +6,6 @@ dns-provider.env
 .env.*
 !.env.example
 acme*.json
+
+# Local scratch space (e.g. bootstrap downloads); not used by any script.
+work/
