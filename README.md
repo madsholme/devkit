@@ -14,30 +14,46 @@ See [installation status](STATUS.md) for completed runtime checks.
 
 Worktree → agent work → commit → local review → explicit team deployment → merge.
 Start a live preview whenever you want a longer back-and-forth session.
-Creating a worktree does not start services. The kit does not commit, push Git,
-merge, install system software, or configure credentials automatically.
+
+devbox does not create or delete worktrees. Your tools (T3 Code, Orca, or plain
+`git worktree add`) own them; devbox only manages the environment (containers,
+volumes, preview URL) of whichever worktree it runs in. Creating a worktree does
+not start services. The kit does not commit, push Git, merge, install system
+software, or configure credentials automatically.
 
 | Command | Behavior |
 |---|---|
-| `devbox new fix/login --base main` | New branch and worktree; prints its path |
 | `devbox live` | Start/resume current workspace's live preview |
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devbox ls` | Preview IDs, modes, web health/status, source commits and URLs |
-| `devbox stop <preview>` | Stop containers; retain data |
-| `devbox start <preview>` | Resume saved configuration; retain data |
-| `devbox destroy <preview>` | Remove containers/networks and disposable named volumes |
+| `devbox stop [preview]` | Stop containers; retain data |
+| `devbox start [preview]` | Resume saved configuration; retain data |
+| `devbox destroy [preview]` | Remove containers/networks and disposable named volumes |
+| `devbox gc [--yes]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
 | `devbox publish HEAD` | Call the project's publishing adapter with reviewed image ID |
 
 Run lifecycle commands inside the owning Git repository. `ls` works anywhere.
-To remove a finished worktree, use normal `git worktree remove <path>` after
-stopping/destroying its live preview; Git refuses removal of uncommitted work.
+Without a preview ID, `stop`, `start` and `destroy` act on the preview that belongs
+to the current worktree: its live preview, or a review started from it. If several
+match (e.g. a live and a review preview), devbox lists them and asks for an ID.
+Each preview records the worktree it was started from in its `devbox.worktree` label.
+To remove a finished worktree, run `devbox destroy` in it and then remove it with
+your tool or `git worktree remove <path>`; Git refuses removal of uncommitted work.
+If a tool already deleted the worktree, `devbox gc` lists the orphaned previews and
+`devbox gc --yes` destroys them (containers, networks, volumes and run dirs). It
+only considers previews of the current repository and never touches a preview
+whose worktree still exists. Review previews created before devbox recorded
+`devbox.worktree` are never collected; destroy them by ID.
 Branches are retained until you explicitly delete them.
 
 ## Three modes
 
 - Live: source bind mount, independent task data. The sample rereads `message.txt`
   on every request. Python code edits need a restart; adapt the recipe to your
-  real application's hot-reload server.
+  real application's hot-reload server. Live services get `restart: unless-stopped`,
+  so running live previews come back after a host reboot (with Traefik, which uses the
+  same policy); stopped ones stay stopped. Previews saved before this policy existed
+  gain it the next time `devbox live` or `devbox start` brings them up.
 - Local review: a detached checkout of an exact commit supplies build inputs.
   The web image is resolved to a Docker image ID; no review service may bind-mount
   host files. The temporary checkout is removed after the build. Test data remains
@@ -132,7 +148,9 @@ an allowlist for the sample. Rendered Compose config may contain environment sec
 it is stored privately at `<git-common-dir>/devbox/runs/<preview>/compose.json`.
 These are per-preview execution artifacts for restart/cleanup, not a task registry.
 
-Seed data must be idempotent and wait for database readiness. The sample does this
+Seed data must be idempotent and wait for database readiness. A one-shot service
+(such as a separate seed job) must set `restart: "no"` in the live Compose file, or
+the live restart policy would rerun it whenever it exits. The sample does this
 on startup without resetting existing data. For a separate seed service, gate app
 startup on its successful completion and make it safe to rerun.
 
@@ -155,7 +173,8 @@ Traefik. No unverified automatic worktree hook is required.
 ## Acceptance check
 
 1. Create a Git repository from the sample and commit it.
-2. Create `try/a` and `try-a` with `devbox new`; verify distinct names/URLs.
+2. Create worktrees for branches `try/a` and `try-a` (e.g. `git worktree add -b try/a ../try-a`);
+   verify distinct names/URLs.
 3. Start both live previews. Change each `message.txt`; verify different responses.
 4. Increment one preview's counter; the other must stay unchanged.
 5. Commit one task; run `devbox review HEAD`. Change its live message again; the

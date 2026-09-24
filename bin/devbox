@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small, single-host development workspace and preview runner."""
+"""Small, single-host preview runner for Git worktrees."""
 import argparse
 import hashlib
 import json
@@ -43,6 +43,27 @@ def repository():
     return root, common
 
 
+def worktrees(root):
+    """Map each existing worktree path of the repository to its branch ("" if detached)."""
+    trees, path, branch, prunable, locked = {}, None, "", False, False
+    for line in git(root, "worktree", "list", "--porcelain").splitlines() + [""]:
+        if line.startswith("worktree "):
+            path, branch, prunable, locked = line[len("worktree "):], "", False, False
+        elif line.startswith("branch "):
+            branch = line[len("branch "):].removeprefix("refs/heads/")
+        elif line.startswith("prunable"):
+            prunable = True
+        elif line.startswith("locked"):
+            locked = True
+        elif not line and path:
+            # A prunable worktree's directory is gone; Git just hasn't forgotten it yet.
+            # A locked one counts as existing even when its directory is unavailable.
+            if locked or (not prunable and Path(path).is_dir()):
+                trees[path] = branch
+            path = None
+    return trees
+
+
 def config(root):
     path = root / "devbox.json"
     if not path.is_file():
@@ -83,6 +104,73 @@ def assert_owner(name, common):
             fail("Preview name is used by another clone. Give clones distinct project names.")
 
 
+def run_dir(common, name):
+    return common / "devbox" / "runs" / name
+
+
+def saved_previews(common):
+    """Labels of every preview with saved configuration in this repository, by preview ID."""
+    previews = {}
+    for path in sorted((common / "devbox" / "runs").glob("*/compose.json")):
+        services = json.loads(path.read_text()).get("services", {}).values()
+        previews[path.parent.name] = next(
+            (s["labels"] for s in services if s.get("labels", {}).get(LABEL) == "true"), {})
+    return previews
+
+
+def source_worktree(labels, trees):
+    """Return (worktree, exists) for the worktree a preview came from, or None if unknown."""
+    if labels.get("devbox.worktree"):
+        return labels["devbox.worktree"], labels["devbox.worktree"] in trees
+    # Previews made before devbox.worktree was recorded: live ones are identified by branch.
+    branch = labels.get("devbox.branch")
+    if labels.get("devbox.mode") == "live" and branch:
+        path = next((p for p, b in trees.items() if b == branch), None)
+        return path or f"(branch {branch})", path is not None
+    return None
+
+
+def live_identity(root):
+    branch = git(root, "symbolic-ref", "--quiet", "--short", "HEAD") if git(root, "rev-parse", "--abbrev-ref", "HEAD") != "HEAD" else ""
+    return branch, branch or "detached-" + hashlib.sha256(str(root).encode()).hexdigest()[:10]
+
+
+def current_preview(root, common):
+    """Resolve the single preview belonging to the current worktree."""
+    trees = worktrees(root)
+    saved = saved_previews(common)
+    candidates = {name for name, labels in saved.items()
+                  if (source_worktree(labels, trees) or (None,))[0] == str(root)}
+    if (root / "devbox.json").is_file():
+        # The preview devbox live would use here, even if it predates devbox.worktree.
+        live = preview_name(config(root)["project"], live_identity(root)[1], "live")
+        if live in saved:
+            candidates.add(live)
+    if not candidates:
+        fail(f"No preview belongs to this worktree ({root}). Pass a preview ID from devbox ls.")
+    if len(candidates) > 1:
+        fail("Several previews belong to this worktree; pass one explicitly:\n" + "\n".join(
+            f"  {name}\t{saved[name].get('devbox.mode', '?')}" for name in sorted(candidates)))
+    return candidates.pop()
+
+
+def restart_live(service):
+    # Live previews come back after a reboot; devbox stop still keeps them stopped.
+    # Services may override this, e.g. a one-shot seed service with restart: "no".
+    service.setdefault("restart", "unless-stopped")
+
+
+def up(path):
+    """Start a saved preview, adding the restart policy to live previews saved without it."""
+    saved = json.loads(path.read_text())
+    services = saved.get("services", {}).values()
+    if any(s.get("labels", {}).get("devbox.mode") == "live" and "restart" not in s for s in services):
+        for service in services:
+            restart_live(service)
+        path.write_text(json.dumps(saved, indent=2) + "\n")
+    compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+
+
 def compose(path, *args):
     run(["docker", "compose", "--project-directory", path.parent,
          "-f", path, "-p", path.parent.name, *args])
@@ -107,6 +195,8 @@ def render(root, cfg, mode, env, metadata):
             v.get("type") == "bind" for v in service.get("volumes", [])
         )):
             fail("Review services must use built images and must not bind-mount host files.")
+        if mode == "live":
+            restart_live(service)
         labels = service.setdefault("labels", {})
         labels.update(metadata)
         labels["traefik.enable"] = "false"
@@ -139,17 +229,23 @@ def render(root, cfg, mode, env, metadata):
 
 def prepare_preview(mode, ref=None):
     root, common = repository()
+    source = root
     cfg = config(root)
     commit = git(root, "rev-parse", "--verify", "--end-of-options", (ref or "HEAD") + "^{commit}")
-    branch = git(root, "symbolic-ref", "--quiet", "--short", "HEAD") if mode == "live" and git(root, "rev-parse", "--abbrev-ref", "HEAD") != "HEAD" else ""
-    identity = (branch or "detached-" + hashlib.sha256(str(root).encode()).hexdigest()[:10]) if mode == "live" else commit
+    branch, identity = live_identity(root) if mode == "live" else ("", commit)
     name = preview_name(cfg["project"], identity, mode)
-    state = common / "devbox" / "runs" / name
+    state = run_dir(common, name)
     path = state / "compose.json"
     assert_owner(name, common)
-    if path.exists():
+    previous = saved_previews(common).get(name, {}).get("devbox.worktree") if path.exists() else None
+    if mode == "live" and previous and previous != str(root):
+        if previous in worktrees(root):
+            fail(f"Preview {name} belongs to the worktree {previous}.")
+        # The branch moved to a new worktree: re-render the source mount, keep the data volumes.
+        print(f"Rebinding {name} from removed worktree {previous}.", file=sys.stderr)
+    elif path.exists():
         # Reusing a preview never reseeds or rebuilds it. Destroy explicitly first.
-        compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+        up(path)
         saved = json.loads(path.read_text())
         print(next(s["labels"]["devbox.url"] for s in saved["services"].values()))
         return
@@ -177,7 +273,7 @@ def prepare_preview(mode, ref=None):
                    COMPOSE_PROJECT_NAME=name)
         metadata = {LABEL: "true", "devbox.preview": name, "devbox.mode": mode,
                     "devbox.project": cfg["project"], "devbox.repository": str(common),
-                    "devbox.commit": commit, "devbox.branch": branch,
+                    "devbox.commit": commit, "devbox.branch": branch, "devbox.worktree": str(source),
                     "devbox.url": env["DEVBOX_URL"]}
         if mode == "review":
             recipe(root, "prepare", env)
@@ -199,22 +295,58 @@ def prepare_preview(mode, ref=None):
             run(["git", "--git-dir", common, "worktree", "remove", checkout])
 
 
-def lifecycle(action, name):
-    _, common = repository()
-    if not re.fullmatch(r"[a-z0-9-]{1,63}", name):
+def destroy(path):
+    compose(path, "down", "--volumes", "--remove-orphans")
+    path.unlink()
+    path.parent.rmdir()
+
+
+def lifecycle(action, name=None):
+    root, common = repository()
+    if name is None:
+        name = current_preview(root, common)
+    elif not re.fullmatch(r"[a-z0-9-]{1,63}", name):
         fail("Use an exact preview ID from devbox ls.")
     assert_owner(name, common)
-    path = common / "devbox" / "runs" / name / "compose.json"
+    path = run_dir(common, name) / "compose.json"
     if not path.is_file():
         fail("No saved preview configuration in this repository.")
     if action == "stop":
         compose(path, "stop")
     elif action == "start":
-        compose(path, "up", "-d", "--wait", "--wait-timeout", "120")
+        up(path)
     else:
-        compose(path, "down", "--volumes", "--remove-orphans")
-        path.unlink()
-        path.parent.rmdir()
+        destroy(path)
+    print(f"{action}: {name}")
+
+
+def gc(apply):
+    """Destroy previews whose source worktree no longer exists."""
+    root, common = repository()
+    trees = worktrees(root)
+    stale, unknown = [], []
+    for name, labels in saved_previews(common).items():
+        source = source_worktree(labels, trees)
+        if source is None:
+            unknown.append(name)
+        elif not source[1]:
+            stale.append((name, labels.get("devbox.mode", "?"), source[0]))
+    if unknown:
+        print("Kept (source worktree not recorded; destroy explicitly if unneeded):")
+        print("".join(f"  {name}\n" for name in unknown), end="")
+    if not stale:
+        print("No previews with a removed worktree.")
+        return
+    print("Destroying:" if apply else "Would destroy (worktree no longer exists):")
+    for name, mode, source in stale:
+        print(f"  {name}\t{mode}\t{source}")
+    if not apply:
+        print("Run devbox gc --yes to remove their containers, networks, volumes and run dirs.")
+        return
+    for name, _, _ in stale:
+        assert_owner(name, common)
+        destroy(run_dir(common, name) / "compose.json")
+    print(f"Destroyed {len(stale)} preview(s).")
 
 
 def listing():
@@ -256,12 +388,14 @@ def main():
     p = sub.add_parser("publish", help="publish an existing reviewed image through the project recipe")
     p.add_argument("commit", nargs="?", default="HEAD")
     sub.add_parser("ls", help="list managed previews, including stopped ones")
-    for action in ("start", "stop", "destroy"):
-        p = sub.add_parser(action)
-        p.add_argument("preview")
-    p = sub.add_parser("new", help="create a branch/worktree without starting services")
-    p.add_argument("branch")
-    p.add_argument("--base", default="HEAD")
+    p = sub.add_parser("gc", help="destroy previews whose worktree no longer exists (dry run by default)")
+    p.add_argument("--yes", action="store_true", help="actually destroy them")
+    for action, verb in (("start", "resume a stopped preview; data is retained"),
+                         ("stop", "stop a preview's containers; data is retained"),
+                         ("destroy", "remove a preview's containers, networks and volumes")):
+        p = sub.add_parser(action, help=verb)
+        p.add_argument("preview", nargs="?",
+                       help="preview ID from devbox ls (default: the current worktree's preview)")
     args = parser.parse_args()
     if args.command in ("live", "review"):
         prepare_preview(args.command, getattr(args, "commit", None))
@@ -269,15 +403,8 @@ def main():
         publish(args.commit)
     elif args.command == "ls":
         listing()
-    elif args.command == "new":
-        root, common = repository()
-        run(["git", "check-ref-format", "--branch", args.branch])
-        base = git(root, "rev-parse", "--verify", "--end-of-options", args.base + "^{commit}")
-        suffix = hashlib.sha256(args.branch.encode()).hexdigest()[:10]
-        path = common / "devbox" / "tasks" / f"{slug(args.branch)}-{suffix}"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        run(["git", "-C", root, "worktree", "add", "-b", args.branch, path, base])
-        print(path)
+    elif args.command == "gc":
+        gc(args.yes)
     else:
         lifecycle(args.command, args.preview)
 
