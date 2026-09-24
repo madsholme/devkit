@@ -61,9 +61,10 @@ def main():
         run("git", "commit", "-m", "Acceptance sample", cwd=root)
         try:
             paths = []
-            for branch in ("try/a", "try-a"):
-                output = run(CLI, "new", branch, cwd=root, capture=True)
-                task = Path(output.strip().splitlines()[-1])
+            for index, branch in enumerate(("try/a", "try-a")):
+                # Worktrees are created by the user's tools; devbox only runs previews in them.
+                task = Path(tmp) / f"task-{index}"
+                run("git", "worktree", "add", "-b", branch, task, cwd=root)
                 paths.append(task)
                 run(CLI, "live", cwd=task)
             a, b = web(project, "try/a"), web(project, "try-a")

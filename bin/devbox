@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small, single-host development workspace and preview runner."""
+"""Small, single-host preview runner for Git worktrees."""
 import argparse
 import hashlib
 import json
@@ -259,9 +259,6 @@ def main():
     for action in ("start", "stop", "destroy"):
         p = sub.add_parser(action)
         p.add_argument("preview")
-    p = sub.add_parser("new", help="create a branch/worktree without starting services")
-    p.add_argument("branch")
-    p.add_argument("--base", default="HEAD")
     args = parser.parse_args()
     if args.command in ("live", "review"):
         prepare_preview(args.command, getattr(args, "commit", None))
@@ -269,15 +266,6 @@ def main():
         publish(args.commit)
     elif args.command == "ls":
         listing()
-    elif args.command == "new":
-        root, common = repository()
-        run(["git", "check-ref-format", "--branch", args.branch])
-        base = git(root, "rev-parse", "--verify", "--end-of-options", args.base + "^{commit}")
-        suffix = hashlib.sha256(args.branch.encode()).hexdigest()[:10]
-        path = common / "devbox" / "tasks" / f"{slug(args.branch)}-{suffix}"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        run(["git", "-C", root, "worktree", "add", "-b", args.branch, path, base])
-        print(path)
     else:
         lifecycle(args.command, args.preview)
 

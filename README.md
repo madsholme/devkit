@@ -14,12 +14,15 @@ See [installation status](STATUS.md) for completed runtime checks.
 
 Worktree → agent work → commit → local review → explicit team deployment → merge.
 Start a live preview whenever you want a longer back-and-forth session.
-Creating a worktree does not start services. The kit does not commit, push Git,
-merge, install system software, or configure credentials automatically.
+
+devbox does not create or delete worktrees. Your tools (T3 Code, Orca, or plain
+`git worktree add`) own them; devbox only manages the environment (containers,
+volumes, preview URL) of whichever worktree it runs in. Creating a worktree does
+not start services. The kit does not commit, push Git, merge, install system
+software, or configure credentials automatically.
 
 | Command | Behavior |
 |---|---|
-| `devbox new fix/login --base main` | New branch and worktree; prints its path |
 | `devbox live` | Start/resume current workspace's live preview |
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devbox ls` | Preview IDs, modes, web health/status, source commits and URLs |
@@ -155,7 +158,8 @@ Traefik. No unverified automatic worktree hook is required.
 ## Acceptance check
 
 1. Create a Git repository from the sample and commit it.
-2. Create `try/a` and `try-a` with `devbox new`; verify distinct names/URLs.
+2. Create worktrees for branches `try/a` and `try-a` (e.g. `git worktree add -b try/a ../try-a`);
+   verify distinct names/URLs.
 3. Start both live previews. Change each `message.txt`; verify different responses.
 4. Increment one preview's counter; the other must stay unchanged.
 5. Commit one task; run `devbox review HEAD`. Change its live message again; the
