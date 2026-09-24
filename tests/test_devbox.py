@@ -91,6 +91,28 @@ class Lifecycle(unittest.TestCase):
                 compose.assert_called_with(path, "down", "--volumes", "--remove-orphans")
                 self.assertFalse(path.exists())
 
+    def test_no_argument_resolves_current_worktree(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, other, common = Path(temp, "wt"), Path(temp, "other"), Path(temp, ".git")
+            saved = {"demo-a-live-1": {"devbox.mode": "live", "devbox.worktree": str(root)},
+                     "demo-b-live-2": {"devbox.mode": "live", "devbox.worktree": str(other)},
+                     "demo-old-live-3": {"devbox.mode": "live", "devbox.branch": "old"},
+                     "demo-abc-review-4": {"devbox.mode": "review"}}
+            trees = {str(root): "a", str(other): "b"}
+            with patch.object(dbx, "saved_previews", return_value=saved), \
+                 patch.object(dbx, "worktrees", return_value=trees):
+                self.assertEqual(dbx.current_preview(root, common), "demo-a-live-1")
+                saved["demo-abc-review-5"] = {"devbox.mode": "review", "devbox.worktree": str(root)}
+                with self.assertRaisesRegex(ValueError, "demo-a-live-1.*\n.*demo-abc-review-5"):
+                    dbx.current_preview(root, common)
+                # A legacy preview without devbox.worktree is found through its branch.
+                trees[str(root)] = "old"
+                del saved["demo-a-live-1"], saved["demo-abc-review-5"]
+                self.assertEqual(dbx.current_preview(root, common), "demo-old-live-3")
+                trees[str(root)] = "elsewhere"
+                with self.assertRaisesRegex(ValueError, "No preview"):
+                    dbx.current_preview(root, common)
+
     def test_refuse_another_clone(self):
         container = {"Config": {"Labels": {"devbox.repository": "/other/.git"}}}
         with patch.object(dbx, "containers_for", return_value=[container]):
@@ -140,6 +162,13 @@ class GitIntegration(unittest.TestCase):
         self.assertTrue(all(value == original for value in observed))
         self.assertEqual((self.root / "message.txt").read_text(), "Uncommitted live change")
         self.assertEqual(self.git("worktree", "list", "--porcelain").count("worktree "), 1)
+
+    def test_worktrees_skip_removed_directories(self):
+        kept, removed = Path(self.temp.name) / "kept", Path(self.temp.name) / "removed"
+        self.git("worktree", "add", "-b", "kept", kept)
+        self.git("worktree", "add", "--detach", removed)
+        shutil.rmtree(removed)
+        self.assertEqual(dbx.worktrees(self.root), {str(self.root): "main", str(kept): "kept"})
 
     def test_existing_checkout_is_never_removed_on_failure(self):
         name = dbx.preview_name("demo", self.commit, "review")

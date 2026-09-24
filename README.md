@@ -26,12 +26,16 @@ software, or configure credentials automatically.
 | `devbox live` | Start/resume current workspace's live preview |
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devbox ls` | Preview IDs, modes, web health/status, source commits and URLs |
-| `devbox stop <preview>` | Stop containers; retain data |
-| `devbox start <preview>` | Resume saved configuration; retain data |
-| `devbox destroy <preview>` | Remove containers/networks and disposable named volumes |
+| `devbox stop [preview]` | Stop containers; retain data |
+| `devbox start [preview]` | Resume saved configuration; retain data |
+| `devbox destroy [preview]` | Remove containers/networks and disposable named volumes |
 | `devbox publish HEAD` | Call the project's publishing adapter with reviewed image ID |
 
 Run lifecycle commands inside the owning Git repository. `ls` works anywhere.
+Without a preview ID, `stop`, `start` and `destroy` act on the preview that belongs
+to the current worktree: its live preview, or a review started from it. If several
+match (e.g. a live and a review preview), devbox lists them and asks for an ID.
+Each preview records the worktree it was started from in its `devbox.worktree` label.
 To remove a finished worktree, use normal `git worktree remove <path>` after
 stopping/destroying its live preview; Git refuses removal of uncommitted work.
 Branches are retained until you explicitly delete them.
