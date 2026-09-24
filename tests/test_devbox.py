@@ -113,6 +113,24 @@ class Lifecycle(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "No preview"):
                     dbx.current_preview(root, common)
 
+    def test_gc_only_removes_previews_of_removed_worktrees(self):
+        with tempfile.TemporaryDirectory() as temp:
+            common = Path(temp)
+            saved = {"demo-kept-live-1": {"devbox.mode": "live", "devbox.worktree": "/wt/kept"},
+                     "demo-gone-live-2": {"devbox.mode": "live", "devbox.worktree": "/wt/gone"},
+                     "demo-gone-review-3": {"devbox.mode": "review", "devbox.worktree": "/wt/gone"},
+                     "demo-old-live-4": {"devbox.mode": "live", "devbox.branch": "deleted"},
+                     "demo-old-review-5": {"devbox.mode": "review"}}
+            with patch.object(dbx, "repository", return_value=(common, common)), \
+                 patch.object(dbx, "saved_previews", return_value=saved), \
+                 patch.object(dbx, "worktrees", return_value={"/wt/kept": "kept"}), \
+                 patch.object(dbx, "assert_owner"), patch.object(dbx, "destroy") as destroy:
+                dbx.gc(apply=False)
+                destroy.assert_not_called()
+                dbx.gc(apply=True)
+            removed = {call.args[0].parent.name for call in destroy.call_args_list}
+            self.assertEqual(removed, {"demo-gone-live-2", "demo-gone-review-3", "demo-old-live-4"})
+
     def test_refuse_another_clone(self):
         container = {"Config": {"Labels": {"devbox.repository": "/other/.git"}}}
         with patch.object(dbx, "containers_for", return_value=[container]):

@@ -29,6 +29,7 @@ software, or configure credentials automatically.
 | `devbox stop [preview]` | Stop containers; retain data |
 | `devbox start [preview]` | Resume saved configuration; retain data |
 | `devbox destroy [preview]` | Remove containers/networks and disposable named volumes |
+| `devbox gc [--yes]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
 | `devbox publish HEAD` | Call the project's publishing adapter with reviewed image ID |
 
 Run lifecycle commands inside the owning Git repository. `ls` works anywhere.
@@ -36,8 +37,13 @@ Without a preview ID, `stop`, `start` and `destroy` act on the preview that belo
 to the current worktree: its live preview, or a review started from it. If several
 match (e.g. a live and a review preview), devbox lists them and asks for an ID.
 Each preview records the worktree it was started from in its `devbox.worktree` label.
-To remove a finished worktree, use normal `git worktree remove <path>` after
-stopping/destroying its live preview; Git refuses removal of uncommitted work.
+To remove a finished worktree, run `devbox destroy` in it and then remove it with
+your tool or `git worktree remove <path>`; Git refuses removal of uncommitted work.
+If a tool already deleted the worktree, `devbox gc` lists the orphaned previews and
+`devbox gc --yes` destroys them (containers, networks, volumes and run dirs). It
+only considers previews of the current repository and never touches a preview
+whose worktree still exists. Review previews created before devbox recorded
+`devbox.worktree` are never collected; destroy them by ID.
 Branches are retained until you explicitly delete them.
 
 ## Three modes

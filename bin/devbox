@@ -298,6 +298,35 @@ def lifecycle(action, name=None):
     print(f"{action}: {name}")
 
 
+def gc(apply):
+    """Destroy previews whose source worktree no longer exists."""
+    root, common = repository()
+    trees = worktrees(root)
+    stale, unknown = [], []
+    for name, labels in saved_previews(common).items():
+        source = source_worktree(labels, trees)
+        if source is None:
+            unknown.append(name)
+        elif not source[1]:
+            stale.append((name, labels.get("devbox.mode", "?"), source[0]))
+    if unknown:
+        print("Kept (source worktree not recorded; destroy explicitly if unneeded):")
+        print("".join(f"  {name}\n" for name in unknown), end="")
+    if not stale:
+        print("No previews with a removed worktree.")
+        return
+    print("Destroying:" if apply else "Would destroy (worktree no longer exists):")
+    for name, mode, source in stale:
+        print(f"  {name}\t{mode}\t{source}")
+    if not apply:
+        print("Run devbox gc --yes to remove their containers, networks, volumes and run dirs.")
+        return
+    for name, _, _ in stale:
+        assert_owner(name, common)
+        destroy(run_dir(common, name) / "compose.json")
+    print(f"Destroyed {len(stale)} preview(s).")
+
+
 def listing():
     seen = set()
     print("PREVIEW\tMODE\tSTATUS\tCOMMIT\tURL")
@@ -337,6 +366,8 @@ def main():
     p = sub.add_parser("publish", help="publish an existing reviewed image through the project recipe")
     p.add_argument("commit", nargs="?", default="HEAD")
     sub.add_parser("ls", help="list managed previews, including stopped ones")
+    p = sub.add_parser("gc", help="destroy previews whose worktree no longer exists (dry run by default)")
+    p.add_argument("--yes", action="store_true", help="actually destroy them")
     for action, verb in (("start", "resume a stopped preview; data is retained"),
                          ("stop", "stop a preview's containers; data is retained"),
                          ("destroy", "remove a preview's containers, networks and volumes")):
@@ -350,6 +381,8 @@ def main():
         publish(args.commit)
     elif args.command == "ls":
         listing()
+    elif args.command == "gc":
+        gc(args.yes)
     else:
         lifecycle(args.command, args.preview)
 
