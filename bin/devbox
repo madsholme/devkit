@@ -45,17 +45,20 @@ def repository():
 
 def worktrees(root):
     """Map each existing worktree path of the repository to its branch ("" if detached)."""
-    trees, path, branch, prunable = {}, None, "", False
+    trees, path, branch, prunable, locked = {}, None, "", False, False
     for line in git(root, "worktree", "list", "--porcelain").splitlines() + [""]:
         if line.startswith("worktree "):
-            path, branch, prunable = line[len("worktree "):], "", False
+            path, branch, prunable, locked = line[len("worktree "):], "", False, False
         elif line.startswith("branch "):
             branch = line[len("branch "):].removeprefix("refs/heads/")
         elif line.startswith("prunable"):
             prunable = True
+        elif line.startswith("locked"):
+            locked = True
         elif not line and path:
             # A prunable worktree's directory is gone; Git just hasn't forgotten it yet.
-            if not prunable and Path(path).is_dir():
+            # A locked one counts as existing even when its directory is unavailable.
+            if locked or (not prunable and Path(path).is_dir()):
                 trees[path] = branch
             path = None
     return trees

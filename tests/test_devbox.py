@@ -205,8 +205,12 @@ class GitIntegration(unittest.TestCase):
         kept, removed = Path(self.temp.name) / "kept", Path(self.temp.name) / "removed"
         self.git("worktree", "add", "-b", "kept", kept)
         self.git("worktree", "add", "--detach", removed)
+        locked = Path(self.temp.name) / "locked"
+        self.git("worktree", "add", "--lock", "-b", "locked", locked)
         shutil.rmtree(removed)
-        self.assertEqual(dbx.worktrees(self.root), {str(self.root): "main", str(kept): "kept"})
+        shutil.rmtree(locked)
+        self.assertEqual(dbx.worktrees(self.root),
+                         {str(self.root): "main", str(kept): "kept", str(locked): "locked"})
 
     def test_existing_checkout_is_never_removed_on_failure(self):
         name = dbx.preview_name("demo", self.commit, "review")
