@@ -573,6 +573,7 @@ class Resources:
         self.history = collections.deque(maxlen=self.HISTORY)
         self.containers, self.processes, self.wanted, self.cpu = [], [], 0.0, None
         self.proc_times, self.proc_clock = {}, None
+        self.wake = threading.Event()
         threading.Thread(target=self.loop, daemon=True).start()
 
     @staticmethod
@@ -672,16 +673,24 @@ class Resources:
                         self.containers, self.processes = containers, processes
             except (OSError, ValueError, subprocess.CalledProcessError) as exc:
                 print(f"devbox web: resource sample failed: {exc}", file=sys.stderr, flush=True)
-            time.sleep(max(0.5, self.INTERVAL - (time.time() - started)))
+            self.wake.wait(max(0.5, self.INTERVAL - (time.time() - started)))
+            self.wake.clear()
 
-    def snapshot(self):
+    def snapshot(self, full=False):
         import time
-        # docker stats is comparatively costly; only sample containers while someone is looking.
-        self.wanted = time.time()
+        result = {"cores": os.cpu_count(), "uptime": float(open("/proc/uptime").read().split()[0]),
+                  "interval": self.INTERVAL}
+        if full:
+            # docker stats is comparatively costly; only sample containers while someone is looking.
+            if time.time() - self.wanted > 60:
+                self.containers, self.processes = [], []  # Stale: show "collecting" instead.
+                self.wake.set()
+            self.wanted = time.time()
         with self.lock:
-            return {"cores": os.cpu_count(), "uptime": float(open("/proc/uptime").read().split()[0]),
-                    "interval": self.INTERVAL, "history": list(self.history), "containers": self.containers,
-                    "processes": self.processes}
+            result["history"] = list(self.history)
+            if full:
+                result.update(containers=self.containers, processes=self.processes)
+        return result
 
 
 def serve(host, port):
@@ -735,7 +744,8 @@ def serve(host, port):
                 elif url.path == "/api/overview":
                     self.send(200, json.dumps(overview()).encode(), "application/json")
                 elif url.path == "/api/resources":
-                    self.send(200, json.dumps(resources.snapshot()).encode(), "application/json")
+                    full = parse_qs(url.query).get("full", [""])[0] == "1"
+                    self.send(200, json.dumps(resources.snapshot(full)).encode(), "application/json")
                 elif url.path == "/api/container":
                     query = parse_qs(url.query)
                     details = container_details(query.get("preview", [""])[0], query.get("service", [None])[0])

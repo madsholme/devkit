@@ -132,9 +132,9 @@ or digests when commissioning the host. Do not run automatic image updates.
 
 ## Web overview
 
-https://devbox.DEV_DOMAIN shows a system monitor (CPU, memory, disk and swap with
-10-minute history, per-container usage, top host processes; sampled every 5s, containers
-and processes only while the page is open), previews (mode, health, branch/commit, uptime and
+https://devbox.DEV_DOMAIN shows a CPU/memory/disk summary bar that opens a system
+monitor (10-minute history, swap, per-container usage and top host processes; containers
+and processes are sampled only while it is open), previews (mode, health, branch/commit, uptime and
 URL; expand one for all its containers with ports and a details view: health,
 networks, mounts, environment with secret-looking values masked, and labels), logs for any container (recent lines, or
 followed live), each repository's worktrees and whether they have a

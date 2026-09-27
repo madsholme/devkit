@@ -72,6 +72,23 @@ button {
 button:hover { border-color: var(--accent); }
 .actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .routed { color: var(--accent); }
+.sysbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; width: 100%; text-align: left;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px;
+  color: var(--text); font-size: 13px; margin-bottom: 8px;
+}
+.sysbar:hover { border-color: var(--accent); }
+.sys-item { display: inline-flex; align-items: center; gap: 8px; }
+.sys-k { color: var(--muted); }
+.sys-v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.mini { display: inline-block; width: 64px; }
+.mini .meter { margin: 0; height: 5px; }
+.sys-more { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-size: 12.5px; }
+.sys-more svg { width: 14px; height: 14px; }
+dialog.wide { width: min(1200px, calc(100vw - 32px)); }
+#system-sub { flex: 1; font-size: 12.5px; }
+.system-body { padding-top: 12px; }
+.system-body .subhead:first-of-type { margin-top: 18px; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
 .tile { padding: 12px 14px; }
 .tile .label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
@@ -158,6 +175,9 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
   .containers td { padding-left: 12px; }
   .actions { flex-wrap: wrap; }
   .cmd { max-width: 44vw; }
+  .sysbar { gap: 8px 18px; }
+  .mini { width: 40px; }
+  .sys-more { margin-left: 0; }
   .tile .spark { height: 36px; }
   .dlg-head { flex-wrap: wrap; }
   th, td { padding: 8px; }
@@ -173,20 +193,12 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
   </header>
   <div id="error" class="error" hidden></div>
 
-  <details class="section" id="sec-system" open>
-    <summary><h2>System</h2><span class="count" id="system-count"></span></summary>
-    <div class="tiles" id="tiles"></div>
-    <div class="subhead">Containers</div>
-    <div class="panel"><table>
-      <thead><tr><th>Container</th><th class="num">CPU</th><th class="num">Memory</th><th class="num hide-sm">Net in / out</th><th class="num hide-sm">Disk read / write</th><th class="num hide-sm">PIDs</th></tr></thead>
-      <tbody id="ctr-stats"></tbody>
-    </table></div>
-    <div class="subhead">Top processes</div>
-    <div class="panel"><table>
-      <thead><tr><th class="num hide-sm">PID</th><th class="hide-sm">User</th><th>Process</th><th class="num">CPU</th><th class="num">Memory</th></tr></thead>
-      <tbody id="procs"></tbody>
-    </table></div>
-  </details>
+  <button class="sysbar" id="system-open" title="Show system details" aria-haspopup="dialog">
+    <span class="sys-item"><span class="sys-k">CPU</span><span class="sys-v" id="sum-cpu">–</span><span class="mini" id="sum-cpu-m"></span></span>
+    <span class="sys-item"><span class="sys-k">Memory</span><span class="sys-v" id="sum-mem">–</span><span class="mini" id="sum-mem-m"></span></span>
+    <span class="sys-item"><span class="sys-k">Disk</span><span class="sys-v" id="sum-disk">–</span><span class="mini" id="sum-disk-m"></span></span>
+    <span class="sys-more">Details<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg></span>
+  </button>
 
   <h2>Previews <span class="count" id="preview-count"></span></h2>
   <div class="filters">
@@ -221,6 +233,24 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
     </table></div>
   </details>
 </main>
+
+<dialog id="system" class="wide">
+  <div class="dlg-head"><span id="system-title"><b>System</b></span><span class="muted" id="system-sub"></span><button id="system-close">Close</button></div>
+  <div class="details-body system-body">
+    <div class="tiles" id="tiles"></div>
+    <div class="subhead">Containers</div>
+    <div class="panel"><table>
+      <thead><tr><th>Container</th><th class="num">CPU</th><th class="num">Memory</th><th class="num hide-sm">Net in / out</th><th class="num hide-sm">Disk read / write</th><th class="num hide-sm">PIDs</th></tr></thead>
+      <tbody id="ctr-stats"></tbody>
+    </table></div>
+    <div class="subhead">Top processes</div>
+    <div class="panel"><table>
+      <thead><tr><th class="num hide-sm">PID</th><th class="hide-sm">User</th><th>Process</th><th class="num">CPU</th><th class="num">Memory</th></tr></thead>
+      <tbody id="procs"></tbody>
+    </table></div>
+
+  </div>
+</dialog>
 
 <dialog id="details">
   <div class="dlg-head"><span class="mono" id="details-title"></span><button id="details-close">Close</button></div>
@@ -469,7 +499,14 @@ function renderResources(r) {
   const memPct = 100 * last.mem_used / last.mem_total, diskPct = 100 * last.disk_used / last.disk_total;
   const swapPct = last.swap_total ? 100 * last.swap_used / last.swap_total : 0;
   const days = Math.floor(r.uptime / 86400), hours = Math.floor(r.uptime % 86400 / 3600);
-  $("system-count").textContent = `CPU ${last.cpu.toFixed(0)}% · memory ${memPct.toFixed(0)}% · disk ${diskPct.toFixed(0)}%`;
+  $("sum-cpu").innerHTML = `${last.cpu.toFixed(0)}% ${flag(last.cpu)}`;
+  $("sum-mem").innerHTML = `${(last.mem_used / GB).toFixed(1)} / ${(last.mem_total / GB).toFixed(0)} GB ${flag(memPct)}`;
+  $("sum-disk").innerHTML = `${diskPct.toFixed(0)}% ${flag(diskPct)}`;
+  $("sum-cpu-m").innerHTML = meter(last.cpu);
+  $("sum-mem-m").innerHTML = meter(memPct);
+  $("sum-disk-m").innerHTML = meter(diskPct);
+  if (!$("system").open) return;
+  $("system-sub").textContent = `${r.cores} cores · up ${days}d ${hours}h · every ${r.interval}s`;
   const series = (key, fn, fmt) => { const s = h.map(x => [x.t, fn(x)]); s.fmt = fmt; sparkData[key] = s; };
   series("cpu", x => x.cpu, v => v.toFixed(1) + "%");
   series("mem", x => 100 * x.mem_used / x.mem_total, v => v.toFixed(1) + "%");
@@ -487,13 +524,13 @@ function renderResources(r) {
       <div class="sub">${bytes(last.disk_total - last.disk_used)} free</div></div>
     <div class="panel tile"><div class="label"><span>Swap</span>${flag(swapPct)}</div>
       <div class="value">${bytes(last.swap_used)} <small>of ${bytes(last.swap_total)}</small></div>${meter(swapPct)}
-      <div class="sub">up ${days}d ${hours}h · sampled every ${r.interval}s</div></div>`;
-  $("ctr-stats").innerHTML = r.containers.map(c => `<tr>
+      <div class="sub">${swapPct.toFixed(0)}% used</div></div>`;
+  $("ctr-stats").innerHTML = (r.containers || []).map(c => `<tr>
       <td class="mono">${c.preview ? `${esc(c.preview)} · <b>${esc(c.service)}</b>` : esc(c.name)}</td>
       <td class="num">${c.cpu.toFixed(1)}%</td><td class="num">${esc(c.mem)}</td>
       <td class="num hide-sm">${esc(c.net)}</td><td class="num hide-sm">${esc(c.block)}</td><td class="num hide-sm">${esc(c.pids)}</td>
     </tr>`).join("") || '<tr><td colspan="6" class="muted">collecting…</td></tr>';
-  $("procs").innerHTML = r.processes.map(p => `<tr>
+  $("procs").innerHTML = (r.processes || []).map(p => `<tr>
       <td class="num mono hide-sm">${p.pid}</td><td class="hide-sm">${esc(p.user)}</td>
       <td><div class="mono cmd" title="${esc(p.command)}"><b>${esc(p.name)}</b> <span class="muted">${esc(p.command)}</span></div></td>
       <td class="num">${p.cpu.toFixed(1)}%</td><td class="num">${bytes(p.rss)}</td>
@@ -501,9 +538,10 @@ function renderResources(r) {
 }
 
 async function loadResources() {
-  if (document.hidden || !$("sec-system").open) return;
+  if (document.hidden) return;
   try {
-    const res = await fetch("api/resources");
+    // Container and process sampling only runs while the details are open.
+    const res = await fetch("api/resources" + ($("system").open ? "?full=1" : ""));
     if (res.ok) renderResources(await res.json());
   } catch {}
 }
@@ -623,9 +661,10 @@ for (const d of document.querySelectorAll("details.section")) {
 
 loadResources();
 setInterval(loadResources, 5000);
-$("sec-system").addEventListener("toggle", loadResources);
+$("system-open").onclick = () => { $("system").showModal(); loadResources(); };
+$("system-close").onclick = () => $("system").close();
 load();
-setInterval(() => { if (!document.hidden && !$("logs").open && !$("details").open) load(); }, 10000);
+setInterval(() => { if (!document.hidden && !document.querySelector("dialog[open]")) load(); }, 10000);
 </script>
 </body>
 </html>
