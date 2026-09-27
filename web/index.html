@@ -70,6 +70,12 @@ button {
   border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
+.actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+a.btn {
+  font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px;
+}
+a.btn:hover { border-color: var(--accent); text-decoration: none; }
+button.copied { color: var(--ok); border-color: var(--ok); }
 .expand {
   display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
   width: 26px; height: 26px; padding: 0; margin-right: 8px; color: var(--muted);
@@ -108,6 +114,7 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
 @media (max-width: 720px) {
   .hide-sm { display: none; }
   .containers td { padding-left: 12px; }
+  .actions { flex-wrap: wrap; }
   .dlg-head { flex-wrap: wrap; }
   th, td { padding: 8px; }
 }
@@ -234,7 +241,11 @@ function renderPreviews(all) {
       <td>${status(p.status)}${others && !open ? `<div class="services">${others}</div>` : ""}</td>
       <td class="hide-sm mono">${esc(p.branch || "detached")} · ${esc(short(p.commit))}</td>
       <td class="hide-sm">${ago(p.started)}</td>
-      <td><button data-logs="${esc(p.name)}">Logs</button></td>
+      <td><div class="actions">
+        <a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(p.url)}">Open ↗</a>
+        <button data-copy="${esc(p.url)}" title="Copy ${esc(p.url)}">Copy URL</button>
+        <button data-logs="${esc(p.name)}">Logs</button>
+      </div></td>
     </tr>`;
     if (open) html += containerRows(p);
   }
@@ -291,6 +302,19 @@ async function load() {
     $("error").hidden = false;
     $("error").textContent = "Could not load overview: " + e.message;
   }
+}
+
+async function copyText(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback for browsers without the async clipboard API.
+    const area = Object.assign(document.createElement("textarea"), {value: text});
+    document.body.append(area); area.select(); document.execCommand("copy"); area.remove();
+  }
+  const label = button.textContent;
+  button.textContent = "Copied"; button.classList.add("copied");
+  setTimeout(() => { button.textContent = label; button.classList.remove("copied"); }, 1200);
 }
 
 let lastData = null;
@@ -372,6 +396,8 @@ function showLogs(preview, service) {
 }
 
 document.addEventListener("click", e => {
+  const c = e.target.closest("[data-copy]");
+  if (c) return copyText(c.dataset.copy, c);
   const b = e.target.closest("[data-logs]");
   if (b) return showLogs(b.dataset.logs, b.dataset.service);
   // Clicking anywhere on a preview row toggles it, except its link.
