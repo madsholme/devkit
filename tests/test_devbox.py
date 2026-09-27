@@ -17,14 +17,41 @@ loader.exec_module(dbx)
 
 
 class Naming(unittest.TestCase):
-    def test_normalization_collisions_and_length(self):
-        names = [dbx.preview_name("shop", task, "live") for task in
-                 ("fix/login", "fix-login", "FIX-login", "x" * 400, "🍋")]
-        self.assertEqual(len(names), len(set(names)))
-        for name in names:
-            self.assertLessEqual(len(name), 63)
-            self.assertRegex(name, r"^[a-z0-9-]+$")
-        self.assertEqual(names[0], dbx.preview_name("shop", "fix/login", "live"))
+    def test_readable_names(self):
+        commit = "3052f1ef86b4ab10022727676e67097c1f22906e"
+        self.assertEqual(dbx.preview_name("shop", "live", "fix/login", commit, "fix/login"), "shop-fix-login")
+        self.assertEqual(dbx.preview_name("shop", "live", "t3code/halloween-theme", commit, "t3code/halloween-theme"),
+                         "shop-t3code-halloween-theme")
+        self.assertEqual(dbx.preview_name("shop", "review", "v2", commit, commit), "shop-v2-3052f1e")
+        self.assertEqual(dbx.preview_name("shop", "review", "", commit, commit), "shop-3052f1e")
+        self.assertEqual(dbx.preview_name("shop", "live", "", commit, "detached-abc"), "shop-detached-abc")
+        for mode in ("live", "review"):
+            for branch in ("x" * 400, "🍋", "Fix/Login"):
+                name = dbx.preview_name("shop" * 20, mode, branch, commit, branch)
+                self.assertLessEqual(len(name) + dbx.CLASH, 63)
+                self.assertRegex(name, r"^[a-z0-9][a-z0-9-]*[a-z0-9]$")
+
+    def test_clashing_names_get_a_digest(self):
+        commit = "3052f1ef86b4ab10022727676e67097c1f22906e"
+        taken = [{"Config": {"Labels": {"devbox.preview": "shop-fix-login"}}}]
+        with patch.object(dbx, "saved_previews", return_value={}), \
+             patch.object(dbx, "docker_containers", return_value=taken):
+            a = dbx.new_preview_name(Path("/r/.git"), "shop", "live", "fix-login", commit, "fix-login")
+            b = dbx.new_preview_name(Path("/r/.git"), "shop", "live", "fix/login", commit, "fix/login")
+            free = dbx.new_preview_name(Path("/r/.git"), "shop", "live", "other", commit, "other")
+        self.assertRegex(a, r"^shop-fix-login-[0-9a-f]{4}$")
+        self.assertRegex(b, r"^shop-fix-login-[0-9a-f]{4}$")
+        self.assertNotEqual(a, b)
+        self.assertEqual(free, "shop-other")
+        self.assertLessEqual(len(dbx.clash_name("x" * 58, Path("/r/.git"), "i", "live")), 63)
+
+    def test_existing_previews_are_found_by_identity_or_legacy_name(self):
+        legacy = dbx.legacy_name("shop", "v2", "live")
+        saved = {legacy: {"devbox.mode": "live", "devbox.project": "shop"},
+                 "shop-3052f1e": {"devbox.identity": "3052f1e", "devbox.mode": "review", "devbox.project": "shop"}}
+        self.assertEqual(dbx.find_saved(saved, "shop", "live", "v2"), legacy)
+        self.assertEqual(dbx.find_saved(saved, "shop", "review", "3052f1e"), "shop-3052f1e")
+        self.assertIsNone(dbx.find_saved(saved, "shop", "live", "main"))
 
     def test_hostname_rejects_config_injection(self):
         for value in ("", "*.dev.example.com", "dev.example.com`)", "a..com"):
@@ -243,8 +270,12 @@ class GitIntegration(unittest.TestCase):
         with patch.object(dbx, "repository", return_value=(self.root, self.common)), \
              patch.object(dbx, "assert_owner"), patch.object(dbx, "hook", side_effect=recipe), \
              patch.object(dbx, "render", side_effect=render), patch.object(dbx, "compose"), \
+             patch.object(dbx, "docker_containers", return_value=[]), \
              patch.dict(os.environ, DEV_DOMAIN="dev.example.com"):
             dbx.prepare_preview("review", self.commit)
+        saved = dbx.saved_previews(self.common)
+        self.assertEqual(list(saved), [f"demo-main-{self.commit[:7]}"])
+        self.assertEqual(saved[f"demo-main-{self.commit[:7]}"]["devbox.identity"], self.commit)
         self.assertTrue(observed)
         self.assertTrue(all(value == original for value in observed))
         self.assertEqual((self.root / "message.txt").read_text(), "Uncommitted live change")
@@ -286,13 +317,13 @@ class GitIntegration(unittest.TestCase):
         self.assertIsNone(dbx.commits_between(self.root, "", head))
 
     def test_existing_checkout_is_never_removed_on_failure(self):
-        name = dbx.preview_name("demo", self.commit, "review")
+        name = f"demo-main-{self.commit[:7]}"
         checkout = self.common / "devbox/checkouts" / name
         checkout.mkdir(parents=True)
         sentinel = checkout / "keep"
         sentinel.write_text("existing work")
         with patch.object(dbx, "repository", return_value=(self.root, self.common)), \
-             patch.object(dbx, "assert_owner"):
+             patch.object(dbx, "assert_owner"), patch.object(dbx, "docker_containers", return_value=[]):
             with self.assertRaises(ValueError):
                 dbx.prepare_preview("review", self.commit)
         self.assertEqual(sentinel.read_text(), "existing work")

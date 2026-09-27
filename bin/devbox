@@ -32,9 +32,47 @@ def slug(value, limit=22):
     return readable[:limit].rstrip("-")
 
 
-def preview_name(project, identity, mode):
+def legacy_name(project, identity, mode):
+    """Preview ID scheme before readable names; existing previews keep it."""
     digest = hashlib.sha256((project + "\0" + identity + "\0" + mode).encode()).hexdigest()[:10]
     return f"{slug(project, 14)}-{slug(identity, 20)}-{mode}-{digest}"
+
+
+CLASH = 5  # room kept for "-" plus a 4-character digest when a readable name is taken
+
+
+def preview_name(project, mode, branch, commit, identity):
+    """Readable preview ID: <project>-<branch> for live, <project>-<branch>-<sha7> for review."""
+    head, sha = slug(project, 20), f"-{commit[:7]}" if mode == "review" else ""
+    label = branch or (identity if mode == "live" else "")
+    middle = "-" + slug(label, 63 - CLASH - len(head) - len(sha) - 1) if label else ""
+    return head + middle + sha
+
+
+def clash_name(name, common, identity, mode):
+    digest = hashlib.sha256((str(common) + "\0" + identity + "\0" + mode).encode()).hexdigest()[:CLASH - 1]
+    return f"{name}-{digest}"
+
+
+def find_saved(saved, project, mode, identity):
+    """The saved preview for this identity: labelled by devbox.identity, or named the legacy way."""
+    for name, labels in saved.items():
+        if (labels.get("devbox.identity"), labels.get("devbox.mode"), labels.get("devbox.project")) == (identity, mode, project):
+            return name
+    legacy = legacy_name(project, identity, mode)
+    return legacy if legacy in saved else None
+
+
+def new_preview_name(common, project, mode, branch, commit, identity):
+    """A readable ID no other preview on this host uses; a short digest is added only on a clash."""
+    taken = set(saved_previews(common)) | {
+        c["Config"].get("Labels", {}).get("devbox.preview") for c in docker_containers()}
+    name = preview_name(project, mode, branch, commit, identity)
+    if name in taken:
+        name = clash_name(name, common, identity, mode)
+        if name in taken:
+            fail(f"Preview ID {name} is already in use.")
+    return name
 
 
 def repository():
@@ -147,8 +185,8 @@ def current_preview(root, common):
                   if (source_worktree(labels, trees) or (None,))[0] == str(root)}
     if (root / "devbox.json").is_file():
         # The preview devbox live would use here, even if it predates devbox.worktree.
-        live = preview_name(config(root)["project"], live_identity(root)[1], "live")
-        if live in saved:
+        live = find_saved(saved, config(root)["project"], "live", live_identity(root)[1])
+        if live:
             candidates.add(live)
     if not candidates:
         fail(f"No preview belongs to this worktree ({root}). Pass a preview ID from devbox ls.")
@@ -237,7 +275,13 @@ def prepare_preview(mode, ref=None):
     cfg = config(root)
     commit = git(root, "rev-parse", "--verify", "--end-of-options", (ref or "HEAD") + "^{commit}")
     branch, identity = live_identity(root) if mode == "live" else ("", commit)
-    name = preview_name(cfg["project"], identity, mode)
+    # A review is named after the current branch when the commit is on it; one commit has one review.
+    label = branch
+    if mode == "review" and subprocess.run(["git", "-C", root, "merge-base", "--is-ancestor", commit, "HEAD"],
+                                           capture_output=True).returncode == 0:
+        label = live_identity(root)[0]
+    name = find_saved(saved_previews(common), cfg["project"], mode, identity) or new_preview_name(
+        common, cfg["project"], mode, label, commit, identity)
     state = run_dir(common, name)
     path = state / "compose.json"
     assert_owner(name, common)
@@ -278,6 +322,7 @@ def prepare_preview(mode, ref=None):
         metadata = {LABEL: "true", "devbox.preview": name, "devbox.mode": mode,
                     "devbox.project": cfg["project"], "devbox.repository": str(common),
                     "devbox.commit": commit, "devbox.branch": branch, "devbox.worktree": str(source),
+                    "devbox.identity": identity,
                     "devbox.url": env["DEVBOX_URL"]}
         if mode == "review":
             hook(root, cfg, "prepare", env)
@@ -372,7 +417,9 @@ def publish(ref):
     root, common = repository()
     cfg = config(root)
     commit = git(root, "rev-parse", "--verify", "--end-of-options", ref + "^{commit}")
-    name = preview_name(cfg["project"], commit, "review")
+    name = find_saved(saved_previews(common), cfg["project"], "review", commit)
+    if not name:
+        fail("Build a local review first. publish requires its existing reviewed image.")
     matches = [c for c in containers_for(name) if c["Config"]["Labels"].get("devbox.image")]
     if len(matches) != 1:
         fail("Build a local review first. publish requires its existing reviewed image.")

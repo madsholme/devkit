@@ -96,8 +96,12 @@ Create one DNS-only public A record:
 ```
 
 The LAN address `192.168.1.21` is not the Tailscale IP. Get the latter with
-`tailscale ip -4`. Names are flat, e.g. `demo-fix-login-live-<hash>.dev.example.com`.
-The bounded readable name plus hash avoids branch-slug collisions.
+`tailscale ip -4`. Names are flat and readable: a live preview is
+`<project>-<branch>` (e.g. `demo-fix-login.dev.example.com`), a review
+`<project>-<branch>-<sha7>` (e.g. `demo-fix-login-3052f1e`), with the full branch
+name kept (`t3code/x` becomes `t3code-x`). If a name is already taken, e.g. by
+branches `try/a` and `try-a`, the newer preview gets a 4-character suffix. Previews
+created before readable names keep their hashed IDs until destroyed.
 
 In `box/traefik`:
 
