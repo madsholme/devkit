@@ -71,11 +71,16 @@ button {
 }
 button:hover { border-color: var(--accent); }
 .actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
-a.btn {
-  font-size: 12.5px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px;
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0;
+  color: var(--accent); border: 1px solid var(--line); border-radius: 6px; background: none;
 }
-a.btn:hover { border-color: var(--accent); text-decoration: none; }
-button.copied { color: var(--ok); border-color: var(--ok); }
+.icon-btn:hover { border-color: var(--accent); text-decoration: none; }
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn .done { display: none; }
+.icon-btn.copied { color: var(--ok); border-color: var(--ok); }
+.icon-btn.copied .idle { display: none; }
+.icon-btn.copied .done { display: block; }
 .expand {
   display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
   width: 26px; height: 26px; padding: 0; margin-right: 8px; color: var(--muted);
@@ -212,6 +217,12 @@ const store = {
   set(k, v) { try { localStorage.setItem("devbox." + k, v); } catch {} },
 };
 const UP = new Set(["healthy", "running", "starting"]);
+const svg = (cls, d) => `<svg class="${cls}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  open: svg("", '<path d="M9 2.5h4.5V7"/><path d="M13.5 2.5 7 9"/><path d="M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/>'),
+  copy: svg("idle", '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/>'),
+  check: svg("done", '<path d="M3 8.5 6.5 12 13 4.5"/>'),
+};
 
 function matches(p) {
   const mode = $("filter-mode").value, state = $("filter-status").value;
@@ -242,8 +253,8 @@ function renderPreviews(all) {
       <td class="hide-sm mono">${esc(p.branch || "detached")} · ${esc(short(p.commit))}</td>
       <td class="hide-sm">${ago(p.started)}</td>
       <td><div class="actions">
-        <a class="btn" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(p.url)}">Open ↗</a>
-        <button data-copy="${esc(p.url)}" title="Copy ${esc(p.url)}">Copy URL</button>
+        ${UP.has(p.status) ? `<a class="icon-btn" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open ${esc(p.url)} in a new tab" aria-label="Open in a new tab">${ICON.open}</a>
+        <button class="icon-btn" data-copy="${esc(p.url)}" title="Copy ${esc(p.url)}" aria-label="Copy URL">${ICON.copy}${ICON.check}</button>` : ""}
         <button data-logs="${esc(p.name)}">Logs</button>
       </div></td>
     </tr>`;
@@ -312,9 +323,8 @@ async function copyText(text, button) {
     const area = Object.assign(document.createElement("textarea"), {value: text});
     document.body.append(area); area.select(); document.execCommand("copy"); area.remove();
   }
-  const label = button.textContent;
-  button.textContent = "Copied"; button.classList.add("copied");
-  setTimeout(() => { button.textContent = label; button.classList.remove("copied"); }, 1200);
+  button.classList.add("copied");
+  setTimeout(() => button.classList.remove("copied"), 1200);
 }
 
 let lastData = null;
