@@ -27,6 +27,23 @@ header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; m
 h1 { font-size: 20px; margin: 0; }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
 h3 { font-size: 14px; margin: 0 0 8px; }
+details.section > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 28px 0 10px; }
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary h2 { margin: 0; }
+details.section > summary::before {
+  content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg); transition: transform .15s; margin: 0 4px 0 2px;
+}
+details.section[open] > summary::before { transform: rotate(45deg); }
+details.section > summary:hover h2, details.section > summary:hover .count { color: var(--text); }
+.count { font-size: 12px; color: var(--muted); }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+.filters input[type=search], .filters select {
+  font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 9px;
+}
+.filters input[type=search] { flex: 1; min-width: 200px; max-width: 420px; }
+.filters input:focus, .filters select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .muted { color: var(--muted); }
@@ -105,23 +122,38 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
   </header>
   <div id="error" class="error" hidden></div>
 
-  <h2>Previews</h2>
+  <h2>Previews <span class="count" id="preview-count"></span></h2>
+  <div class="filters">
+    <input type="search" id="filter-text" placeholder="Filter by name, project, branch, commit, worktree…" autocomplete="off">
+    <select id="filter-mode" aria-label="Mode">
+      <option value="">All modes</option><option value="live">Live</option><option value="review">Review</option>
+    </select>
+    <select id="filter-status" aria-label="Status">
+      <option value="">Any status</option><option value="up">Running</option><option value="down">Not running</option>
+    </select>
+  </div>
   <div class="panel"><table>
     <thead><tr><th>Preview</th><th>Status</th><th class="hide-sm">Branch · commit</th><th class="hide-sm">Up</th><th></th></tr></thead>
     <tbody id="previews"></tbody>
   </table></div>
 
-  <h2>Worktrees</h2>
-  <div class="repos" id="repos"></div>
+  <details class="section" id="sec-worktrees" open>
+    <summary><h2>Worktrees</h2><span class="count" id="worktree-count"></span></summary>
+    <div class="repos" id="repos"></div>
+  </details>
 
-  <h2>Clean-up candidates</h2>
-  <div class="panel" id="orphans"></div>
+  <details class="section" id="sec-orphans" open>
+    <summary><h2>Clean-up candidates</h2><span class="count" id="orphan-count"></span></summary>
+    <div class="panel" id="orphans"></div>
+  </details>
 
-  <h2>Docker disk</h2>
-  <div class="panel"><table class="disk">
-    <thead><tr><th>Type</th><th>Size</th><th>Reclaimable</th></tr></thead>
-    <tbody id="disk"></tbody>
-  </table></div>
+  <details class="section" id="sec-disk" open>
+    <summary><h2>Docker disk</h2><span class="count" id="disk-count"></span></summary>
+    <div class="panel"><table class="disk">
+      <thead><tr><th>Type</th><th>Size</th><th>Reclaimable</th></tr></thead>
+      <tbody id="disk"></tbody>
+    </table></div>
+  </details>
 </main>
 
 <dialog id="logs">
@@ -168,8 +200,28 @@ function containerRows(p) {
   </table></td></tr>`;
 }
 
-function renderPreviews(previews) {
-  if (!previews.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews. Run <span class="mono">devbox live</span> in a worktree.</td></tr>`; return; }
+const store = {
+  get(k) { try { return localStorage.getItem("devbox." + k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem("devbox." + k, v); } catch {} },
+};
+const UP = new Set(["healthy", "running", "starting"]);
+
+function matches(p) {
+  const mode = $("filter-mode").value, state = $("filter-status").value;
+  if (mode && p.mode !== mode) return false;
+  if (state === "up" && !UP.has(p.status)) return false;
+  if (state === "down" && UP.has(p.status)) return false;
+  const words = $("filter-text").value.toLowerCase().split(/\s+/).filter(Boolean);
+  const hay = [p.name, p.project, p.mode, p.status, p.branch, p.commit, p.worktree, p.url,
+               ...p.services.map(c => c.name + " " + c.image)].join(" ").toLowerCase();
+  return words.every(w => hay.includes(w));
+}
+
+function renderPreviews(all) {
+  const previews = all.filter(matches);
+  $("preview-count").textContent = previews.length === all.length ? `(${all.length})` : `(${previews.length} of ${all.length})`;
+  if (!all.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews. Run <span class="mono">devbox live</span> in a worktree.</td></tr>`; return; }
+  if (!previews.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews match the filter.</td></tr>`; return; }
   let html = "", project = null;
   for (const p of previews) {
     if (p.project !== project) { project = p.project; html += `<tr class="group"><td colspan="5">${esc(project)}</td></tr>`; }
@@ -190,6 +242,8 @@ function renderPreviews(previews) {
 }
 
 function renderRepos(repos) {
+  const trees = repos.reduce((n, r) => n + r.worktrees.length, 0);
+  $("worktree-count").textContent = `${trees} in ${repos.length} ${repos.length === 1 ? "repository" : "repositories"}`;
   $("repos").innerHTML = repos.map(r => `<div class="panel repo">
     <h3 class="mono path">${esc(home(r.path.replace(/\/\.git$/, "")))}</h3>
     <ul>${r.worktrees.map(w => `<li>
@@ -202,6 +256,7 @@ function renderRepos(repos) {
 
 function renderOrphans(repos) {
   const rows = repos.flatMap(r => r.orphans.map(o => ({...o, repo: r.path.replace(/\/\.git$/, "")})));
+  $("orphan-count").textContent = rows.length ? `${rows.length} to remove` : "none";
   $("orphans").innerHTML = rows.length
     ? `<table><thead><tr><th>Preview</th><th>Mode</th><th class="hide-sm">Removed worktree</th></tr></thead><tbody>${rows.map(o =>
         `<tr><td class="mono">${esc(o.name)}</td><td>${esc(o.mode)}</td><td class="hide-sm mono path">${esc(home(o.worktree))}</td></tr>`).join("")}</tbody></table>
@@ -215,6 +270,8 @@ function renderHost(h) {
     <span>${esc(h.domain)}</span>
     <span>cert expires <b>${esc(h.certificate_expires)}</b></span>
     <span><b>${h.running_containers}</b> containers running</span>`;
+  const images = h.disk.find(d => d.type === "Images");
+  $("disk-count").textContent = images ? `images ${images.size}, ${images.reclaimable} reclaimable` : "";
   $("disk").innerHTML = h.disk.map(d => `<tr><td>${esc(d.type)}</td><td>${esc(d.size)}</td><td>${esc(d.reclaimable)}</td></tr>`).join("");
 }
 
@@ -330,6 +387,20 @@ $("logs").addEventListener("close", stopFollow);
 $("logs-reload").onclick = () => logsFor && loadLogs();
 $("logs-follow").onchange = () => logsFor && loadLogs();
 $("logs-hide-health").onchange = paintLogs;
+
+for (const id of ["filter-text", "filter-mode", "filter-status"]) {
+  const el = $(id), saved = store.get(id);
+  if (saved !== null) el.value = saved;
+  el.addEventListener("input", () => { store.set(id, el.value); if (lastData) renderPreviews(lastData.previews); });
+}
+$("filter-text").addEventListener("keydown", e => { if (e.key === "Escape") { e.target.value = ""; e.target.dispatchEvent(new Event("input")); } });
+document.addEventListener("keydown", e => {
+  if (e.key === "/" && !e.target.closest("input, select, textarea") && !$("logs").open) { e.preventDefault(); $("filter-text").focus(); }
+});
+for (const d of document.querySelectorAll("details.section")) {
+  if (store.get(d.id) === "closed") d.open = false;
+  d.addEventListener("toggle", () => store.set(d.id, d.open ? "open" : "closed"));
+}
 
 load();
 setInterval(() => { if (!document.hidden && !$("logs").open) load(); }, 10000);
