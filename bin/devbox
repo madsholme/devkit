@@ -697,7 +697,10 @@ def serve(host, port):
     """Read-only web overview. Bind to localhost; Traefik publishes it on the tailnet."""
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import parse_qs, urlparse
-    page = (Path(__file__).resolve().parent.parent / "web" / "index.html").read_bytes()
+    web = Path(__file__).resolve().parent.parent / "web"
+    page = (web / "index.html").read_bytes()
+    assets = {f"/{name}": ((web / name).read_bytes(), kind) for name, kind in (
+        ("logo.svg", "image/svg+xml"), ("favicon.ico", "image/x-icon"), ("apple-touch-icon.png", "image/png"))}
     resources = Resources()
 
     class Handler(BaseHTTPRequestHandler):
@@ -741,6 +744,8 @@ def serve(host, port):
             try:
                 if url.path == "/":
                     self.send(200, page, "text/html; charset=utf-8")
+                elif url.path in assets:
+                    self.send(200, *assets[url.path])
                 elif url.path == "/api/overview":
                     self.send(200, json.dumps(overview()).encode(), "application/json")
                 elif url.path == "/api/resources":

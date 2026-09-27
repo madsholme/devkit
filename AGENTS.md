@@ -9,6 +9,8 @@ This file covers what you need to change the kit itself.
   It also holds the web backend: `overview()`, `container_details()`, the
   `Resources` sampler and `serve()`.
 - `web/index.html`: the dashboard page. Vanilla JS, no build step, no dependencies.
+  `web/logo.svg`, `favicon.ico` and `apple-touch-icon.png` are the CRT skin of the
+  devkit logo; `serve()` only serves files listed in its `assets` map.
 - `box/traefik/`: the edge proxy (container `devbox-edge`). `dynamic.yaml` is the
   file provider: it routes t3.DEV_DOMAIN to T3 on localhost:3773 and
   devbox.DEV_DOMAIN to the dashboard on localhost:3780. Previews are routed by

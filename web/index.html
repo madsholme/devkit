@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>devbox</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="16x16">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
 :root {
   --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
@@ -23,8 +26,9 @@ body {
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; margin-bottom: 20px; }
-h1 { font-size: 20px; margin: 0; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-bottom: 20px; }
+h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; }
+h1 img { width: 32px; height: 32px; }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
 h3 { font-size: 14px; margin: 0 0 8px; }
 details.section > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 28px 0 10px; }
@@ -187,7 +191,7 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
 <body>
 <main>
   <header>
-    <h1>devbox</h1>
+    <h1><img src="/logo.svg" alt="">devbox</h1>
     <div class="facts" id="facts"></div>
     <span class="refresh" id="refreshed">loading…</span>
   </header>
