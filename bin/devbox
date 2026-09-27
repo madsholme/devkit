@@ -411,6 +411,19 @@ def logs(follow):
     run(["docker", "logs", "--tail", "200", *(["--follow"] if follow else []), live_web(root)])
 
 
+def container_ports(c):
+    """Container-internal ports, marking the one Traefik routes the preview URL to.
+
+    Previews never publish host ports, so these are only reachable inside Docker networks."""
+    routed = next((v for k, v in c["Config"].get("Labels", {}).items()
+                   if k.startswith("traefik.http.services.") and k.endswith(".loadbalancer.server.port")), None)
+    ports = {k.split("/")[0]: k.split("/")[-1] for k in (c["Config"].get("ExposedPorts") or {})}
+    if routed:
+        ports.setdefault(routed, "tcp")
+    return [{"port": int(port), "protocol": proto, "routed": port == routed}
+            for port, proto in sorted(ports.items(), key=lambda item: int(item[0]))]
+
+
 def overview():
     """Everything the web overview shows, read live from Docker labels and Git."""
     previews = {}
@@ -430,7 +443,7 @@ def overview():
         status = state.get("Health", {}).get("Status", state["Status"]) if state["Running"] else state["Status"]
         p["services"].append({"name": labels.get("com.docker.compose.service", "?"), "status": status,
                               "web": labels.get("traefik.enable") == "true", "id": c["Id"][:12],
-                              "image": c["Config"].get("Image", ""),
+                              "image": c["Config"].get("Image", ""), "ports": container_ports(c),
                               "started": state.get("StartedAt") if state["Running"] else None})
         if labels.get("traefik.enable") == "true":
             p["status"], p["started"] = status, state.get("StartedAt") if state["Running"] else None

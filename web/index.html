@@ -71,6 +71,7 @@ button {
 }
 button:hover { border-color: var(--accent); }
 .actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+.routed { color: var(--accent); }
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0;
   color: var(--accent); border: 1px solid var(--line); border-radius: 6px; background: none;
@@ -200,10 +201,11 @@ const expanded = new Set();
 
 function containerRows(p) {
   return `<tr class="containers"><td colspan="5"><table>
-    <thead><tr><th>Container</th><th>Status</th><th class="hide-sm">Image</th><th class="hide-sm">ID</th><th class="hide-sm">Up</th><th></th></tr></thead>
+    <thead><tr><th>Container</th><th>Status</th><th>Ports</th><th class="hide-sm">Image</th><th class="hide-sm">ID</th><th class="hide-sm">Up</th><th></th></tr></thead>
     <tbody>${p.services.map(c => `<tr>
       <td class="mono">${esc(c.name)}${c.web ? ' <span class="tag">web</span>' : ""}</td>
       <td>${status(c.status)}</td>
+      <td class="mono">${c.ports.length ? c.ports.map(x => `<span${x.routed ? ' class="routed" title="Preview URL routes here through Traefik"' : ""}>${x.port}${x.protocol === "tcp" ? "" : "/" + esc(x.protocol)}${x.routed ? " ← URL" : ""}</span>`).join(", ") : '<span class="muted">—</span>'}</td>
       <td class="hide-sm mono path">${esc(c.image.startsWith("sha256:") ? c.image.slice(0, 19) : c.image)}</td>
       <td class="hide-sm mono">${esc(c.id)}</td>
       <td class="hide-sm">${ago(c.started)}</td>

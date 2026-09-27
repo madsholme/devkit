@@ -177,6 +177,15 @@ class WebOverview(unittest.TestCase):
         self.assertIsNone(preview["started"])
         self.assertEqual({s["name"]: s["status"] for s in preview["services"]}, {"web": "exited", "db": "healthy"})
 
+    def test_ports_mark_the_traefik_routed_port(self):
+        c = {"Config": {"ExposedPorts": {"5432/tcp": {}, "53/udp": {}},
+                        "Labels": {"traefik.http.services.x.loadbalancer.server.port": "8000"}}}
+        self.assertEqual(dbx.container_ports(c), [
+            {"port": 53, "protocol": "udp", "routed": False},
+            {"port": 5432, "protocol": "tcp", "routed": False},
+            {"port": 8000, "protocol": "tcp", "routed": True}])
+        self.assertEqual(dbx.container_ports({"Config": {"ExposedPorts": None}}), [])
+
     def test_logs_reject_anything_but_a_preview_id(self):
         for name in ("", "../etc", "a b", "x;rm"):
             with self.assertRaises(ValueError):
