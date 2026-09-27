@@ -51,7 +51,7 @@ a:hover { text-decoration: underline; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); }
 .facts b { color: var(--text); font-weight: 500; }
 .refresh { margin-left: auto; color: var(--muted); font-size: 12px; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: 12px; font-weight: 500; color: var(--muted); }
@@ -72,6 +72,30 @@ button {
 button:hover { border-color: var(--accent); }
 .actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .routed { color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.tile { padding: 12px 14px; }
+.tile .label { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.tile .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0 6px; }
+.tile .value small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.tile .sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.meter { height: 6px; border-radius: 3px; background: var(--code); overflow: hidden; margin: 4px 0 6px; }
+.meter > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.meter.warn > span { background: var(--warn); }
+.meter.bad > span { background: var(--bad); }
+.flag { font-size: 11px; font-weight: 600; }
+.flag.warn { color: var(--warn); } .flag.bad { color: var(--bad); }
+.spark { position: relative; height: 44px; margin-top: 4px; }
+.spark svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.spark .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.spark .area { fill: var(--accent); opacity: .12; }
+.spark .cursor { stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.spark .tip {
+  position: absolute; top: -26px; transform: translateX(-50%); pointer-events: none; white-space: nowrap;
+  font-size: 11.5px; background: var(--text); color: var(--bg); padding: 2px 6px; border-radius: 4px;
+}
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.subhead { font-size: 12.5px; font-weight: 600; margin: 16px 0 8px; }
+.cmd { max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .details-body { overflow: auto; max-height: calc(100vh - 130px); padding: 4px 14px 16px; }
 .details-body h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; display: flex; align-items: center; gap: 8px; }
 .kv { width: 100%; border-collapse: collapse; }
@@ -133,6 +157,8 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
   .hide-sm { display: none; }
   .containers td { padding-left: 12px; }
   .actions { flex-wrap: wrap; }
+  .cmd { max-width: 44vw; }
+  .tile .spark { height: 36px; }
   .dlg-head { flex-wrap: wrap; }
   th, td { padding: 8px; }
 }
@@ -146,6 +172,21 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
     <span class="refresh" id="refreshed">loading…</span>
   </header>
   <div id="error" class="error" hidden></div>
+
+  <details class="section" id="sec-system" open>
+    <summary><h2>System</h2><span class="count" id="system-count"></span></summary>
+    <div class="tiles" id="tiles"></div>
+    <div class="subhead">Containers</div>
+    <div class="panel"><table>
+      <thead><tr><th>Container</th><th class="num">CPU</th><th class="num">Memory</th><th class="num hide-sm">Net in / out</th><th class="num hide-sm">Disk read / write</th><th class="num hide-sm">PIDs</th></tr></thead>
+      <tbody id="ctr-stats"></tbody>
+    </table></div>
+    <div class="subhead">Top processes</div>
+    <div class="panel"><table>
+      <thead><tr><th class="num hide-sm">PID</th><th class="hide-sm">User</th><th>Process</th><th class="num">CPU</th><th class="num">Memory</th></tr></thead>
+      <tbody id="procs"></tbody>
+    </table></div>
+  </details>
 
   <h2>Previews <span class="count" id="preview-count"></span></h2>
   <div class="filters">
@@ -386,6 +427,87 @@ $("details-body").addEventListener("input", e => {
   for (const tr of table.querySelectorAll("tr")) tr.classList.toggle("hidden", !!q && !tr.dataset.k.includes(q));
 });
 
+const GB = 2 ** 30;
+const bytes = b => b >= GB ? (b / GB).toFixed(1) + " GB" : Math.round(b / 2 ** 20) + " MB";
+const level = pct => pct >= 90 ? "bad" : pct >= 75 ? "warn" : "";
+const flag = pct => level(pct) ? `<span class="flag ${level(pct)}">${level(pct) === "bad" ? "critical" : "high"}</span>` : "";
+const meter = pct => `<div class="meter ${level(pct)}" role="meter" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.min(100, pct).toFixed(1)}%"></span></div>`;
+const clock = t => new Date(t * 1000).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"});
+
+// A single-series sparkline on a fixed 0-100% scale, with a hover readout.
+function spark(id, history, value, fmt) {
+  const pts = history.map(h => [h.t, value(h)]).filter(([, v]) => v != null);
+  if (pts.length < 2) return `<div class="spark muted sub">collecting…</div>`;
+  const t0 = pts[0][0], span = pts[pts.length - 1][0] - t0 || 1;
+  const xy = pts.map(([t, v]) => [((t - t0) / span) * 100, 40 - Math.min(100, v) * 0.4]);
+  const line = xy.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+  return `<div class="spark" data-spark="${id}">
+    <svg viewBox="0 0 100 40" preserveAspectRatio="none" aria-label="last ${Math.round(span / 60)} minutes">
+      <polygon class="area" points="0,40 ${line} 100,40"/><polyline class="line" points="${line}"/>
+      <line class="cursor" x1="0" x2="0" y1="0" y2="40" visibility="hidden"/>
+    </svg><span class="tip" hidden></span></div>`;
+}
+const sparkData = {};
+document.addEventListener("pointermove", e => {
+  for (const el of document.querySelectorAll("[data-spark]")) {
+    const svg = el.querySelector("svg"), tip = el.querySelector(".tip"), cur = el.querySelector(".cursor");
+    const r = svg.getBoundingClientRect(), inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8;
+    const series = sparkData[el.dataset.spark];
+    if (!inside || !series) { tip.hidden = true; cur.setAttribute("visibility", "hidden"); continue; }
+    const t0 = series[0][0], span = series[series.length - 1][0] - t0 || 1;
+    const t = t0 + ((e.clientX - r.left) / r.width) * span;
+    const [pt, pv] = series.reduce((a, b) => Math.abs(b[0] - t) < Math.abs(a[0] - t) ? b : a);
+    const x = ((pt - t0) / span) * 100;
+    cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("visibility", "visible");
+    tip.hidden = false; tip.style.left = x + "%"; tip.textContent = `${series.fmt(pv)} · ${clock(pt)}`;
+  }
+});
+
+function renderResources(r) {
+  const h = r.history, last = h[h.length - 1];
+  if (!last) { $("tiles").innerHTML = '<div class="panel tile muted">collecting…</div>'; return; }
+  const memPct = 100 * last.mem_used / last.mem_total, diskPct = 100 * last.disk_used / last.disk_total;
+  const swapPct = last.swap_total ? 100 * last.swap_used / last.swap_total : 0;
+  const days = Math.floor(r.uptime / 86400), hours = Math.floor(r.uptime % 86400 / 3600);
+  $("system-count").textContent = `CPU ${last.cpu.toFixed(0)}% · memory ${memPct.toFixed(0)}% · disk ${diskPct.toFixed(0)}%`;
+  const series = (key, fn, fmt) => { const s = h.map(x => [x.t, fn(x)]); s.fmt = fmt; sparkData[key] = s; };
+  series("cpu", x => x.cpu, v => v.toFixed(1) + "%");
+  series("mem", x => 100 * x.mem_used / x.mem_total, v => v.toFixed(1) + "%");
+  $("tiles").innerHTML = `
+    <div class="panel tile"><div class="label"><span>CPU · ${r.cores} cores</span>${flag(last.cpu)}</div>
+      <div class="value">${last.cpu.toFixed(0)}<small>%</small></div>${meter(last.cpu)}
+      <div class="sub">load ${last.load.map(l => l.toFixed(2)).join(" · ")}</div>
+      ${spark("cpu", h, x => x.cpu)}</div>
+    <div class="panel tile"><div class="label"><span>Memory</span>${flag(memPct)}</div>
+      <div class="value">${bytes(last.mem_used)} <small>of ${bytes(last.mem_total)}</small></div>${meter(memPct)}
+      <div class="sub">${memPct.toFixed(0)}% used</div>
+      ${spark("mem", h, x => 100 * x.mem_used / x.mem_total)}</div>
+    <div class="panel tile"><div class="label"><span>Disk /</span>${flag(diskPct)}</div>
+      <div class="value">${bytes(last.disk_used)} <small>of ${bytes(last.disk_total)}</small></div>${meter(diskPct)}
+      <div class="sub">${bytes(last.disk_total - last.disk_used)} free</div></div>
+    <div class="panel tile"><div class="label"><span>Swap</span>${flag(swapPct)}</div>
+      <div class="value">${bytes(last.swap_used)} <small>of ${bytes(last.swap_total)}</small></div>${meter(swapPct)}
+      <div class="sub">up ${days}d ${hours}h · sampled every ${r.interval}s</div></div>`;
+  $("ctr-stats").innerHTML = r.containers.map(c => `<tr>
+      <td class="mono">${c.preview ? `${esc(c.preview)} · <b>${esc(c.service)}</b>` : esc(c.name)}</td>
+      <td class="num">${c.cpu.toFixed(1)}%</td><td class="num">${esc(c.mem)}</td>
+      <td class="num hide-sm">${esc(c.net)}</td><td class="num hide-sm">${esc(c.block)}</td><td class="num hide-sm">${esc(c.pids)}</td>
+    </tr>`).join("") || '<tr><td colspan="6" class="muted">collecting…</td></tr>';
+  $("procs").innerHTML = r.processes.map(p => `<tr>
+      <td class="num mono hide-sm">${p.pid}</td><td class="hide-sm">${esc(p.user)}</td>
+      <td><div class="mono cmd" title="${esc(p.command)}"><b>${esc(p.name)}</b> <span class="muted">${esc(p.command)}</span></div></td>
+      <td class="num">${p.cpu.toFixed(1)}%</td><td class="num">${bytes(p.rss)}</td>
+    </tr>`).join("") || '<tr><td colspan="5" class="muted">collecting…</td></tr>';
+}
+
+async function loadResources() {
+  if (document.hidden || !$("sec-system").open) return;
+  try {
+    const res = await fetch("api/resources");
+    if (res.ok) renderResources(await res.json());
+  } catch {}
+}
+
 let lastData = null;
 let logsFor = null, logLines = [], stream = null, paintQueued = false;
 const MAX_LINES = 5000;
@@ -499,6 +621,9 @@ for (const d of document.querySelectorAll("details.section")) {
   d.addEventListener("toggle", () => store.set(d.id, d.open ? "open" : "closed"));
 }
 
+loadResources();
+setInterval(loadResources, 5000);
+$("sec-system").addEventListener("toggle", loadResources);
 load();
 setInterval(() => { if (!document.hidden && !$("logs").open && !$("details").open) load(); }, 10000);
 </script>
