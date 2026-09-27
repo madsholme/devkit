@@ -72,6 +72,18 @@ button {
 button:hover { border-color: var(--accent); }
 .actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 .routed { color: var(--accent); }
+.details-body { overflow: auto; max-height: calc(100vh - 130px); padding: 4px 14px 16px; }
+.details-body h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; display: flex; align-items: center; gap: 8px; }
+.kv { width: 100%; border-collapse: collapse; }
+.kv td { padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 12.5px; }
+.kv td:first-child { width: 32%; color: var(--muted); word-break: break-all; }
+.kv td:last-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+.kv tr:last-child td { border-bottom: 0; }
+.kv tr.hidden { display: none; }
+.details-body input[type=search] {
+  font: inherit; font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 2px 8px; text-transform: none; letter-spacing: 0; margin-left: auto; width: 180px;
+}
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 26px; padding: 0;
   color: var(--accent); border: 1px solid var(--line); border-radius: 6px; background: none;
@@ -169,6 +181,11 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
   </details>
 </main>
 
+<dialog id="details">
+  <div class="dlg-head"><span class="mono" id="details-title"></span><button id="details-close">Close</button></div>
+  <div class="details-body" id="details-body"></div>
+</dialog>
+
 <dialog id="logs">
   <div class="dlg-head">
     <span class="live-dot" id="logs-live" title="following"></span>
@@ -209,7 +226,10 @@ function containerRows(p) {
       <td class="hide-sm mono path">${esc(c.image.startsWith("sha256:") ? c.image.slice(0, 19) : c.image)}</td>
       <td class="hide-sm mono">${esc(c.id)}</td>
       <td class="hide-sm">${ago(c.started)}</td>
-      <td><button data-logs="${esc(p.name)}" data-service="${esc(c.name)}">Logs</button></td>
+      <td><div class="actions">
+        <button data-details="${esc(p.name)}" data-service="${esc(c.name)}">Details</button>
+        <button data-logs="${esc(p.name)}" data-service="${esc(c.name)}">Logs</button>
+      </div></td>
     </tr>`).join("")}</tbody>
   </table></td></tr>`;
 }
@@ -329,6 +349,43 @@ async function copyText(text, button) {
   setTimeout(() => button.classList.remove("copied"), 1200);
 }
 
+const kv = rows => `<table class="kv">${rows.map(([k, v]) =>
+  `<tr data-k="${esc(String(k).toLowerCase() + " " + String(v).toLowerCase())}"><td>${esc(k)}</td><td>${esc(v === "" || v == null ? "—" : v)}</td></tr>`).join("")}</table>`;
+const cmd = a => (a || []).map(x => /\s/.test(x) ? JSON.stringify(x) : x).join(" ");
+
+async function showDetails(preview, service) {
+  $("details-title").textContent = preview + " · " + service;
+  $("details-body").innerHTML = '<p class="muted">loading…</p>';
+  if (!$("details").open) $("details").showModal();
+  const res = await fetch(`api/container?preview=${encodeURIComponent(preview)}&service=${encodeURIComponent(service)}`);
+  if (!res.ok) { $("details-body").innerHTML = `<p class="error">${esc(await res.text())}</p>`; return; }
+  const d = await res.json(), h = d.health;
+  const section = (title, body, filter) => `<h4>${esc(title)}${filter ? `<input type="search" data-filter placeholder="Filter…">` : ""}</h4>${body}`;
+  $("details-body").innerHTML = [
+    section("Container", kv([
+      ["Name", d.name], ["ID", d.id.slice(0, 12)], ["Status", d.status + (d.status === "exited" ? ` (exit ${d.exit_code})` : "")],
+      ["Image", d.image], ["Image ID", d.image_id.slice(0, 19)], ["Created", d.created], ["Started", d.started],
+      ["Restart policy", d.restart_policy], ["Restarts", d.restart_count], ["User", d.user], ["Working dir", d.working_dir],
+      ["Entrypoint", cmd(d.entrypoint)], ["Command", cmd(d.command)],
+    ])),
+    h.status ? section("Health", kv([
+      ["Status", h.status], ["Check", cmd(h.test.filter((x, i) => i || !x.startsWith("CMD")))], ["Failing streak", h.failing_streak],
+      ["Last exit", h.last_exit], ["Last output", h.last_output],
+    ])) : "",
+    section("Ports", d.ports.length ? kv(d.ports.map(x => [x.port + "/" + x.protocol, x.routed ? "preview URL (Traefik)" : "internal"])) : '<p class="muted">None</p>'),
+    section("Networks", kv(d.networks.map(n => [n.name, n.ip + (n.aliases.length ? "  (" + n.aliases.join(", ") + ")" : "")]))),
+    section("Mounts", d.mounts.length ? kv(d.mounts.map(m => [m.destination, `${m.type} ${m.source}${m.rw ? "" : " (read-only)"}`])) : '<p class="muted">None</p>'),
+    section(`Environment (${d.env.length})`, kv(d.env.map(e => [e.name, e.value])), true),
+    section(`Labels (${Object.keys(d.labels).length})`, kv(Object.entries(d.labels)), true),
+  ].join("");
+}
+$("details-close").onclick = () => $("details").close();
+$("details-body").addEventListener("input", e => {
+  if (!e.target.matches("[data-filter]")) return;
+  const q = e.target.value.toLowerCase(), table = e.target.closest("h4").nextElementSibling;
+  for (const tr of table.querySelectorAll("tr")) tr.classList.toggle("hidden", !!q && !tr.dataset.k.includes(q));
+});
+
 let lastData = null;
 let logsFor = null, logLines = [], stream = null, paintQueued = false;
 const MAX_LINES = 5000;
@@ -408,6 +465,8 @@ function showLogs(preview, service) {
 }
 
 document.addEventListener("click", e => {
+  const det = e.target.closest("[data-details]");
+  if (det) return showDetails(det.dataset.details, det.dataset.service);
   const c = e.target.closest("[data-copy]");
   if (c) return copyText(c.dataset.copy, c);
   const b = e.target.closest("[data-logs]");
@@ -441,7 +500,7 @@ for (const d of document.querySelectorAll("details.section")) {
 }
 
 load();
-setInterval(() => { if (!document.hidden && !$("logs").open) load(); }, 10000);
+setInterval(() => { if (!document.hidden && !$("logs").open && !$("details").open) load(); }, 10000);
 </script>
 </body>
 </html>

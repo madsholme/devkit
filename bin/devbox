@@ -521,6 +521,39 @@ def preview_container(name, service=None):
     fail(f"No {service or 'web'} container for that preview.")
 
 
+SECRET_NAME = re.compile(r"PASS|SECRET|TOKEN|KEY|CREDENTIAL|PRIVATE|DSN|DATABASE_URL", re.I)
+
+
+def container_details(name, service=None):
+    """A readable subset of docker inspect for one preview container; secret-looking env values are masked."""
+    c = json.loads(run(["docker", "inspect", preview_container(name, service)], capture=True))[0]
+    cfg, host, state = c["Config"], c["HostConfig"], c["State"]
+    env = []
+    for item in cfg.get("Env") or []:
+        key, _, value = item.partition("=")
+        env.append({"name": key, "value": "••••••" if SECRET_NAME.search(key) and value else value})
+    health = state.get("Health") or {}
+    last = (health.get("Log") or [{}])[-1]
+    return {
+        "name": c["Name"].lstrip("/"), "id": c["Id"], "image": cfg.get("Image", ""), "image_id": c["Image"],
+        "created": c["Created"], "started": state.get("StartedAt"), "finished": state.get("FinishedAt"),
+        "status": state["Status"], "exit_code": state.get("ExitCode"), "restart_count": c.get("RestartCount", 0),
+        "restart_policy": (host.get("RestartPolicy") or {}).get("Name") or "no",
+        "user": cfg.get("User") or "(image default)", "working_dir": cfg.get("WorkingDir", ""),
+        "entrypoint": cfg.get("Entrypoint") or [], "command": cfg.get("Cmd") or [],
+        "health": {"status": health.get("Status"), "failing_streak": health.get("FailingStreak"),
+                   "test": (cfg.get("Healthcheck") or {}).get("Test") or [],
+                   "last_output": (last.get("Output") or "").strip(), "last_exit": last.get("ExitCode")},
+        "ports": container_ports(c),
+        "networks": [{"name": k, "ip": v.get("IPAddress", ""), "aliases": v.get("Aliases") or []}
+                     for k, v in sorted(c["NetworkSettings"]["Networks"].items())],
+        "mounts": [{"type": m["Type"], "source": m.get("Name") or m.get("Source", ""),
+                    "destination": m["Destination"], "rw": m.get("RW", False)} for m in c.get("Mounts", [])],
+        "env": sorted(env, key=lambda e: e["name"]),
+        "labels": dict(sorted((cfg.get("Labels") or {}).items())),
+    }
+
+
 def logs_command(container, follow=False):
     return ["docker", "logs", "--tail", "200", "--timestamps", *(["--follow"] if follow else []), container]
 
@@ -579,6 +612,10 @@ def serve(host, port):
                     self.send(200, page, "text/html; charset=utf-8")
                 elif url.path == "/api/overview":
                     self.send(200, json.dumps(overview()).encode(), "application/json")
+                elif url.path == "/api/container":
+                    query = parse_qs(url.query)
+                    details = container_details(query.get("preview", [""])[0], query.get("service", [None])[0])
+                    self.send(200, json.dumps(details).encode(), "application/json")
                 elif url.path == "/api/logs":
                     query = parse_qs(url.query)
                     name = query.get("preview", [""])[0]

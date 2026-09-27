@@ -133,7 +133,8 @@ or digests when commissioning the host. Do not run automatic image updates.
 ## Web overview
 
 https://devbox.DEV_DOMAIN shows previews (mode, health, branch/commit, uptime and
-URL; expand one for all its containers), logs for any container (recent lines, or
+URL; expand one for all its containers with ports and a details view: health,
+networks, mounts, environment with secret-looking values masked, and labels), logs for any container (recent lines, or
 followed live), each repository's worktrees and whether they have a
 preview, clean-up candidates (what `devbox gc` would remove), certificate expiry,
 and Docker disk use. Everything is read live from Docker labels and Git; there is

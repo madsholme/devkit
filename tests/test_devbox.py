@@ -186,6 +186,17 @@ class WebOverview(unittest.TestCase):
             {"port": 8000, "protocol": "tcp", "routed": True}])
         self.assertEqual(dbx.container_ports({"Config": {"ExposedPorts": None}}), [])
 
+    def test_details_mask_secret_looking_env_values(self):
+        inspect = [{"Id": "abc", "Name": "/x-db-1", "Image": "sha256:1", "Created": "t", "RestartCount": 0,
+                    "State": {"Status": "running"}, "HostConfig": {}, "Mounts": [],
+                    "NetworkSettings": {"Networks": {}},
+                    "Config": {"Image": "postgres:15", "Labels": {}, "Env": [
+                        "POSTGRES_PASSWORD=hunter2", "API_TOKEN=t", "DB_HOST=db", "EMPTY_SECRET="]}}]
+        with patch.object(dbx, "preview_container", return_value="abc"), \
+             patch.object(dbx, "run", return_value=json.dumps(inspect)):
+            env = {e["name"]: e["value"] for e in dbx.container_details("x", "db")["env"]}
+        self.assertEqual(env, {"POSTGRES_PASSWORD": "••••••", "API_TOKEN": "••••••", "DB_HOST": "db", "EMPTY_SECRET": ""})
+
     def test_logs_reject_anything_but_a_preview_id(self):
         for name in ("", "../etc", "a b", "x;rm"):
             with self.assertRaises(ValueError):
