@@ -16,7 +16,9 @@ This file covers what you need to change the kit itself.
   devbox.DEV_DOMAIN to the dashboard on localhost:3780. Previews are routed by
   Docker labels. Traefik listens only on the Tailscale IP 100.69.127.125:443.
 - `box/systemd/devbox-web.service`: reference copy of the installed user unit.
-- `project-template/`: the sample project recipe (`devbox.json` plus Compose files).
+- `project-template/`: the sample project recipe (`devbox.json`, Compose files and a
+  `t3.json` with T3 actions for the devbox commands).
+- `t3.json`: T3 actions for working on the kit itself, and its project icon.
 - `tests/`: unit tests, plus a Docker runtime acceptance check.
 
 ## Running things

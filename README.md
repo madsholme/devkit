@@ -182,6 +182,17 @@ the live restart policy would rerun it whenever it exits. The sample does this
 on startup without resetting existing data. For a separate seed service, gate app
 startup on its successful completion and make it safe to rerun.
 
+## T3 actions
+
+`project-template/t3.json` declares T3 Code scripts for the devbox commands: live
+preview, review of HEAD, logs and stop. T3 reads `t3.json` from the repository root
+and offers its scripts for import in the project's scripts menu; import them once
+per project. They run in a T3 terminal in the thread's worktree, so each thread
+drives its own preview. Add project-specific ones there too, e.g. tests through
+`devbox exec`. T3 ignores the whole file if any field is invalid; check it against
+https://t3.codes/schema/t3.json. This repository's own `t3.json` has test and
+dashboard scripts and sets the CRT logo as the project icon.
+
 ## Agent integration
 
 Give your agent the following project instruction:

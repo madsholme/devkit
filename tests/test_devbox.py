@@ -60,6 +60,22 @@ class Naming(unittest.TestCase):
                     dbx.domain()
 
 
+class T3ProjectFiles(unittest.TestCase):
+    def test_t3_files_use_known_fields_and_icons(self):
+        # T3 silently ignores the whole t3.json when any field is invalid.
+        icons = {"play", "test", "lint", "configure", "build", "debug"}
+        fields = {"name", "command", "icon", "runOnWorktreeCreate", "previewUrl", "autoOpenPreview"}
+        for path in (KIT / "t3.json", KIT / "project-template/t3.json"):
+            data = json.loads(path.read_text())
+            self.assertLessEqual(set(data), {"$schema", "iconPath", "defaultThreadEnvMode", "scripts"})
+            if "iconPath" in data:
+                self.assertTrue((path.parent / data["iconPath"]).is_file())
+            for script in data["scripts"]:
+                self.assertLessEqual(set(script), fields)
+                self.assertTrue(script["name"].strip() and script["command"].strip())
+                self.assertIn(script.get("icon", "play"), icons)
+
+
 class ComposeContract(unittest.TestCase):
     def env(self):
         return dict(os.environ, DEVBOX_PREVIEW="demo-review-123", DEVBOX_HOST="demo-review-123.dev.example.com",
