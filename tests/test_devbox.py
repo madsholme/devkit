@@ -269,6 +269,22 @@ class GitIntegration(unittest.TestCase):
         self.assertEqual(dbx.worktrees(self.root),
                          {str(self.root): "main", str(kept): "kept", str(locked): "locked"})
 
+    def test_worktree_state_reports_head_changes_and_last_commit(self):
+        state = dbx.worktree_state(self.root)
+        self.assertEqual((state["head"], state["changes"], state["upstream"], state["subject"]),
+                         (self.commit, 0, "", "sample"))
+        (self.root / "message.txt").write_text("edited")
+        (self.root / "new.txt").write_text("untracked")
+        self.assertEqual(dbx.worktree_state(self.root)["changes"], 2)
+
+    def test_commits_between_counts_new_commits(self):
+        self.git("commit", "--allow-empty", "-m", "one")
+        self.git("commit", "--allow-empty", "-m", "two")
+        head = self.git("rev-parse", "HEAD")
+        self.assertEqual(dbx.commits_between(self.root, self.commit, head), 2)
+        self.assertEqual(dbx.commits_between(self.root, head, head), 0)
+        self.assertIsNone(dbx.commits_between(self.root, "", head))
+
     def test_existing_checkout_is_never_removed_on_failure(self):
         name = dbx.preview_name("demo", self.commit, "review")
         checkout = self.common / "devbox/checkouts" / name

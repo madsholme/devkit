@@ -157,6 +157,10 @@ tr.preview:hover td { background: var(--code); }
 .repo ul { list-style: none; margin: 0; padding: 0; }
 .repo li { padding: 6px 0; border-top: 1px solid var(--line); }
 .repo li:first-child { border-top: 0; }
+.git-line { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 12px; color: var(--muted); margin-top: 3px; }
+.subject { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.badge { font-size: 11.5px; white-space: nowrap; }
+.badge.warn { color: var(--warn); } .badge.bad { color: var(--bad); }
 .path { word-break: break-all; }
 .empty { padding: 16px; color: var(--muted); }
 .disk td:nth-child(n+2) { text-align: right; }
@@ -286,6 +290,8 @@ function ago(iso) {
   if (s < 172800) return Math.round(s / 3600) + "h";
   return Math.round(s / 86400) + "d";
 }
+const epoch = t => t ? new Date(t * 1000).toISOString() : null;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const status = s => `<span class="status s-${esc(s)}"><span class="dot"></span>${esc(s)}</span>`;
 
@@ -327,9 +333,33 @@ function matches(p) {
   if (state === "up" && !UP.has(p.status)) return false;
   if (state === "down" && UP.has(p.status)) return false;
   const words = $("filter-text").value.toLowerCase().split(/\s+/).filter(Boolean);
-  const hay = [p.name, p.project, p.mode, p.status, p.branch, p.commit, p.worktree, p.url,
+  const hay = [p.name, p.project, p.mode, p.status, p.branch, p.commit, p.head, p.source_branch, p.worktree, p.url,
                ...p.services.map(c => c.name + " " + c.image)].join(" ").toLowerCase();
   return words.every(w => hay.includes(w));
+}
+
+function commitCell(p) {
+  if (p.mode === "live") {
+    // Live previews run the worktree as it is now; the recorded commit is only where it started.
+    const head = p.head || p.commit;
+    const moved = p.head && p.head !== p.commit ? ` title="Started at ${esc(short(p.commit))}"` : "";
+    return `<span class="mono"${moved}>${esc(p.branch || "detached")} · ${esc(short(head))}</span>` +
+      (p.changes ? `<div class="services"><span class="badge warn">${plural(p.changes, "uncommitted change")}</span></div>` : "");
+  }
+  const from = p.source_branch ? `from ${p.source_branch}` : "detached";
+  return `<span class="mono">${esc(from)} · ${esc(short(p.commit))}</span>` +
+    (p.behind ? `<div class="services"><span class="badge warn">${plural(p.behind, "commit")} behind ${esc(p.source_branch || "its worktree")}</span></div>` : "");
+}
+
+function gitLine(w) {
+  const badges = [];
+  if (w.changes) badges.push(`<span class="badge warn">${plural(w.changes, "uncommitted change")}</span>`);
+  if (!w.upstream) badges.push(`<span class="badge">no upstream</span>`);
+  else if (w.ahead || w.behind) badges.push(`<span class="badge" title="Compared with ${esc(w.upstream)}">${w.ahead ? "↑" + w.ahead : ""}${w.ahead && w.behind ? " " : ""}${w.behind ? "↓" + w.behind : ""} ${esc(w.upstream)}</span>`);
+  else badges.push(`<span class="badge" title="Same commit as ${esc(w.upstream)}">in sync with ${esc(w.upstream)}</span>`);
+  if (!w.head) return `<div class="git-line"><span>no commits</span>${badges.join("")}</div>`;
+  return `<div class="subject" title="${esc(w.subject)}">${esc(w.subject)}</div>
+    <div class="git-line"><span class="mono">${esc(short(w.head))}</span><span>${ago(epoch(w.committed))} ago</span>${badges.join("")}</div>`;
 }
 
 function renderPreviews(all) {
@@ -347,7 +377,7 @@ function renderPreviews(all) {
         ${p.status === "healthy" || p.status === "running" ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}
         ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}</div>` : ""}</td>
       <td>${status(p.status)}${others && !open ? `<div class="services">${others}</div>` : ""}</td>
-      <td class="hide-sm mono">${esc(p.branch || "detached")} · ${esc(short(p.commit))}</td>
+      <td class="hide-sm">${commitCell(p)}</td>
       <td class="hide-sm">${ago(p.started)}</td>
       <td><div class="actions">
         ${UP.has(p.status) ? `<a class="icon-btn" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open ${esc(p.url)} in a new tab" aria-label="Open in a new tab">${ICON.open}</a>
@@ -360,7 +390,14 @@ function renderPreviews(all) {
   $("previews").innerHTML = html;
 }
 
-function renderRepos(repos) {
+function previewLink(p) {
+  if (!p) return "";
+  return UP.has(p.status) ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" title="Open ${esc(p.url)}">${esc(p.name)}</a>`
+    : `${esc(p.name)} <span class="muted">(${esc(p.status)})</span>`;
+}
+
+function renderRepos(repos, previews) {
+  const byName = Object.fromEntries(previews.map(p => [p.name, p]));
   const trees = repos.reduce((n, r) => n + r.worktrees.length, 0);
   $("worktree-count").textContent = `${trees} in ${repos.length} ${repos.length === 1 ? "repository" : "repositories"}`;
   $("repos").innerHTML = repos.map(r => `<div class="panel repo">
@@ -368,9 +405,10 @@ function renderRepos(repos) {
     <ul>${r.worktrees.map(w => `<li>
       <div class="mono">${esc(w.branch || "detached")}</div>
       <div class="muted mono path">${esc(home(w.path))}</div>
-      <div class="services">${w.previews.length ? "preview: " + w.previews.map(esc).join(", ") : "no preview"}</div>
+      ${gitLine(w)}
+      <div class="services">${w.previews.length ? "preview: " + w.previews.map(n => previewLink(byName[n]) || esc(n)).join(", ") : "no preview"}</div>
     </li>`).join("")}</ul>
-  </div>`).join("") || `<div class="panel empty">No repositories with previews yet.</div>`;
+  </div>`).join("") || `<div class="panel empty">No repositories yet. They appear once they have a preview or a T3 worktree.</div>`;
 }
 
 function renderOrphans(repos) {
@@ -383,11 +421,20 @@ function renderOrphans(repos) {
     : `<div class="empty">None. Every preview's worktree still exists.</div>`;
 }
 
+function certFact(h) {
+  const d = h.certificate_days;
+  if (d === null) return `<span class="badge bad" title="${esc(h.certificate_expires)}">certificate ${esc(h.certificate_expires)}</span>`;
+  const level = d < 7 ? "bad" : d < 21 ? "warn" : "";
+  const when = d < 0 ? "expired" : d === 0 ? "expires today" : `expires in <b>${plural(d, "day")}</b>`;
+  return `<span class="${level ? "badge " + level : ""}" title="${esc(h.certificate_expires)}">cert ${when}</span>`;
+}
+
 function renderHost(h) {
   $("facts").innerHTML = `
-    <span><a href="${esc(h.t3)}" target="_blank" rel="noopener">T3 Code</a></span>
+    ${h.services.map(s => `<span class="status s-${s.status === "up" ? "healthy" : "dead"}" title="${esc(s.name)}: ${esc(s.status)} (${esc(s.detail)})"><span class="dot"></span>${
+      s.name === "T3" ? `<a href="${esc(h.t3)}" target="_blank" rel="noopener">T3 Code</a>` : esc(s.name)}</span>`).join("")}
     <span>${esc(h.domain)}</span>
-    <span>cert expires <b>${esc(h.certificate_expires)}</b></span>
+    ${certFact(h)}
     <span><b>${h.running_containers}</b> containers running</span>`;
   const images = h.disk.find(d => d.type === "Images");
   $("disk-count").textContent = images ? `images ${images.size}, ${images.reclaimable} reclaimable` : "";
@@ -401,7 +448,7 @@ async function load() {
     const data = await res.json();
     lastData = data;
     renderPreviews(data.previews);
-    renderRepos(data.repositories);
+    renderRepos(data.repositories, data.previews);
     renderOrphans(data.repositories);
     renderHost(data.host);
     $("error").hidden = true;

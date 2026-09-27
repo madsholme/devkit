@@ -424,6 +424,50 @@ def container_ports(c):
             for port, proto in sorted(ports.items(), key=lambda item: int(item[0]))]
 
 
+def worktree_state(path):
+    """Current commit, uncommitted changes, upstream distance and last commit of one worktree."""
+    state = {"head": "", "changes": 0, "upstream": "", "ahead": 0, "behind": 0, "subject": "", "committed": None}
+    try:
+        for line in git(path, "status", "--porcelain=v2", "--branch").splitlines():
+            if line.startswith("# branch.oid "):
+                state["head"] = line.split()[2] if line.split()[2] != "(initial)" else ""
+            elif line.startswith("# branch.upstream "):
+                state["upstream"] = line.split(" ", 2)[2]
+            elif line.startswith("# branch.ab "):
+                ahead, behind = line.split()[2:4]
+                state["ahead"], state["behind"] = int(ahead), -int(behind)
+            elif line and not line.startswith("#"):
+                state["changes"] += 1
+        if state["head"]:
+            committed, state["subject"] = git(path, "log", "-1", "--format=%ct%x00%s", state["head"]).split("\0", 1)
+            state["committed"] = int(committed)
+    except (subprocess.CalledProcessError, ValueError):
+        pass
+    return state
+
+
+def commits_between(root, base, head):
+    """How many commits head has that base lacks; None if either is unknown."""
+    if not base or not head or base == head:
+        return 0 if base and base == head else None
+    try:
+        return int(git(root, "rev-list", "--count", f"{base}..{head}"))
+    except (subprocess.CalledProcessError, ValueError):
+        return None
+
+
+def watched_repositories():
+    """Git common dirs of harness worktrees (T3 keeps them under ~/.t3/worktrees/<repo>/<id>)."""
+    found = set()
+    for tree in sorted((Path.home() / ".t3" / "worktrees").glob("*/*")):
+        if (tree / ".git").exists():
+            try:
+                found.add(git(tree, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+            except subprocess.CalledProcessError:
+                pass
+    return found
+
+
 def overview():
     """Everything the web overview shows, read live from Docker labels and Git."""
     previews = {}
@@ -448,11 +492,12 @@ def overview():
         if labels.get("traefik.enable") == "true":
             p["status"], p["started"] = status, state.get("StartedAt") if state["Running"] else None
     repos = {}
-    for common in sorted({p["repository"] for p in previews.values() if p["repository"]}):
+    for common in sorted({p["repository"] for p in previews.values() if p["repository"]} | watched_repositories()):
         try:
             trees = worktrees(Path(common))
         except subprocess.CalledProcessError:
             trees = {}
+        states = {path: worktree_state(path) for path in trees}
         saved = saved_previews(Path(common))
         orphans = []
         for name, labels in saved.items():
@@ -466,14 +511,25 @@ def overview():
                                           "devbox.branch": p["branch"]}, trees)
                 if source and source[1]:
                     by_tree.setdefault(source[0], []).append(p["name"])
+                    state = states[source[0]]
+                    p["source_branch"] = trees[source[0]]
+                    if p["mode"] == "live":
+                        # Live code is the worktree itself; the label only records the start commit.
+                        p["head"], p["changes"] = state["head"], state["changes"]
+                    else:
+                        p["behind"] = commits_between(common, p["commit"], state["head"])
         repos[common] = {
             "path": common, "orphans": orphans,
-            "worktrees": [{"path": path, "branch": branch, "previews": by_tree.get(path, [])}
+            "worktrees": [{"path": path, "branch": branch, "previews": by_tree.get(path, []), **states[path]}
                           for path, branch in trees.items()],
         }
     for p in previews.values():
         p.setdefault("status", "missing")
         p.setdefault("started", None)
+        p.setdefault("head", None)
+        p.setdefault("changes", None)
+        p.setdefault("behind", None)
+        p.setdefault("source_branch", None)
     return {"previews": sorted(previews.values(), key=lambda p: (p["project"], p["mode"], p["name"])),
             "repositories": list(repos.values()), "host": host_facts()}
 
@@ -497,13 +553,42 @@ def cert_expiry(host):
     return value
 
 
+def t3_status():
+    """Whether T3 answers on localhost:3773; any HTTP response counts as up."""
+    from urllib.request import urlopen
+    from urllib.error import HTTPError
+    try:
+        urlopen("http://127.0.0.1:3773/", timeout=2).close()
+    except HTTPError:
+        pass
+    except OSError as exc:
+        return {"name": "T3", "status": "down", "detail": exc.__class__.__name__}
+    return {"name": "T3", "status": "up", "detail": "localhost:3773"}
+
+
+def edge_status():
+    """State of the Traefik container of the devbox-edge Compose project."""
+    ids = run(["docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=devbox-edge"], capture=True).split()
+    if not ids:
+        return {"name": "Traefik", "status": "down", "detail": "no devbox-edge container"}
+    state = json.loads(run(["docker", "inspect", ids[0]], capture=True))[0]["State"]
+    status = state.get("Health", {}).get("Status", state["Status"]) if state["Running"] else state["Status"]
+    return {"name": "Traefik", "status": "up" if status in ("running", "healthy") else "down", "detail": status}
+
+
 def host_facts():
+    import ssl, time
     dom = domain()
     disk = [json.loads(line) for line in run(
         ["docker", "system", "df", "--format", "{{json .}}"], capture=True).splitlines() if line]
     running = run(["docker", "ps", "-q"], capture=True).split()
-    return {"domain": dom, "t3": f"https://t3.{dom}", "certificate_expires": cert_expiry(f"t3.{dom}"),
-            "running_containers": len(running),
+    expires = cert_expiry(f"t3.{dom}")
+    try:
+        days = int((ssl.cert_time_to_seconds(expires) - time.time()) // 86400)
+    except ValueError:
+        days = None
+    return {"domain": dom, "t3": f"https://t3.{dom}", "certificate_expires": expires, "certificate_days": days,
+            "services": [t3_status(), edge_status()], "running_containers": len(running),
             "disk": [{"type": d["Type"], "size": d["Size"], "reclaimable": d["Reclaimable"]} for d in disk]}
 
 

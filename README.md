@@ -132,20 +132,22 @@ or digests when commissioning the host. Do not run automatic image updates.
 
 ## Web overview
 
-https://devbox.DEV_DOMAIN shows a CPU/memory/disk summary bar that opens a system
+https://devbox.DEV_DOMAIN shows whether T3 and Traefik are up, days until the
+certificate expires, a CPU/memory/disk summary bar that opens a system
 monitor (10-minute history, swap, per-container usage and top host processes; containers
 and processes are sampled only while it is open), previews (mode, health, branch/commit, uptime and
-URL; expand one for all its containers with ports and a details view: health,
+URL; a live preview shows its worktree's current commit and uncommitted changes, a
+review how far its worktree has moved on; expand one for all its containers with ports and a details view: health,
 networks, mounts, environment with secret-looking values masked, and labels), logs for any container (recent lines, or
-followed live), each repository's worktrees and whether they have a
-preview, clean-up candidates (what `devbox gc` would remove), certificate expiry,
+followed live), each repository's worktrees with their last commit,
+uncommitted changes, upstream distance and preview, clean-up candidates (what `devbox gc` would remove), certificate expiry,
 and Docker disk use. Everything is read live from Docker labels and Git; there is
 no database. It is read-only: lifecycle actions stay in the CLI.
 
 `devbox web` binds to 127.0.0.1:3780. Install `box/systemd/devbox-web.service` as a
 user service (instructions in the file); the `devbox` router in
 `box/traefik/dynamic.yaml` publishes it on the tailnet. Repositories appear once
-they have at least one preview.
+they have at least one preview or a T3 worktree (under `~/.t3/worktrees`).
 
 ## Project recipe
 
