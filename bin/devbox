@@ -428,7 +428,10 @@ def overview():
         state = c["State"]
         # A stopped container keeps its last health result; report it as stopped instead.
         status = state.get("Health", {}).get("Status", state["Status"]) if state["Running"] else state["Status"]
-        p["services"].append({"name": labels.get("com.docker.compose.service", "?"), "status": status})
+        p["services"].append({"name": labels.get("com.docker.compose.service", "?"), "status": status,
+                              "web": labels.get("traefik.enable") == "true", "id": c["Id"][:12],
+                              "image": c["Config"].get("Image", ""),
+                              "started": state.get("StartedAt") if state["Running"] else None})
         if labels.get("traefik.enable") == "true":
             p["status"], p["started"] = status, state.get("StartedAt") if state["Running"] else None
     repos = {}
@@ -491,13 +494,26 @@ def host_facts():
             "disk": [{"type": d["Type"], "size": d["Size"], "reclaimable": d["Reclaimable"]} for d in disk]}
 
 
-def preview_logs(name):
+def preview_container(name, service=None):
+    """Container ID of a preview's service; its web service by default."""
     if not re.fullmatch(r"[a-z0-9-]{1,63}", name):
         fail("Use an exact preview ID.")
-    web = [c for c in containers_for(name) if c["Config"]["Labels"].get("traefik.enable") == "true"]
-    if not web:
-        fail("No web container for that preview.")
-    return subprocess.run(["docker", "logs", "--tail", "200", "--timestamps", web[0]["Id"]], text=True,
+    if service is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", service):
+        fail("Use an exact Compose service name.")
+    for c in containers_for(name):
+        labels = c["Config"]["Labels"]
+        if (labels.get("com.docker.compose.service") == service if service
+                else labels.get("traefik.enable") == "true"):
+            return c["Id"]
+    fail(f"No {service or 'web'} container for that preview.")
+
+
+def logs_command(container, follow=False):
+    return ["docker", "logs", "--tail", "200", "--timestamps", *(["--follow"] if follow else []), container]
+
+
+def preview_logs(name, service=None):
+    return subprocess.run(logs_command(preview_container(name, service)), text=True,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, errors="replace").stdout
 
 
@@ -515,6 +531,34 @@ def serve(host, port):
             self.end_headers()
             self.wfile.write(body)
 
+        def stream(self, command):
+            """Relay docker logs --follow until the browser disconnects."""
+            proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            import select, socket
+            out = proc.stdout.fileno()
+            try:
+                while True:
+                    ready, _, _ = select.select([out, self.connection], [], [], 30)
+                    # The browser never sends more on this connection; readable means it went away.
+                    if self.connection in ready and not self.connection.recv(1, socket.MSG_PEEK):
+                        break
+                    if out in ready:
+                        chunk = os.read(out, 65536)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                proc.kill()
+                proc.wait()
+
         def do_GET(self):
             url = urlparse(self.path)
             try:
@@ -523,8 +567,13 @@ def serve(host, port):
                 elif url.path == "/api/overview":
                     self.send(200, json.dumps(overview()).encode(), "application/json")
                 elif url.path == "/api/logs":
-                    name = parse_qs(url.query).get("preview", [""])[0]
-                    self.send(200, preview_logs(name).encode(), "text/plain; charset=utf-8")
+                    query = parse_qs(url.query)
+                    name = query.get("preview", [""])[0]
+                    service = query.get("service", [None])[0]
+                    if query.get("follow", [""])[0] == "1":
+                        self.stream(logs_command(preview_container(name, service), follow=True))
+                    else:
+                        self.send(200, preview_logs(name, service).encode(), "text/plain; charset=utf-8")
                 else:
                     self.send(404, b"Not found", "text/plain")
             except (ValueError, subprocess.CalledProcessError) as exc:

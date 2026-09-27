@@ -181,6 +181,9 @@ class WebOverview(unittest.TestCase):
         for name in ("", "../etc", "a b", "x;rm"):
             with self.assertRaises(ValueError):
                 dbx.preview_logs(name)
+        for service in ("", "../db", "db;rm", "-f"):
+            with self.assertRaises(ValueError):
+                dbx.preview_container("demo-live-1", service)
 
 
 class GitIntegration(unittest.TestCase):

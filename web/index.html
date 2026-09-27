@@ -53,6 +53,11 @@ button {
   border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
+.expand { border: 0; padding: 0 4px 0 0; color: var(--muted); font-size: 12px; width: 18px; }
+.expand:hover { color: var(--accent); }
+.containers td { background: var(--code); padding: 0 12px 10px 34px; }
+.containers table { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.containers th, .containers td td { padding: 6px 10px; background: none; }
 .repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .repo { padding: 14px 16px; }
 .repo ul { list-style: none; margin: 0; padding: 0; }
@@ -68,11 +73,17 @@ dialog {
 }
 dialog::backdrop { background: rgb(0 0 0 / .45); }
 .dlg-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.dlg-head label { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.dlg-head .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); visibility: hidden; }
+.dlg-head .live-dot.on { visibility: visible; animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
 .dlg-head .mono { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100vh - 130px); font-size: 12px; background: var(--code); white-space: pre-wrap; word-break: break-all; }
 .error { color: var(--bad); padding: 12px 0; }
 @media (max-width: 720px) {
   .hide-sm { display: none; }
+  .containers td { padding-left: 12px; }
+  .dlg-head { flex-wrap: wrap; }
   th, td { padding: 8px; }
 }
 </style>
@@ -106,7 +117,13 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
 </main>
 
 <dialog id="logs">
-  <div class="dlg-head"><span class="mono" id="logs-title"></span><button id="logs-reload">Reload</button><button id="logs-close">Close</button></div>
+  <div class="dlg-head">
+    <span class="live-dot" id="logs-live" title="following"></span>
+    <span class="mono" id="logs-title"></span>
+    <label><input type="checkbox" id="logs-follow"> Follow</label>
+    <label><input type="checkbox" id="logs-hide-health" checked> Hide health checks</label>
+    <button id="logs-reload">Reload</button><button id="logs-close">Close</button>
+  </div>
   <pre id="logs-body"></pre>
 </dialog>
 
@@ -127,21 +144,39 @@ function ago(iso) {
 
 const status = s => `<span class="status s-${esc(s)}"><span class="dot"></span>${esc(s)}</span>`;
 
+const expanded = new Set();
+
+function containerRows(p) {
+  return `<tr class="containers"><td colspan="5"><table>
+    <thead><tr><th>Container</th><th>Status</th><th class="hide-sm">Image</th><th class="hide-sm">ID</th><th class="hide-sm">Up</th><th></th></tr></thead>
+    <tbody>${p.services.map(c => `<tr>
+      <td class="mono">${esc(c.name)}${c.web ? ' <span class="tag">web</span>' : ""}</td>
+      <td>${status(c.status)}</td>
+      <td class="hide-sm mono path">${esc(c.image.startsWith("sha256:") ? c.image.slice(0, 19) : c.image)}</td>
+      <td class="hide-sm mono">${esc(c.id)}</td>
+      <td class="hide-sm">${ago(c.started)}</td>
+      <td><button data-logs="${esc(p.name)}" data-service="${esc(c.name)}">Logs</button></td>
+    </tr>`).join("")}</tbody>
+  </table></td></tr>`;
+}
+
 function renderPreviews(previews) {
   if (!previews.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews. Run <span class="mono">devbox live</span> in a worktree.</td></tr>`; return; }
   let html = "", project = null;
   for (const p of previews) {
     if (p.project !== project) { project = p.project; html += `<tr class="group"><td colspan="5">${esc(project)}</td></tr>`; }
-    const others = p.services.filter(s => s.name !== "web").map(s => `${esc(s.name)} ${esc(s.status)}`).join(" · ");
+    const open = expanded.has(p.name);
+    const others = p.services.filter(s => !s.web).map(s => `${esc(s.name)} ${esc(s.status)}`).join(" · ");
     html += `<tr>
-      <td><span class="tag ${p.mode === "live" ? "live" : ""}">${esc(p.mode)}</span>
+      <td><button class="expand" data-expand="${esc(p.name)}" aria-expanded="${open}" title="Show containers">${open ? "▾" : "▸"}</button><span class="tag ${p.mode === "live" ? "live" : ""}">${esc(p.mode)}</span>
         ${p.status === "healthy" || p.status === "running" ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}
         ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}</div>` : ""}</td>
-      <td>${status(p.status)}${others ? `<div class="services">${others}</div>` : ""}</td>
+      <td>${status(p.status)}${others && !open ? `<div class="services">${others}</div>` : ""}</td>
       <td class="hide-sm mono">${esc(p.branch || "detached")} · ${esc(short(p.commit))}</td>
       <td class="hide-sm">${ago(p.started)}</td>
       <td><button data-logs="${esc(p.name)}">Logs</button></td>
     </tr>`;
+    if (open) html += containerRows(p);
   }
   $("previews").innerHTML = html;
 }
@@ -180,6 +215,7 @@ async function load() {
     const res = await fetch("api/overview");
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
+    lastData = data;
     renderPreviews(data.previews);
     renderRepos(data.repositories);
     renderOrphans(data.repositories);
@@ -192,19 +228,99 @@ async function load() {
   }
 }
 
-let logsFor = null;
-async function showLogs(name) {
-  logsFor = name;
-  $("logs-title").textContent = name;
+let lastData = null;
+let logsFor = null, logLines = [], stream = null, paintQueued = false;
+const MAX_LINES = 5000;
+const HEALTH = /"(GET|HEAD) \/health\/?\S* HTTP|healthcheck/i;
+
+function paintLogs() {
+  paintQueued = false;
+  const pre = $("logs-body");
+  const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+  const lines = $("logs-hide-health").checked ? logLines.filter(l => !HEALTH.test(l)) : logLines;
+  pre.textContent = lines.join("\n") || (stream ? "(waiting for output…)" : "(no output)");
+  if (atBottom) pre.scrollTop = pre.scrollHeight;
+}
+function queuePaint() { if (!paintQueued) { paintQueued = true; requestAnimationFrame(paintLogs); } }
+
+function addText(text, carry) {
+  const parts = (carry + text).split("\n");
+  const rest = parts.pop();
+  logLines.push(...parts);
+  if (logLines.length > MAX_LINES) logLines.splice(0, logLines.length - MAX_LINES);
+  queuePaint();
+  return rest;
+}
+
+function stopFollow() {
+  if (stream) stream.abort();
+  stream = null;
+  $("logs-live").classList.remove("on");
+}
+
+function logsUrl(extra = "") {
+  return `api/logs?preview=${encodeURIComponent(logsFor.preview)}` +
+    (logsFor.service ? `&service=${encodeURIComponent(logsFor.service)}` : "") + extra;
+}
+
+async function loadLogs() {
+  stopFollow();
+  logLines = [];
   $("logs-body").textContent = "loading…";
-  if (!$("logs").open) $("logs").showModal();
-  const res = await fetch("api/logs?preview=" + encodeURIComponent(name));
-  $("logs-body").textContent = (await res.text()) || "(no output)";
+  if ($("logs-follow").checked) return follow();
+  const res = await fetch(logsUrl());
+  const text = await res.text();
+  logLines = text.replace(/\n$/, "").split("\n").filter(Boolean);
+  paintLogs();
   $("logs-body").scrollTop = $("logs-body").scrollHeight;
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-logs]"); if (b) showLogs(b.dataset.logs); });
+
+async function follow() {
+  const ctrl = new AbortController();
+  stream = ctrl;
+  $("logs-live").classList.add("on");
+  try {
+    const res = await fetch(logsUrl("&follow=1"), {signal: ctrl.signal});
+    if (!res.ok) { logLines = [await res.text()]; paintLogs(); return; }
+    const reader = res.body.getReader(), decoder = new TextDecoder();
+    let carry = "";
+    paintLogs();
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      carry = addText(decoder.decode(value, {stream: true}), carry);
+    }
+    if (carry) addText("\n", carry);
+  } catch (e) {
+    if (e.name !== "AbortError") { logLines.push("[stream error: " + e.message + "]"); queuePaint(); }
+  } finally {
+    if (stream === ctrl) { stream = null; $("logs-live").classList.remove("on"); }
+  }
+}
+
+function showLogs(preview, service) {
+  logsFor = {preview, service};
+  $("logs-title").textContent = preview + " · " + (service || "web");
+  if (!$("logs").open) $("logs").showModal();
+  $("logs-body").scrollTop = 0;
+  loadLogs();
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-logs]");
+  if (b) return showLogs(b.dataset.logs, b.dataset.service);
+  const x = e.target.closest("[data-expand]");
+  if (x) {
+    const name = x.dataset.expand;
+    expanded.has(name) ? expanded.delete(name) : expanded.add(name);
+    if (lastData) renderPreviews(lastData.previews);
+  }
+});
 $("logs-close").onclick = () => $("logs").close();
-$("logs-reload").onclick = () => logsFor && showLogs(logsFor);
+$("logs").addEventListener("close", stopFollow);
+$("logs-reload").onclick = () => logsFor && loadLogs();
+$("logs-follow").onchange = () => logsFor && loadLogs();
+$("logs-hide-health").onchange = paintLogs;
 
 load();
 setInterval(() => { if (!document.hidden && !$("logs").open) load(); }, 10000);
