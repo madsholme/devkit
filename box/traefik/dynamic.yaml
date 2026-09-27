@@ -13,8 +13,17 @@ http:
       entryPoints: [websecure]
       service: t3
       tls: {}
+    devbox:
+      rule: 'Host(`devbox.{{ env "DEV_DOMAIN" }}`)'
+      entryPoints: [websecure]
+      service: devbox
+      tls: {}
   services:
     t3:
       loadBalancer:
         servers:
           - url: http://127.0.0.1:3773
+    devbox:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:3780

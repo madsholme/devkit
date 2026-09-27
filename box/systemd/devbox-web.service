@@ -1,0 +1,16 @@
+# Read-only devbox web overview on localhost; Traefik publishes it at devbox.DEV_DOMAIN.
+# Install: cp to ~/.config/systemd/user/, set DEV_DOMAIN, then
+#   systemctl --user daemon-reload && systemctl --user enable --now devbox-web
+[Unit]
+Description=devbox web overview
+After=docker.service
+
+[Service]
+Type=simple
+Environment=DEV_DOMAIN=dev.steenfeldt.net
+ExecStart=/usr/bin/python3 %h/devbox-kit/bin/devbox web --host 127.0.0.1 --port 3780
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

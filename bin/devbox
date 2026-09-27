@@ -411,6 +411,132 @@ def logs(follow):
     run(["docker", "logs", "--tail", "200", *(["--follow"] if follow else []), live_web(root)])
 
 
+def overview():
+    """Everything the web overview shows, read live from Docker labels and Git."""
+    previews = {}
+    for c in docker_containers():
+        labels = c["Config"].get("Labels", {})
+        name = labels.get("devbox.preview")
+        if not name:
+            continue
+        p = previews.setdefault(name, {
+            "name": name, "mode": labels.get("devbox.mode", "?"), "project": labels.get("devbox.project", "?"),
+            "branch": labels.get("devbox.branch", ""), "commit": labels.get("devbox.commit", ""),
+            "worktree": labels.get("devbox.worktree", ""), "url": labels.get("devbox.url", ""),
+            "repository": labels.get("devbox.repository", ""), "services": [],
+        })
+        state = c["State"]
+        # A stopped container keeps its last health result; report it as stopped instead.
+        status = state.get("Health", {}).get("Status", state["Status"]) if state["Running"] else state["Status"]
+        p["services"].append({"name": labels.get("com.docker.compose.service", "?"), "status": status})
+        if labels.get("traefik.enable") == "true":
+            p["status"], p["started"] = status, state.get("StartedAt") if state["Running"] else None
+    repos = {}
+    for common in sorted({p["repository"] for p in previews.values() if p["repository"]}):
+        try:
+            trees = worktrees(Path(common))
+        except subprocess.CalledProcessError:
+            trees = {}
+        saved = saved_previews(Path(common))
+        orphans = []
+        for name, labels in saved.items():
+            source = source_worktree(labels, trees)
+            if source and not source[1]:
+                orphans.append({"name": name, "mode": labels.get("devbox.mode", "?"), "worktree": source[0]})
+        by_tree = {}
+        for p in previews.values():
+            if p["repository"] == common:
+                source = source_worktree({"devbox.worktree": p["worktree"], "devbox.mode": p["mode"],
+                                          "devbox.branch": p["branch"]}, trees)
+                if source and source[1]:
+                    by_tree.setdefault(source[0], []).append(p["name"])
+        repos[common] = {
+            "path": common, "orphans": orphans,
+            "worktrees": [{"path": path, "branch": branch, "previews": by_tree.get(path, [])}
+                          for path, branch in trees.items()],
+        }
+    for p in previews.values():
+        p.setdefault("status", "missing")
+        p.setdefault("started", None)
+    return {"previews": sorted(previews.values(), key=lambda p: (p["project"], p["mode"], p["name"])),
+            "repositories": list(repos.values()), "host": host_facts()}
+
+
+_cert_cache = {}
+
+
+def cert_expiry(host):
+    """notAfter of the certificate served for host; cached for an hour."""
+    import ssl, socket, time
+    cached = _cert_cache.get(host)
+    if cached and time.time() - cached[0] < 3600:
+        return cached[1]
+    try:
+        with socket.create_connection((host, 443), timeout=3) as sock:
+            with ssl.create_default_context().wrap_socket(sock, server_hostname=host) as tls:
+                value = tls.getpeercert()["notAfter"]
+    except OSError as exc:
+        value = f"unavailable ({exc.__class__.__name__})"
+    _cert_cache[host] = (time.time(), value)
+    return value
+
+
+def host_facts():
+    dom = domain()
+    disk = [json.loads(line) for line in run(
+        ["docker", "system", "df", "--format", "{{json .}}"], capture=True).splitlines() if line]
+    running = run(["docker", "ps", "-q"], capture=True).split()
+    return {"domain": dom, "t3": f"https://t3.{dom}", "certificate_expires": cert_expiry(f"t3.{dom}"),
+            "running_containers": len(running),
+            "disk": [{"type": d["Type"], "size": d["Size"], "reclaimable": d["Reclaimable"]} for d in disk]}
+
+
+def preview_logs(name):
+    if not re.fullmatch(r"[a-z0-9-]{1,63}", name):
+        fail("Use an exact preview ID.")
+    web = [c for c in containers_for(name) if c["Config"]["Labels"].get("traefik.enable") == "true"]
+    if not web:
+        fail("No web container for that preview.")
+    return subprocess.run(["docker", "logs", "--tail", "200", "--timestamps", web[0]["Id"]], text=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, errors="replace").stdout
+
+
+def serve(host, port):
+    """Read-only web overview. Bind to localhost; Traefik publishes it on the tailnet."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import parse_qs, urlparse
+    page = (Path(__file__).resolve().parent.parent / "web" / "index.html").read_bytes()
+
+    class Handler(BaseHTTPRequestHandler):
+        def send(self, code, body, kind):
+            self.send_response(code)
+            self.send_header("Content-Type", kind)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            url = urlparse(self.path)
+            try:
+                if url.path == "/":
+                    self.send(200, page, "text/html; charset=utf-8")
+                elif url.path == "/api/overview":
+                    self.send(200, json.dumps(overview()).encode(), "application/json")
+                elif url.path == "/api/logs":
+                    name = parse_qs(url.query).get("preview", [""])[0]
+                    self.send(200, preview_logs(name).encode(), "text/plain; charset=utf-8")
+                else:
+                    self.send(404, b"Not found", "text/plain")
+            except (ValueError, subprocess.CalledProcessError) as exc:
+                self.send(400, str(exc).encode(), "text/plain; charset=utf-8")
+
+        def log_message(self, *args):
+            pass
+
+    print(f"devbox web on http://{host}:{port}", flush=True)
+    ThreadingHTTPServer((host, port), Handler).serve_forever()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -424,6 +550,9 @@ def main():
     p = sub.add_parser("logs", help="show this worktree's live web log")
     p.add_argument("-f", "--follow", action="store_true")
     sub.add_parser("ls", help="list managed previews, including stopped ones")
+    p = sub.add_parser("web", help="serve the read-only web overview")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=3780)
     p = sub.add_parser("gc", help="destroy previews whose worktree no longer exists (dry run by default)")
     p.add_argument("--yes", action="store_true", help="actually destroy them")
     for action, verb in (("start", "resume a stopped preview; data is retained"),
@@ -445,6 +574,8 @@ def main():
         logs(args.follow)
     elif args.command == "ls":
         listing()
+    elif args.command == "web":
+        serve(args.host, args.port)
     elif args.command == "gc":
         gc(args.yes)
     else:

@@ -27,6 +27,7 @@ software, or configure credentials automatically.
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devbox exec <cmd>` | Run a command in this worktree's live web container, as your user |
 | `devbox logs [-f]` | Show (or follow) this worktree's live web log |
+| `devbox web` | Serve the read-only web overview (see below) |
 | `devbox ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devbox stop [preview]` | Stop containers; retain data |
 | `devbox start [preview]` | Resume saved configuration; retain data |
@@ -128,6 +129,19 @@ policy should grant the intended users access to TCP 443 and SSH.
 
 The Traefik `v3` and Python image tags are bootstrap defaults. Pin tested versions
 or digests when commissioning the host. Do not run automatic image updates.
+
+## Web overview
+
+https://devbox.DEV_DOMAIN shows previews (mode, health, branch/commit, uptime,
+URL and recent web logs), each repository's worktrees and whether they have a
+preview, clean-up candidates (what `devbox gc` would remove), certificate expiry,
+and Docker disk use. Everything is read live from Docker labels and Git; there is
+no database. It is read-only: lifecycle actions stay in the CLI.
+
+`devbox web` binds to 127.0.0.1:3780. Install `box/systemd/devbox-web.service` as a
+user service (instructions in the file); the `devbox` router in
+`box/traefik/dynamic.yaml` publishes it on the tailnet. Repositories appear once
+they have at least one preview.
 
 ## Project recipe
 

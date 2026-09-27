@@ -158,6 +158,31 @@ class Lifecycle(unittest.TestCase):
                 dbx.assert_owner("demo-live", Path("/mine/.git"))
 
 
+class WebOverview(unittest.TestCase):
+    def container(self, service, running, health, web=False):
+        labels = {"devbox.preview": "demo-live-1", "devbox.mode": "live", "devbox.project": "demo",
+                  "com.docker.compose.service": service}
+        if web:
+            labels["traefik.enable"] = "true"
+        return {"Id": service, "Config": {"Labels": labels},
+                "State": {"Running": running, "Status": "running" if running else "exited",
+                          "StartedAt": "2026-01-01T00:00:00Z", "Health": {"Status": health}}}
+
+    def test_stopped_preview_reports_state_not_stale_health(self):
+        with patch.object(dbx, "docker_containers", return_value=[
+                self.container("web", False, "unhealthy", web=True), self.container("db", True, "healthy")]), \
+             patch.object(dbx, "host_facts", return_value={}):
+            (preview,) = dbx.overview()["previews"]
+        self.assertEqual(preview["status"], "exited")
+        self.assertIsNone(preview["started"])
+        self.assertEqual({s["name"]: s["status"] for s in preview["services"]}, {"web": "exited", "db": "healthy"})
+
+    def test_logs_reject_anything_but_a_preview_id(self):
+        for name in ("", "../etc", "a b", "x;rm"):
+            with self.assertRaises(ValueError):
+                dbx.preview_logs(name)
+
+
 class GitIntegration(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

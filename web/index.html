@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>devbox</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
+  --accent: #2f5bd3; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --idle: #8a8a85;
+  --code: #f0f0ec;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141413; --panel: #1d1d1b; --text: #ecece8; --muted: #9a9a94; --line: #2e2e2b;
+    --accent: #7ea2ff; --ok: #4cc27f; --warn: #e0a84a; --bad: #ef6b5b; --idle: #77776f;
+    --code: #262624;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; margin-bottom: 20px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
+h3 { font-size: 14px; margin: 0 0 8px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); }
+.facts b { color: var(--text); font-weight: 500; }
+.refresh { margin-left: auto; color: var(--muted); font-size: 12px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 500; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+.group td { background: var(--code); font-weight: 600; padding: 6px 12px; }
+.status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); flex: none; }
+.s-healthy .dot, .s-running .dot { background: var(--ok); }
+.s-starting .dot, .s-restarting .dot { background: var(--warn); }
+.s-unhealthy .dot, .s-dead .dot, .s-missing .dot { background: var(--bad); }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--line); color: var(--muted); }
+.tag.live { color: var(--accent); border-color: var(--accent); }
+.services { font-size: 12px; color: var(--muted); margin-top: 2px; }
+button {
+  font: inherit; font-size: 12.5px; color: var(--accent); background: none;
+  border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+.repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.repo { padding: 14px 16px; }
+.repo ul { list-style: none; margin: 0; padding: 0; }
+.repo li { padding: 6px 0; border-top: 1px solid var(--line); }
+.repo li:first-child { border-top: 0; }
+.path { word-break: break-all; }
+.empty { padding: 16px; color: var(--muted); }
+.disk td:nth-child(n+2) { text-align: right; }
+.disk th:nth-child(n+2) { text-align: right; }
+dialog {
+  width: min(1000px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text);
+}
+dialog::backdrop { background: rgb(0 0 0 / .45); }
+.dlg-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.dlg-head .mono { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100vh - 130px); font-size: 12px; background: var(--code); white-space: pre-wrap; word-break: break-all; }
+.error { color: var(--bad); padding: 12px 0; }
+@media (max-width: 720px) {
+  .hide-sm { display: none; }
+  th, td { padding: 8px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>devbox</h1>
+    <div class="facts" id="facts"></div>
+    <span class="refresh" id="refreshed">loading…</span>
+  </header>
+  <div id="error" class="error" hidden></div>
+
+  <h2>Previews</h2>
+  <div class="panel"><table>
+    <thead><tr><th>Preview</th><th>Status</th><th class="hide-sm">Branch · commit</th><th class="hide-sm">Up</th><th></th></tr></thead>
+    <tbody id="previews"></tbody>
+  </table></div>
+
+  <h2>Worktrees</h2>
+  <div class="repos" id="repos"></div>
+
+  <h2>Clean-up candidates</h2>
+  <div class="panel" id="orphans"></div>
+
+  <h2>Docker disk</h2>
+  <div class="panel"><table class="disk">
+    <thead><tr><th>Type</th><th>Size</th><th>Reclaimable</th></tr></thead>
+    <tbody id="disk"></tbody>
+  </table></div>
+</main>
+
+<dialog id="logs">
+  <div class="dlg-head"><span class="mono" id="logs-title"></span><button id="logs-reload">Reload</button><button id="logs-close">Close</button></div>
+  <pre id="logs-body"></pre>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const short = c => (c || "").slice(0, 10);
+const home = p => (p || "").replace(/^\/home\/[^/]+/, "~");
+
+function ago(iso) {
+  if (!iso) return "—";
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (s < 90) return Math.round(s) + "s";
+  if (s < 5400) return Math.round(s / 60) + "m";
+  if (s < 172800) return Math.round(s / 3600) + "h";
+  return Math.round(s / 86400) + "d";
+}
+
+const status = s => `<span class="status s-${esc(s)}"><span class="dot"></span>${esc(s)}</span>`;
+
+function renderPreviews(previews) {
+  if (!previews.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews. Run <span class="mono">devbox live</span> in a worktree.</td></tr>`; return; }
+  let html = "", project = null;
+  for (const p of previews) {
+    if (p.project !== project) { project = p.project; html += `<tr class="group"><td colspan="5">${esc(project)}</td></tr>`; }
+    const others = p.services.filter(s => s.name !== "web").map(s => `${esc(s.name)} ${esc(s.status)}`).join(" · ");
+    html += `<tr>
+      <td><span class="tag ${p.mode === "live" ? "live" : ""}">${esc(p.mode)}</span>
+        ${p.status === "healthy" || p.status === "running" ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}
+        ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}</div>` : ""}</td>
+      <td>${status(p.status)}${others ? `<div class="services">${others}</div>` : ""}</td>
+      <td class="hide-sm mono">${esc(p.branch || "detached")} · ${esc(short(p.commit))}</td>
+      <td class="hide-sm">${ago(p.started)}</td>
+      <td><button data-logs="${esc(p.name)}">Logs</button></td>
+    </tr>`;
+  }
+  $("previews").innerHTML = html;
+}
+
+function renderRepos(repos) {
+  $("repos").innerHTML = repos.map(r => `<div class="panel repo">
+    <h3 class="mono path">${esc(home(r.path.replace(/\/\.git$/, "")))}</h3>
+    <ul>${r.worktrees.map(w => `<li>
+      <div class="mono">${esc(w.branch || "detached")}</div>
+      <div class="muted mono path">${esc(home(w.path))}</div>
+      <div class="services">${w.previews.length ? "preview: " + w.previews.map(esc).join(", ") : "no preview"}</div>
+    </li>`).join("")}</ul>
+  </div>`).join("") || `<div class="panel empty">No repositories with previews yet.</div>`;
+}
+
+function renderOrphans(repos) {
+  const rows = repos.flatMap(r => r.orphans.map(o => ({...o, repo: r.path.replace(/\/\.git$/, "")})));
+  $("orphans").innerHTML = rows.length
+    ? `<table><thead><tr><th>Preview</th><th>Mode</th><th class="hide-sm">Removed worktree</th></tr></thead><tbody>${rows.map(o =>
+        `<tr><td class="mono">${esc(o.name)}</td><td>${esc(o.mode)}</td><td class="hide-sm mono path">${esc(home(o.worktree))}</td></tr>`).join("")}</tbody></table>
+       <div class="empty">Remove them with <span class="mono">devbox gc --yes</span> in the repository.</div>`
+    : `<div class="empty">None. Every preview's worktree still exists.</div>`;
+}
+
+function renderHost(h) {
+  $("facts").innerHTML = `
+    <span><a href="${esc(h.t3)}" target="_blank" rel="noopener">T3 Code</a></span>
+    <span>${esc(h.domain)}</span>
+    <span>cert expires <b>${esc(h.certificate_expires)}</b></span>
+    <span><b>${h.running_containers}</b> containers running</span>`;
+  $("disk").innerHTML = h.disk.map(d => `<tr><td>${esc(d.type)}</td><td>${esc(d.size)}</td><td>${esc(d.reclaimable)}</td></tr>`).join("");
+}
+
+async function load() {
+  try {
+    const res = await fetch("api/overview");
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    renderPreviews(data.previews);
+    renderRepos(data.repositories);
+    renderOrphans(data.repositories);
+    renderHost(data.host);
+    $("error").hidden = true;
+    $("refreshed").textContent = "updated " + new Date().toLocaleTimeString();
+  } catch (e) {
+    $("error").hidden = false;
+    $("error").textContent = "Could not load overview: " + e.message;
+  }
+}
+
+let logsFor = null;
+async function showLogs(name) {
+  logsFor = name;
+  $("logs-title").textContent = name;
+  $("logs-body").textContent = "loading…";
+  if (!$("logs").open) $("logs").showModal();
+  const res = await fetch("api/logs?preview=" + encodeURIComponent(name));
+  $("logs-body").textContent = (await res.text()) || "(no output)";
+  $("logs-body").scrollTop = $("logs-body").scrollHeight;
+}
+document.addEventListener("click", e => { const b = e.target.closest("[data-logs]"); if (b) showLogs(b.dataset.logs); });
+$("logs-close").onclick = () => $("logs").close();
+$("logs-reload").onclick = () => logsFor && showLogs(logsFor);
+
+load();
+setInterval(() => { if (!document.hidden && !$("logs").open) load(); }, 10000);
+</script>
+</body>
+</html>

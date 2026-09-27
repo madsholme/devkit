@@ -30,6 +30,7 @@ Installed and HTTPS commissioned on 2026-09-14.
 ## Running endpoints
 
 - T3: https://t3.dev.steenfeldt.net
+- Overview: https://devbox.dev.steenfeldt.net (devbox-web.service, localhost:3780)
 - Live: https://demo-main-live-9f7f4fac13.dev.steenfeldt.net
 - Review: https://demo-40636547d6674a487f13-review-06a726b4b8.dev.steenfeldt.net
 - Review commit: 40636547d6674a487f1335b3bf46aeaaa518149c
