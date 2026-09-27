@@ -8,7 +8,7 @@ Installed and HTTPS commissioned on 2026-09-14.
 - Ubuntu 26.04.1; Docker Engine 29.8.0; Compose 5.5.1
 - Tailscale IPv4: 100.69.127.125
 - Kit: /home/rene/devbox-kit
-- CLI wrapper and just 1.45.0: /home/rene/.local/bin
+- CLI wrapper: /home/rene/.local/bin
 - Demo repository: /home/rene/work/devbox-demo
 - No pre-existing Docker workloads were altered.
 

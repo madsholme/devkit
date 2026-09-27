@@ -84,8 +84,12 @@ def domain():
     return value
 
 
-def recipe(root, name, env):
-    run(["just", "--justfile", root / "justfile", name], cwd=root, env=env)
+def hook(root, cfg, name, env):
+    """Run a project hook from devbox.json; a missing hook is skipped."""
+    command = cfg.get("hooks", {}).get(name)
+    if command:
+        run(["sh", "-euc", command], cwd=root, env=env)
+    return bool(command)
 
 
 def docker_containers():
@@ -276,13 +280,14 @@ def prepare_preview(mode, ref=None):
                     "devbox.commit": commit, "devbox.branch": branch, "devbox.worktree": str(source),
                     "devbox.url": env["DEVBOX_URL"]}
         if mode == "review":
-            recipe(root, "prepare", env)
-            recipe(root, "check", env)
+            hook(root, cfg, "prepare", env)
+            hook(root, cfg, "check", env)
             if git(root, "status", "--porcelain", "--untracked-files=all"):
                 fail("prepare/check changed the review checkout. Keep build inputs committed.")
-            recipe(root, "build", env)
+            if not hook(root, cfg, "build", env):
+                fail("devbox.json has no build hook; review needs one to produce $DEVBOX_IMAGE.")
         else:
-            recipe(root, "prepare", env)
+            hook(root, cfg, "prepare", env)
         resolved = render(root, cfg, mode, env, metadata)
         path.write_text(json.dumps(resolved, indent=2) + "\n")
         os.chmod(path, 0o600)
@@ -376,7 +381,34 @@ def publish(ref):
     env = os.environ.copy()
     env.update(DEVBOX_COMMIT=commit, DEVBOX_IMAGE_ID=image_id, DEVBOX_PREVIEW=name)
     # An explicit per-project adapter owns registry and Dokploy configuration.
-    recipe(root, "publish", env)
+    if not hook(root, cfg, "publish", env):
+        fail("Team publishing is not configured: add a publish hook to devbox.json.")
+
+
+def live_web(root):
+    """The running web container of the current worktree's live preview."""
+    cfg = config(root)
+    for c in docker_containers():
+        labels = c["Config"].get("Labels", {})
+        if (c["State"]["Running"] and labels.get("devbox.mode") == "live"
+                and labels.get("devbox.worktree") == str(root)
+                and labels.get("com.docker.compose.service") == cfg.get("web_service", "web")):
+            return c["Id"]
+    fail("No running live preview for this worktree. Run devbox live first.")
+
+
+def exec_live(command):
+    root, _ = repository()
+    # Run as the host user so files written into the bind-mounted source stay yours.
+    args = ["docker", "exec", "-i", "-u", f"{os.getuid()}:{os.getgid()}"]
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        args.append("-t")
+    sys.exit(subprocess.run([*args, live_web(root), *command]).returncode)
+
+
+def logs(follow):
+    root, _ = repository()
+    run(["docker", "logs", "--tail", "200", *(["--follow"] if follow else []), live_web(root)])
 
 
 def main():
@@ -385,8 +417,12 @@ def main():
     sub.add_parser("live", help="start or resume a preview of working files")
     p = sub.add_parser("review", help="fresh build from a committed version")
     p.add_argument("commit", nargs="?", default="HEAD")
-    p = sub.add_parser("publish", help="publish an existing reviewed image through the project recipe")
+    p = sub.add_parser("publish", help="publish an existing reviewed image through the project publish hook")
     p.add_argument("commit", nargs="?", default="HEAD")
+    p = sub.add_parser("exec", help="run a command in this worktree's live web container")
+    p.add_argument("cmd", nargs=argparse.REMAINDER)
+    p = sub.add_parser("logs", help="show this worktree's live web log")
+    p.add_argument("-f", "--follow", action="store_true")
     sub.add_parser("ls", help="list managed previews, including stopped ones")
     p = sub.add_parser("gc", help="destroy previews whose worktree no longer exists (dry run by default)")
     p.add_argument("--yes", action="store_true", help="actually destroy them")
@@ -401,6 +437,12 @@ def main():
         prepare_preview(args.command, getattr(args, "commit", None))
     elif args.command == "publish":
         publish(args.commit)
+    elif args.command == "exec":
+        if not args.cmd:
+            fail("Usage: devbox exec <command> [args...]")
+        exec_live(args.cmd)
+    elif args.command == "logs":
+        logs(args.follow)
     elif args.command == "ls":
         listing()
     elif args.command == "gc":

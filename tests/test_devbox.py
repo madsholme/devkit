@@ -184,15 +184,16 @@ class GitIntegration(unittest.TestCase):
         (self.root / "message.txt").write_text("Uncommitted live change")
         observed = []
 
-        def recipe(root, name, env):
+        def recipe(root, cfg, name, env):
             observed.append((root / "message.txt").read_text())
             self.assertEqual(env["DEVBOX_COMMIT"], self.commit)
+            return True
 
         def render(root, cfg, mode, env, metadata):
             return {"services": {"web": {"labels": metadata}}}
 
         with patch.object(dbx, "repository", return_value=(self.root, self.common)), \
-             patch.object(dbx, "assert_owner"), patch.object(dbx, "recipe", side_effect=recipe), \
+             patch.object(dbx, "assert_owner"), patch.object(dbx, "hook", side_effect=recipe), \
              patch.object(dbx, "render", side_effect=render), patch.object(dbx, "compose"), \
              patch.dict(os.environ, DEV_DOMAIN="dev.example.com"):
             dbx.prepare_preview("review", self.commit)
@@ -200,6 +201,14 @@ class GitIntegration(unittest.TestCase):
         self.assertTrue(all(value == original for value in observed))
         self.assertEqual((self.root / "message.txt").read_text(), "Uncommitted live change")
         self.assertEqual(self.git("worktree", "list", "--porcelain").count("worktree "), 1)
+
+    def test_hooks_run_from_devbox_json_and_missing_ones_are_skipped(self):
+        cfg = {"hooks": {"check": 'echo "$DEVBOX_COMMIT" > hook.out'}}
+        self.assertTrue(dbx.hook(self.root, cfg, "check", {**os.environ, "DEVBOX_COMMIT": "abc"}))
+        self.assertEqual((self.root / "hook.out").read_text(), "abc\n")
+        self.assertFalse(dbx.hook(self.root, cfg, "prepare", os.environ))
+        with self.assertRaises(subprocess.CalledProcessError):
+            dbx.hook(self.root, {"hooks": {"check": "false"}}, "check", os.environ)
 
     def test_worktrees_skip_removed_directories(self):
         kept, removed = Path(self.temp.name) / "kept", Path(self.temp.name) / "removed"

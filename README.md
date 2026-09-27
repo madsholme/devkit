@@ -25,12 +25,14 @@ software, or configure credentials automatically.
 |---|---|
 | `devbox live` | Start/resume current workspace's live preview |
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
+| `devbox exec <cmd>` | Run a command in this worktree's live web container, as your user |
+| `devbox logs [-f]` | Show (or follow) this worktree's live web log |
 | `devbox ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devbox stop [preview]` | Stop containers; retain data |
 | `devbox start [preview]` | Resume saved configuration; retain data |
 | `devbox destroy [preview]` | Remove containers/networks and disposable named volumes |
 | `devbox gc [--yes]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
-| `devbox publish HEAD` | Call the project's publishing adapter with reviewed image ID |
+| `devbox publish HEAD` | Run the project's `publish` hook with the reviewed image ID |
 
 Run lifecycle commands inside the owning Git repository. `ls` works anywhere.
 Without a preview ID, `stop`, `start` and `destroy` act on the preview that belongs
@@ -67,7 +69,7 @@ This v1 sample does not initialize submodules or Git LFS automatically.
 
 ## Host prerequisites
 
-Linux, Git, Python 3.10+, Docker Engine with Compose v2, `just`, Tailscale, and the
+Linux, Git, Python 3.10+, Docker Engine with Compose v2, Tailscale, and the
 agent runtime of your choice. Install these using their official instructions after
 checking the target host. Do not pipe installers into a shell without inspecting
 the host and choosing versions. The installation is intentionally separate.
@@ -134,9 +136,11 @@ project slug per clone on a host. It identifies the web service, its internal po
 and separate live/review Compose files. Common configuration can be factored out
 later; the tiny sample deliberately keeps each file self-contained.
 
-The `justfile` contract is prepare/check/live/build/seed plus a publish adapter.
-Prepare/check must not modify tracked review inputs. Build must produce
-`$DEVBOX_IMAGE`. Compose files must have health checks, isolated named volumes,
+`devbox.json` also holds the project's hooks: shell commands run with `sh -eu`
+in the project root. `prepare` runs before live and review, `check` and `build`
+during review, `publish` for `devbox publish`. All are optional except `build`
+(review) and `publish` (publishing). Prepare/check must not modify tracked review
+inputs. Build must produce `$DEVBOX_IMAGE`. Compose files must have health checks, isolated named volumes,
 no fixed container names and no host port publishing. Review Compose uses the built
 image and has no build entries or source mounts. `DEVBOX_URL` and `DEVBOX_COMMIT`
 are available during rendering/building for project configuration.
@@ -158,7 +162,7 @@ startup on its successful completion and make it safe to rerun.
 
 Give your agent the following project instruction:
 
-> Work in a separate worktree. Use just check for checks. Start devbox live only
+> Work in a separate worktree. Run tests with devbox exec. Start devbox live only
 > when a live preview is useful or requested. After committing, use devbox review
 > with the exact commit for review and report its URL and SHA. Preserve stopped
 > preview data. Publish to the team only when requested.

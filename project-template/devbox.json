@@ -5,5 +5,9 @@
   "compose": {
     "live": "compose.live.yaml",
     "review": "compose.review.yaml"
+  },
+  "hooks": {
+    "check": "python3 -c 'import ast; from pathlib import Path; ast.parse(Path(\"app.py\").read_text())'",
+    "build": "docker build --label \"org.opencontainers.image.revision=$DEVBOX_COMMIT\" --build-arg \"DEVBOX_COMMIT=$DEVBOX_COMMIT\" -t \"$DEVBOX_IMAGE\" ."
   }
 }

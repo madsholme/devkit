@@ -1,12 +1,12 @@
 # Team publishing: adapter contract
 
 The intended destination is Dokploy on Hetzner. Destination details are not yet
-provided, so the sample `publish` recipe deliberately fails instead of pretending
+provided, so the sample has no `publish` hook and publishing fails instead of pretending
 to deploy. Local live/review previews do not require Git pushes.
 
 `devbox publish <commit>` requires an existing local review container (running or
 stopped). It obtains the reviewed web image ID from its Docker labels and calls
-the current project's `just publish` with:
+the `publish` hook from the project's `devbox.json` with:
 
 - `DEVBOX_COMMIT`: full source commit
 - `DEVBOX_IMAGE_ID`: exact local image ID, not a mutable tag
