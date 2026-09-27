@@ -53,7 +53,9 @@ button {
   border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
-.expand { border: 0; padding: 0 4px 0 0; color: var(--muted); font-size: 12px; width: 18px; }
+.expand { border: 0; padding: 0; margin-right: 6px; color: var(--muted); font-size: 16px; line-height: 1; width: 20px; }
+tr.preview { cursor: pointer; }
+tr.preview:hover td { background: var(--code); }
 .expand:hover { color: var(--accent); }
 .containers td { background: var(--code); padding: 0 12px 10px 34px; }
 .containers table { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
@@ -167,7 +169,7 @@ function renderPreviews(previews) {
     if (p.project !== project) { project = p.project; html += `<tr class="group"><td colspan="5">${esc(project)}</td></tr>`; }
     const open = expanded.has(p.name);
     const others = p.services.filter(s => !s.web).map(s => `${esc(s.name)} ${esc(s.status)}`).join(" · ");
-    html += `<tr>
+    html += `<tr class="preview" data-row="${esc(p.name)}">
       <td><button class="expand" data-expand="${esc(p.name)}" aria-expanded="${open}" title="Show containers">${open ? "▾" : "▸"}</button><span class="tag ${p.mode === "live" ? "live" : ""}">${esc(p.mode)}</span>
         ${p.status === "healthy" || p.status === "running" ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}
         ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}</div>` : ""}</td>
@@ -309,9 +311,10 @@ function showLogs(preview, service) {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-logs]");
   if (b) return showLogs(b.dataset.logs, b.dataset.service);
-  const x = e.target.closest("[data-expand]");
+  // Clicking anywhere on a preview row toggles it, except its link.
+  const x = e.target.closest("[data-expand]") || (!e.target.closest("a") && e.target.closest("[data-row]"));
   if (x) {
-    const name = x.dataset.expand;
+    const name = x.dataset.expand || x.dataset.row;
     expanded.has(name) ? expanded.delete(name) : expanded.add(name);
     if (lastData) renderPreviews(lastData.previews);
   }
