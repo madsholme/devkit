@@ -399,18 +399,41 @@ def gc(apply):
     print(f"Destroyed {len(stale)} preview(s).")
 
 
+def container_status(state):
+    # A stopped container keeps its last health result; report it as stopped instead.
+    return state.get("Health", {}).get("Status", state["Status"]) if state["Running"] else state["Status"]
+
+
+def live_head(labels, trees_by_repo):
+    """Current commit of a live preview's worktree; its code is the worktree, not the start commit."""
+    repo = labels.get("devbox.repository")
+    if labels.get("devbox.mode") != "live" or not repo:
+        return None
+    if repo not in trees_by_repo:
+        try:
+            trees_by_repo[repo] = worktrees(Path(repo))
+        except subprocess.CalledProcessError:
+            trees_by_repo[repo] = {}
+    source = source_worktree(labels, trees_by_repo[repo])
+    if not source or not source[1]:
+        return None
+    try:
+        return git(source[0], "rev-parse", "HEAD")
+    except subprocess.CalledProcessError:
+        return None
+
+
 def listing():
-    seen = set()
+    seen, trees = set(), {}
     print("PREVIEW\tMODE\tSTATUS\tCOMMIT\tURL")
     for c in docker_containers():
         labels = c["Config"]["Labels"]
         if labels.get("traefik.enable") != "true" or labels["devbox.preview"] in seen:
             continue
         seen.add(labels["devbox.preview"])
-        state = c["State"]
-        status = state.get("Health", {}).get("Status", state["Status"])
-        print("\t".join([labels["devbox.preview"], labels["devbox.mode"], status,
-                         labels["devbox.commit"][:12], labels["devbox.url"]]))
+        commit = live_head(labels, trees) or labels["devbox.commit"]
+        print("\t".join([labels["devbox.preview"], labels["devbox.mode"], container_status(c["State"]),
+                         commit[:12], labels["devbox.url"]]))
 
 
 def publish(ref):
@@ -530,8 +553,7 @@ def overview():
             "repository": labels.get("devbox.repository", ""), "services": [],
         })
         state = c["State"]
-        # A stopped container keeps its last health result; report it as stopped instead.
-        status = state.get("Health", {}).get("Status", state["Status"]) if state["Running"] else state["Status"]
+        status = container_status(state)
         p["services"].append({"name": labels.get("com.docker.compose.service", "?"), "status": status,
                               "web": labels.get("traefik.enable") == "true", "id": c["Id"][:12],
                               "image": c["Config"].get("Image", ""), "ports": container_ports(c),
@@ -618,8 +640,7 @@ def edge_status():
     ids = run(["docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=devbox-edge"], capture=True).split()
     if not ids:
         return {"name": "Traefik", "status": "down", "detail": "no devbox-edge container"}
-    state = json.loads(run(["docker", "inspect", ids[0]], capture=True))[0]["State"]
-    status = state.get("Health", {}).get("Status", state["Status"]) if state["Running"] else state["Status"]
+    status = container_status(json.loads(run(["docker", "inspect", ids[0]], capture=True))[0]["State"])
     return {"name": "Traefik", "status": "up" if status in ("running", "healthy") else "down", "detail": status}
 
 

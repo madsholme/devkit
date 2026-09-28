@@ -1,4 +1,6 @@
+from contextlib import redirect_stdout
 import importlib.machinery
+import io
 import importlib.util
 import json
 import os
@@ -331,6 +333,27 @@ class GitIntegration(unittest.TestCase):
         self.assertEqual(dbx.commits_between(self.root, self.commit, head), 2)
         self.assertEqual(dbx.commits_between(self.root, head, head), 0)
         self.assertIsNone(dbx.commits_between(self.root, "", head))
+
+    def test_ls_shows_live_worktree_commit_and_stopped_state(self):
+        started = self.commit
+        self.git("commit", "--allow-empty", "-m", "later")
+        head = self.git("rev-parse", "HEAD")
+
+        def container(name, mode, running, health):
+            labels = {"traefik.enable": "true", "devbox.preview": name, "devbox.mode": mode,
+                      "devbox.commit": started, "devbox.url": f"https://{name}.x",
+                      "devbox.repository": str(self.common), "devbox.worktree": str(self.root)}
+            state = {"Running": running, "Status": "running" if running else "exited", "Health": {"Status": health}}
+            return {"Config": {"Labels": labels}, "State": state}
+
+        out = io.StringIO()
+        with patch.object(dbx, "docker_containers", return_value=[
+                container("demo-main", "live", True, "healthy"),
+                container("demo-main-abc1234", "review", False, "unhealthy")]), redirect_stdout(out):
+            dbx.listing()
+        rows = [line.split("\t") for line in out.getvalue().splitlines()[1:]]
+        self.assertEqual(rows[0][2:4], ["healthy", head[:12]])
+        self.assertEqual(rows[1][2:4], ["exited", started[:12]])
 
     def test_existing_checkout_is_never_removed_on_failure(self):
         name = f"demo-main-{self.commit[:7]}"
