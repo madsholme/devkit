@@ -146,7 +146,8 @@ networks, mounts, environment with secret-looking values masked, and labels), lo
 followed live), each repository's worktrees with their last commit,
 uncommitted changes, upstream distance and preview, clean-up candidates (what `devbox gc` would remove), certificate expiry,
 and Docker disk use. Everything is read live from Docker labels and Git; there is
-no database. It is read-only: lifecycle actions stay in the CLI.
+no database. It is read-only: lifecycle actions stay in the CLI. It is dark by default;
+a header switch picks light or auto (follows the system), remembered per browser.
 
 `devbox web` binds to 127.0.0.1:3780. Install `box/systemd/devbox-web.service` as a
 user service (instructions in the file); the `devbox` router in

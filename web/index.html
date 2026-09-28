@@ -3,23 +3,39 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+// Dark unless the viewer picked light or auto; set before first paint to avoid a flash.
+try { document.documentElement.dataset.theme = localStorage.getItem("devbox.theme") || "dark"; } catch { document.documentElement.dataset.theme = "dark"; }
+</script>
 <title>devbox</title>
 <link rel="icon" href="/logo.svg?v=2" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico?v=2" sizes="16x16 32x32 64x64">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
 <style>
 :root {
+  color-scheme: dark;
+  --bg: #141413; --panel: #1d1d1b; --text: #ecece8; --muted: #9a9a94; --line: #2e2e2b;
+  --accent: #7ea2ff; --ok: #4cc27f; --warn: #e0a84a; --bad: #ef6b5b; --idle: #77776f;
+  --code: #262624;
+}
+:root[data-theme=light] {
+  color-scheme: light;
   --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
   --accent: #2f5bd3; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --idle: #8a8a85;
   --code: #f0f0ec;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141413; --panel: #1d1d1b; --text: #ecece8; --muted: #9a9a94; --line: #2e2e2b;
-    --accent: #7ea2ff; --ok: #4cc27f; --warn: #e0a84a; --bad: #ef6b5b; --idle: #77776f;
-    --code: #262624;
+@media (prefers-color-scheme: light) {
+  :root[data-theme=auto] {
+    color-scheme: light;
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e4df;
+    --accent: #2f5bd3; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --idle: #8a8a85;
+    --code: #f0f0ec;
   }
 }
+.theme { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.theme button { border: 0; border-radius: 0; padding: 2px 8px; font-size: 12px; color: var(--muted); }
+.theme button + button { border-left: 1px solid var(--line); }
+.theme button[aria-pressed=true] { background: var(--code); color: var(--text); }
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
@@ -198,6 +214,9 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
     <h1><img src="/logo.svg" alt="">devbox</h1>
     <div class="facts" id="facts"></div>
     <span class="refresh" id="refreshed">loading…</span>
+    <span class="theme" role="group" aria-label="Theme">
+      <button data-theme-pick="dark">Dark</button><button data-theme-pick="light">Light</button><button data-theme-pick="auto" title="Follow the system setting">Auto</button>
+    </span>
   </header>
   <div id="error" class="error" hidden></div>
 
@@ -319,6 +338,14 @@ const store = {
   get(k) { try { return localStorage.getItem("devbox." + k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem("devbox." + k, v); } catch {} },
 };
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  store.set("theme", theme);
+  document.querySelectorAll("[data-theme-pick]").forEach(b => b.setAttribute("aria-pressed", b.dataset.themePick === theme));
+}
+document.querySelectorAll("[data-theme-pick]").forEach(b => b.addEventListener("click", () => setTheme(b.dataset.themePick)));
+setTheme(document.documentElement.dataset.theme);
+
 const UP = new Set(["healthy", "running", "starting"]);
 const svg = (cls, d) => `<svg class="${cls}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICON = {
