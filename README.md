@@ -158,10 +158,12 @@ Configure the host once in `~/.config/devbox/config.json`:
 
 and put an API token with **Tunnel Write** and **DNS Write** for that domain in
 `~/.config/devbox/cloudflare-token` (`chmod 600`). Optional keys: `zone_id` (looked up
-from the domain otherwise), `token_file`, and `image` (the pinned `cloudflared`).
+from the domain otherwise), `token_file`, `prefix`, and `image` (the pinned `cloudflared`).
 
 `devbox share` publishes the current worktree's preview (or the one named) at
-`<preview>.<domain>`, or at a fixed name from `hosts` with `--host sso-1`. Register
+`preview-<preview>.<domain>`, or at a fixed name from `hosts` with `--host sso-1`. Change
+the prefix with `"prefix"` (`""` for none); names over the 63-character DNS limit are
+shortened with a short hash. Register
 fixed names once as OAuth callback hosts with Google, GitHub and so on; Google does
 not accept wildcards. Each share is its own tunnel and a `cloudflared` container next to the
 preview, labelled with it, so the web overview shows it in the preview's group, marked

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -15,6 +16,7 @@ type shareConfig struct {
 	AccountID    string   `json:"account_id"`    // Cloudflare account ID
 	ZoneID       string   `json:"zone_id"`       // optional; looked up from the domain when empty
 	TokenFile    string   `json:"token_file"`    // API token (Tunnel Write + DNS Write); must not be readable by others
+	Prefix       *string  `json:"prefix"`        // put before the preview ID in its share name; default "preview-"
 	Hosts        []string `json:"hosts"`         // fixed names under the domain, assignable with --host
 	Image        string   `json:"image"`         // cloudflared image
 	DefaultHours int      `json:"default_hours"` // share lifetime when --hours is not given
@@ -70,6 +72,13 @@ func loadShareConfig() (cfg shareConfig, ok bool, err error) {
 		cfg.TokenFile = filepath.Join(configDir(), "cloudflare-token")
 	}
 	cfg.TokenFile = expandHome(cfg.TokenFile)
+	if cfg.Prefix == nil {
+		prefix := "preview-"
+		cfg.Prefix = &prefix
+	}
+	if *cfg.Prefix != "" && !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,19}$`).MatchString(*cfg.Prefix) {
+		return cfg, false, fail("%s: share prefix %q must be lowercase letters, digits and dashes (at most 20).", path, *cfg.Prefix)
+	}
 	if cfg.Image == "" {
 		cfg.Image = defaultCloudflared
 	}

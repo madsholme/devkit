@@ -68,6 +68,16 @@ var machine = func() string {
 func tunnelPrefix() string { return "devbox-" + machine() + "-" }
 func dnsComment() string   { return "devbox share " + machine() }
 
+// shareName is the DNS label of a preview's share: prefix + preview ID, shortened with a digest
+// when that would pass the 63-character limit of a DNS label.
+func shareName(prefix, preview string) string {
+	name := prefix + preview
+	if len(name) <= 63 {
+		return name
+	}
+	return strings.TrimRight(name[:63-clash], "-") + "-" + digest(preview)[:clash-1]
+}
+
 // shareTarget returns a preview's running web container, its name and the port Traefik routes to.
 func shareTarget(preview string) (container, string, error) {
 	containers, err := containersFor(preview)
@@ -146,7 +156,7 @@ func shareLabels(web container, s share) []string {
 
 // startCloudflared runs the connector; the token travels in the environment, not on the command line.
 var startCloudflared = func(cfg shareConfig, web container, s share, token string) (string, error) {
-	args := append([]string{"docker", "run", "-d", "--name", s.Preview + "-share", "--network", "devbox-proxy",
+	args := append([]string{"docker", "run", "-d", "--quiet", "--name", s.Preview + "-share", "--network", "devbox-proxy",
 		"--restart", "unless-stopped", "--env", "TUNNEL_TOKEN"}, shareLabels(web, s)...)
 	args = append(args, cfg.Image, "tunnel", "--no-autoupdate", "run")
 	return runCommand(args, runOpts{capture: true, env: withEnv(os.Environ(), map[string]string{"TUNNEL_TOKEN": token})})
@@ -203,7 +213,7 @@ func sharePreview(name, fixedHost string, hours int) error {
 	if hours < 1 || hours > cfg.MaxHours {
 		return fail("--hours must be between 1 and %d (max_hours in the host config).", cfg.MaxHours)
 	}
-	label := name
+	label := shareName(*cfg.Prefix, name)
 	if fixedHost != "" {
 		known := false
 		for _, h := range cfg.Hosts {

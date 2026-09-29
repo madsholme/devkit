@@ -203,12 +203,12 @@ func TestShareCreatesTunnelDNSAndConnector(t *testing.T) {
 		t.Errorf("tunnel name %q", tun.Name)
 	}
 	route, _ := json.Marshal(cf.routes[tun.ID])
-	if !strings.Contains(string(route), `"hostname":"demo-main.share.test","service":"http://demo-main-web-1:8000"`) ||
+	if !strings.Contains(string(route), `"hostname":"preview-demo-main.share.test","service":"http://demo-main-web-1:8000"`) ||
 		!strings.Contains(string(route), "http_status:404") {
 		t.Errorf("route %s", route)
 	}
 	for _, r := range cf.records {
-		if r.Name != "demo-main.share.test" || r.Content != tun.ID+".cfargotunnel.com" || r.Comment != "devbox share m5" {
+		if r.Name != "preview-demo-main.share.test" || r.Content != tun.ID+".cfargotunnel.com" || r.Comment != "devbox share m5" {
 			t.Errorf("dns record %+v", r)
 		}
 	}
@@ -217,12 +217,12 @@ func TestShareCreatesTunnelDNSAndConnector(t *testing.T) {
 	}
 	labels := rec.started[0]
 	for _, want := range []string{"devbox.preview=demo-main", "devbox.service=share", "devbox.share.tunnel=" + tun.ID,
-		"devbox.share.url=https://demo-main.share.test", "devbox.repository=/repo/.git"} {
+		"devbox.share.url=https://preview-demo-main.share.test", "devbox.repository=/repo/.git"} {
 		if !hasLabel(labels, want) {
 			t.Errorf("missing label %s in %v", want, labels)
 		}
 	}
-	if len(rec.publicURL) != 1 || rec.publicURL[0] != "/repo/.git demo-main https://demo-main.share.test true" {
+	if len(rec.publicURL) != 1 || rec.publicURL[0] != "/repo/.git demo-main https://preview-demo-main.share.test true" {
 		t.Errorf("public URL %v", rec.publicURL)
 	}
 }
@@ -258,7 +258,7 @@ func TestShareUsesOnlyConfiguredFixedHostsAndBoundedHours(t *testing.T) {
 func TestShareRefusesAForeignDNSRecord(t *testing.T) {
 	shareHost(t)
 	cf := newFakeCloudflare(t)
-	cf.records["x"] = dnsRecord{ID: "x", Type: "A", Name: "demo-main.share.test", Content: "192.0.2.1"}
+	cf.records["x"] = dnsRecord{ID: "x", Type: "A", Name: "preview-demo-main.share.test", Content: "192.0.2.1"}
 	var rec recorded
 	stubDocker(t, &rec, nil)
 	swap(t, &dockerContainers, withContainers(runningWeb("demo-main")))
@@ -326,7 +326,7 @@ func TestSharingAgainExtendsWithoutANewTunnel(t *testing.T) {
 	var rec recorded
 	stubDocker(t, &rec, nil)
 	swap(t, &dockerContainers, withContainers(runningWeb("demo-main"),
-		shareContainer("demo-main", "demo-main.share.test", "tun-1", "dns-1", time.Now().Add(time.Hour))))
+		shareContainer("demo-main", "preview-demo-main.share.test", "tun-1", "dns-1", time.Now().Add(time.Hour))))
 	if err := sharePreview("demo-main", "", 5); err != nil {
 		t.Fatal(err)
 	}
@@ -501,5 +501,19 @@ func TestShareArgumentsInAnyOrder(t *testing.T) {
 	}
 	if _, _, err := splitArgs([]string{"--hosts", "x"}, map[string]bool{"--host": true}, nil); err == nil {
 		t.Error("accepted an unknown option")
+	}
+}
+
+func TestShareNamesFitADNSLabel(t *testing.T) {
+	if got := shareName("preview-", "qrbase-v2"); got != "preview-qrbase-v2" {
+		t.Errorf("shareName = %q", got)
+	}
+	if got := shareName("", "qrbase-v2"); got != "qrbase-v2" {
+		t.Errorf("no prefix = %q", got)
+	}
+	long := strings.Repeat("a", 40) + "-" + strings.Repeat("b", 17)
+	a, b := shareName("preview-", long), shareName("preview-", long+"x")
+	if len(a) > 63 || len(b) > 63 || a == b || !domainLabel.MatchString(a) {
+		t.Errorf("long names %q %q", a, b)
 	}
 }
