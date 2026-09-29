@@ -72,6 +72,10 @@ a:hover { text-decoration: underline; }
 .facts b { color: var(--text); font-weight: 500; }
 .refresh { margin-left: auto; color: var(--muted); font-size: 12px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+/* The preview table grows with its rows and never scrolls; narrow screens hide columns instead. */
+.panel.grow { overflow: visible; }
+.panel.grow tr:last-child > td:first-child { border-bottom-left-radius: 10px; }
+.panel.grow tr:last-child > td:last-child { border-bottom-right-radius: 10px; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: 12px; font-weight: 500; color: var(--muted); }
@@ -201,7 +205,8 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
 .menu > summary { list-style: none; cursor: pointer; font-size: 12.5px; color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; }
 .menu > summary::-webkit-details-marker { display: none; }
 .menu > summary:hover, .menu[open] > summary { border-color: var(--accent); }
-.menu-items { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; display: flex; flex-direction: column; min-width: 150px;
+/* Placed against the window by placeMenu(): the table panel scrolls, so it would clip the menu. */
+.menu-items { position: fixed; z-index: 5; display: flex; flex-direction: column; min-width: 150px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 6px 20px rgb(0 0 0 / .25); }
 .menu-items button { border: 0; text-align: left; padding: 6px 10px; }
 .menu-items button:hover { background: var(--code); }
@@ -261,7 +266,7 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
       <option value="">Any status</option><option value="up">Running</option><option value="down">Not running</option>
     </select>
   </div>
-  <div class="panel"><table>
+  <div class="panel grow"><table>
     <thead><tr><th>Preview</th><th>Status</th><th class="hide-sm">Branch · commit</th><th class="hide-sm">Up</th><th></th></tr></thead>
     <tbody id="previews"></tbody>
   </table></div>
@@ -523,6 +528,19 @@ async function loadSession() {
   renderAuth();
   if (lastData) { renderPreviews(lastData.previews); renderRepos(lastData.repositories, lastData.previews); renderOrphans(lastData.repositories); }
 }
+
+// placeMenu puts an open actions menu under its button, or above it when the window has no room below.
+function placeMenu(menu) {
+  const items = menu.querySelector(".menu-items"), button = menu.querySelector("summary").getBoundingClientRect();
+  const height = items.offsetHeight, width = items.offsetWidth;
+  const below = button.bottom + 4 + height <= window.innerHeight - 8;
+  items.style.top = (below ? button.bottom + 4 : Math.max(8, button.top - 4 - height)) + "px";
+  items.style.left = Math.max(8, Math.min(button.right - width, window.innerWidth - width - 8)) + "px";
+}
+document.addEventListener("toggle", e => { if (e.target.matches && e.target.matches("details.menu") && e.target.open) placeMenu(e.target); }, true);
+const closeMenus = () => { for (const m of document.querySelectorAll("details.menu[open]")) m.open = false; };
+window.addEventListener("resize", closeMenus);
+document.addEventListener("scroll", e => { if (!(e.target.closest && e.target.closest(".menu-items"))) closeMenus(); }, true);
 
 async function post(path, body) {
   return fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
