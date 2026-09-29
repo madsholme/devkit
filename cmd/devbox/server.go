@@ -120,10 +120,15 @@ func newHandler() (http.Handler, error) {
 	}
 	res := newResources()
 	go reapLoop()
+	actions := newActionHandler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		plain := "text/plain; charset=utf-8"
 		if a, ok := assets[r.URL.Path]; ok && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 			send(w, http.StatusOK, a.body, a.kind, a.cache)
+			return
+		}
+		if actions.handles(r.URL.Path) {
+			actions.ServeHTTP(w, r)
 			return
 		}
 		if r.Method != http.MethodGet {
@@ -167,6 +172,125 @@ func newHandler() (http.Handler, error) {
 	}), nil
 }
 
+// actionHandler serves signing in and out, and the actions a signed-in browser may start.
+type actionHandler struct {
+	limiter *loginLimiter
+	jobs    *jobs
+}
+
+func newActionHandler() *actionHandler {
+	return &actionHandler{&loginLimiter{failures: map[string][]time.Time{}}, &jobs{list: map[string]*job{}}}
+}
+
+func (h *actionHandler) handles(path string) bool {
+	switch path {
+	case "/api/session", "/api/login", "/api/logout", "/api/action", "/api/job":
+		return true
+	}
+	return false
+}
+
+func sendError(w http.ResponseWriter, code int, message string) {
+	send(w, code, []byte(message), "text/plain; charset=utf-8", "no-store")
+}
+
+// session describes what the page may offer: whether a password is set, whether this browser is
+// signed in, and the share options of this host.
+func session(r *http.Request) map[string]any {
+	result := map[string]any{"password_set": passwordHash() != "", "signed_in": signedIn(r), "share": nil}
+	if cfg, ok, err := loadShareConfig(); err == nil && ok {
+		result["share"] = map[string]any{"domain": cfg.Domain, "prefix": *cfg.Prefix, "hosts": append([]string{}, cfg.Hosts...),
+			"default_hours": cfg.DefaultHours, "max_hours": cfg.MaxHours}
+	}
+	return result
+}
+
+func (h *actionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/session" && r.Method == http.MethodGet {
+		sendJSON(w, session(r))
+		return
+	}
+	if r.URL.Path == "/api/job" && r.Method == http.MethodGet {
+		if !signedIn(r) {
+			sendError(w, http.StatusUnauthorized, "Sign in first.")
+			return
+		}
+		j := h.jobs.get(r.URL.Query().Get("id"))
+		if j == nil {
+			sendError(w, http.StatusNotFound, "No such job.")
+			return
+		}
+		offset, _ := strconv.Atoi(r.URL.Query().Get("since"))
+		output, next, done, ok := j.since(offset)
+		sendJSON(w, map[string]any{"title": j.Title, "output": output, "next": next, "done": done, "ok": ok})
+		return
+	}
+	if r.Method != http.MethodPost {
+		sendError(w, http.StatusMethodNotAllowed, "Use POST.")
+		return
+	}
+	// Only the dashboard's own page may post; the session cookie is SameSite=Strict as well.
+	if !sameOrigin(r) {
+		sendError(w, http.StatusForbidden, "Cross-site request refused.")
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+		actionRequest
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil && r.URL.Path != "/api/logout" {
+		sendError(w, http.StatusBadRequest, "Send JSON.")
+		return
+	}
+	switch r.URL.Path {
+	case "/api/login":
+		ip := clientIP(r)
+		if h.limiter.blocked(ip, time.Now()) {
+			sendError(w, http.StatusTooManyRequests, "Too many wrong passwords; try again in a few minutes.")
+			return
+		}
+		hash := passwordHash()
+		if hash == "" {
+			sendError(w, http.StatusConflict, "No password is set; run devbox web password on the host.")
+			return
+		}
+		if !checkPassword(body.Password, hash) {
+			h.limiter.fail(ip, time.Now())
+			time.Sleep(500 * time.Millisecond)
+			sendError(w, http.StatusUnauthorized, "Wrong password.")
+			return
+		}
+		h.limiter.reset(ip)
+		secret, err := sessionSecret()
+		if err != nil {
+			sendError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		setSessionCookie(w, r, newSession(secret, hash, time.Now()), int(sessionLife.Seconds()))
+		sendJSON(w, map[string]any{"signed_in": true})
+	case "/api/logout":
+		setSessionCookie(w, r, "", -1)
+		sendJSON(w, map[string]any{"signed_in": false})
+	case "/api/action":
+		if !signedIn(r) {
+			sendError(w, http.StatusUnauthorized, "Sign in first.")
+			return
+		}
+		plan, err := planAction(body.actionRequest)
+		if err != nil {
+			sendError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		j, err := h.jobs.start(plan)
+		if err != nil {
+			sendError(w, http.StatusConflict, err.Error())
+			return
+		}
+		fmt.Printf("devbox web: %s started %q\n", clientIP(r), j.Title)
+		sendJSON(w, map[string]any{"id": j.ID, "title": j.Title})
+	}
+}
+
 // reapLoop removes expired shares every minute and sweeps leftover Cloudflare resources every ten.
 func reapLoop() {
 	for tick := 0; ; tick++ {
@@ -192,7 +316,7 @@ func reapLoop() {
 	}
 }
 
-// serve runs the read-only web overview. Bind to localhost; Traefik publishes it on the tailnet.
+// serve runs the web overview. Bind to localhost; Traefik publishes it on the tailnet.
 func serve(host string, port int) error {
 	handler, err := newHandler()
 	if err != nil {

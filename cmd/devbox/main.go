@@ -22,7 +22,8 @@ commands:
   logs [-f]            show this worktree's live web log (-f, --follow to follow it)
   ls                   list managed previews, including stopped ones
   web [--host H] [--port P]
-                       serve the read-only web overview (default 127.0.0.1:3780)
+                       serve the web overview (default 127.0.0.1:3780)
+  web password         set the password that lets the web overview run actions
   gc [--yes]           destroy previews whose worktree no longer exists (dry run by default)
   share [preview] [--host NAME] [--hours N]
                        make a running preview public through a Cloudflare tunnel until it expires
@@ -173,6 +174,12 @@ func dispatch(args []string) (int, error) {
 		}
 		return 0, listing()
 	case "web":
+		if len(rest) > 0 && rest[0] == "password" {
+			if len(rest) > 1 {
+				return 2, usageError("web password takes no arguments")
+			}
+			return 0, setWebPassword()
+		}
 		set := flags(command)
 		host := set.String("host", "127.0.0.1", "")
 		port := set.Int("port", 3780, "")

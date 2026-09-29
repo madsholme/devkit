@@ -196,6 +196,27 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .dlg-head .mono { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100vh - 130px); font-size: 12px; background: var(--code); white-space: pre-wrap; word-break: break-all; }
 .error { color: var(--bad); padding: 12px 0; }
+.auth { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.menu { position: relative; }
+.menu > summary { list-style: none; cursor: pointer; font-size: 12.5px; color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary:hover, .menu[open] > summary { border-color: var(--accent); }
+.menu-items { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; display: flex; flex-direction: column; min-width: 150px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 6px 20px rgb(0 0 0 / .25); }
+.menu-items button { border: 0; text-align: left; padding: 6px 10px; }
+.menu-items button:hover { background: var(--code); }
+button.danger { color: var(--bad); }
+.wt-actions { display: flex; gap: 6px; margin-top: 6px; }
+.form { padding: 14px; display: grid; gap: 12px; }
+.form label { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.form input, .form select { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; }
+.form .row { display: flex; gap: 8px; justify-content: flex-end; }
+.form .note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.form .err { color: var(--bad); font-size: 12.5px; min-height: 1em; margin: 0; }
+button.primary { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+button.primary.danger { background: var(--bad); border-color: var(--bad); color: var(--bg); }
+#act, #signin { width: min(460px, calc(100vw - 32px)); }
+.job-state.ok { color: var(--ok); } .job-state.bad { color: var(--bad); } .job-state { font-size: 12.5px; white-space: nowrap; }
 @media (max-width: 720px) {
   .hide-sm { display: none; }
   .containers td { padding-left: 12px; }
@@ -216,6 +237,7 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
     <h1><img src="/logo.svg" alt="">devbox</h1>
     <div class="facts" id="facts"></div>
     <span class="refresh" id="refreshed">loading…</span>
+    <span class="auth" id="auth"></span>
     <span class="theme" role="group" aria-label="Theme">
       <button data-theme-pick="dark">Dark</button><button data-theme-pick="light">Light</button><button data-theme-pick="auto" title="Follow the system setting">Auto</button>
     </span>
@@ -295,6 +317,35 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
     <button id="logs-reload">Reload</button><button id="logs-close">Close</button>
   </div>
   <pre id="logs-body"></pre>
+</dialog>
+
+<dialog id="signin">
+  <div class="dlg-head"><b>Sign in</b></div>
+  <form class="form" id="signin-form" method="dialog">
+    <p class="note">Signing in lets this browser run devbox actions for 7 days.</p>
+    <label>Dashboard password<input type="password" id="signin-password" autocomplete="current-password" required></label>
+    <p class="err" id="signin-error"></p>
+    <div class="row"><button type="button" id="signin-cancel">Cancel</button><button class="primary" type="submit">Sign in</button></div>
+  </form>
+</dialog>
+
+<dialog id="act">
+  <div class="dlg-head"><b id="act-title"></b></div>
+  <form class="form" id="act-form" method="dialog">
+    <div id="act-body"></div>
+    <p class="err" id="act-error"></p>
+    <div class="row"><button type="button" id="act-cancel">Cancel</button><button class="primary" type="submit" id="act-ok"></button></div>
+  </form>
+</dialog>
+
+<dialog id="job">
+  <div class="dlg-head">
+    <span class="live-dot" id="job-live"></span>
+    <span class="mono" id="job-title"></span>
+    <span class="job-state" id="job-state"></span>
+    <button id="job-close">Close</button>
+  </div>
+  <pre id="job-body"></pre>
 </dialog>
 
 <script>
@@ -430,12 +481,149 @@ function renderPreviews(all) {
         ${UP.has(p.status) ? `<a class="icon-btn" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open ${esc(p.url)} in a new tab" aria-label="Open in a new tab">${ICON.open}</a>
         <button class="icon-btn" data-copy="${esc(p.url)}" title="Copy ${esc(p.url)}" aria-label="Copy URL">${ICON.copy}${ICON.check}</button>` : ""}
         <button data-logs="${esc(p.name)}">Logs</button>
+        ${previewMenu(p)}
       </div></td>
     </tr>`;
     if (open) html += containerRows(p);
   }
   $("previews").innerHTML = html;
 }
+
+// Actions: a signed-in browser can run devbox commands. The server checks every target and runs
+// the devbox binary itself, so these do exactly what the CLI does.
+let session = {password_set: false, signed_in: false, share: null};
+
+const act = (action, label, target, cls = "") =>
+  `<button class="${cls}" data-act="${action}" data-target="${esc(JSON.stringify(target))}">${esc(label)}</button>`;
+
+function previewMenu(p) {
+  if (!session.signed_in) return "";
+  const up = UP.has(p.status), items = [];
+  items.push(up ? act("stop", "Stop", {preview: p.name}) : act("start", "Start", {preview: p.name}));
+  if (session.share && up) items.push(act("share", p.share ? "Extend share…" : "Share publicly…", {preview: p.name}));
+  if (p.share) items.push(act("unshare", "Unshare", {preview: p.name}));
+  items.push(act("destroy", "Destroy…", {preview: p.name}, "danger"));
+  return `<details class="menu"><summary>Actions</summary><div class="menu-items">${items.join("")}</div></details>`;
+}
+
+function worktreeActions(w, byName) {
+  if (!session.signed_in) return "";
+  const live = w.previews.some(n => byName[n] && byName[n].mode === "live");
+  return `<div class="wt-actions">${live ? "" : act("live", "Start live preview", {worktree: w.path})}${act("review", "Review HEAD", {worktree: w.path})}</div>`;
+}
+
+function renderAuth() {
+  $("auth").innerHTML = session.signed_in ? `<button id="signout">Sign out</button>`
+    : session.password_set ? `<button id="signin-open">Sign in</button>`
+    : `<span title="Run devbox web password on the host to enable actions">read-only</span>`;
+}
+
+async function loadSession() {
+  try { session = await (await fetch("api/session")).json(); } catch {}
+  renderAuth();
+  if (lastData) { renderPreviews(lastData.previews); renderRepos(lastData.repositories, lastData.previews); renderOrphans(lastData.repositories); }
+}
+
+async function post(path, body) {
+  return fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+}
+
+// ask shows the action dialog; submit returns an error message to keep it open, or nothing to close it.
+function ask({title, body, ok, danger, submit}) {
+  $("act-title").textContent = title;
+  $("act-body").innerHTML = body;
+  $("act-ok").textContent = ok;
+  $("act-ok").className = "primary" + (danger ? " danger" : "");
+  $("act-error").textContent = "";
+  $("act-form").onsubmit = async e => {
+    e.preventDefault();
+    $("act-ok").disabled = true;
+    try {
+      const error = await submit();
+      if (error) $("act-error").textContent = error; else $("act").close();
+    } finally { $("act-ok").disabled = false; }
+  };
+  $("act").showModal();
+  const first = $("act-body").querySelector("input, select");
+  if (first) first.focus();
+}
+
+function shareForm(preview) {
+  const sh = session.share;
+  const own = `${sh.prefix}${preview}.${sh.domain}`;
+  return `<p class="note">Anyone with the link can open it until it expires. The app restarts once to learn its public address.</p>
+    <label>Address<select id="act-host"><option value="">${esc(own)}</option>${sh.hosts.map(h => `<option value="${esc(h)}">${esc(h)}.${esc(sh.domain)}</option>`).join("")}</select></label>
+    <label>Hours (1–${sh.max_hours})<input type="number" id="act-hours" min="1" max="${sh.max_hours}" value="${sh.default_hours}" required></label>`;
+}
+
+async function handleAct(button) {
+  const action = button.dataset.act, target = JSON.parse(button.dataset.target);
+  for (const m of document.querySelectorAll("details.menu[open]")) m.open = false;
+  if (action === "destroy") return ask({title: `Destroy ${target.preview}`, ok: "Destroy", danger: true,
+    body: `<p class="note">Removes its containers, networks and volumes, so its data is gone. Type the preview ID to confirm.</p>
+      <label>Preview ID<input id="act-confirm" autocomplete="off" spellcheck="false" required></label>`,
+    submit: () => run({action, ...target, confirm: $("act-confirm").value.trim()})});
+  if (action === "gc") return ask({title: "Clean up", ok: "Remove", danger: true,
+    body: `<p class="note">Destroys the previews whose worktree is gone in ${esc(home(target.repo.replace(/\/\.git$/, "")))}, with their data.</p>`,
+    submit: () => run({action, ...target, confirm: "remove"})});
+  if (action === "share") return ask({title: `Share ${target.preview}`, ok: "Share", body: shareForm(target.preview),
+    submit: () => run({action, ...target, host: $("act-host").value, hours: Number($("act-hours").value)})});
+  const error = await run({action, ...target});
+  if (error) alert(error);
+}
+
+// run starts an action and follows it; it returns an error message if it could not start.
+async function run(request) {
+  const res = await post("api/action", request);
+  if (res.status === 401) { await loadSession(); if ($("act").open) $("act").close(); $("signin").showModal(); return "Sign in first."; }
+  if (!res.ok) return await res.text();
+  const job = await res.json();
+  if ($("act").open) $("act").close();
+  followJob(job.id, job.title);
+}
+
+let currentJob = null;
+async function followJob(id, title) {
+  currentJob = id;
+  $("job-title").textContent = title;
+  $("job-body").textContent = "";
+  $("job-state").textContent = "running";
+  $("job-state").className = "job-state";
+  $("job-live").classList.add("on");
+  if (!$("job").open) $("job").showModal();
+  let since = 0;
+  while (currentJob === id) {
+    const res = await fetch(`api/job?id=${encodeURIComponent(id)}&since=${since}`);
+    if (!res.ok) { $("job-state").textContent = await res.text(); break; }
+    const j = await res.json(), pre = $("job-body");
+    if (j.output) {
+      const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 24;
+      pre.textContent += j.output;
+      if (atEnd) pre.scrollTop = pre.scrollHeight;
+    }
+    since = j.next;
+    if (j.done) {
+      $("job-state").textContent = j.ok ? "done" : "failed";
+      $("job-state").className = "job-state " + (j.ok ? "ok" : "bad");
+      load();
+      break;
+    }
+    await new Promise(r => setTimeout(r, 700));
+  }
+  $("job-live").classList.remove("on");
+}
+$("job-close").onclick = () => { currentJob = null; $("job").close(); load(); };
+$("act-cancel").onclick = () => $("act").close();
+$("signin-cancel").onclick = () => $("signin").close();
+$("signin-form").onsubmit = async e => {
+  e.preventDefault();
+  const res = await post("api/login", {password: $("signin-password").value});
+  if (!res.ok) { $("signin-error").textContent = await res.text(); return; }
+  $("signin-password").value = "";
+  $("signin-error").textContent = "";
+  $("signin").close();
+  loadSession();
+};
 
 function previewLink(p) {
   if (!p) return "";
@@ -453,6 +641,7 @@ function renderRepos(repos, previews) {
       <div class="mono">${esc(w.branch || "detached")}</div>
       <div class="muted mono path">${esc(home(w.path))}</div>
       ${gitLine(w)}
+      ${worktreeActions(w, byName)}
       <div class="services">${w.previews.length ? "preview: " + w.previews.map(n => previewLink(byName[n]) || esc(n)).join(", ") : "no preview"}</div>
     </li>`).join("")}</ul>
   </div>`).join("") || `<div class="panel empty">No repositories yet. They appear once they have a preview or a T3 worktree.</div>`;
@@ -464,7 +653,9 @@ function renderOrphans(repos) {
   $("orphans").innerHTML = rows.length
     ? `<table><thead><tr><th>Preview</th><th>Mode</th><th class="hide-sm">Removed worktree</th></tr></thead><tbody>${rows.map(o =>
         `<tr><td class="mono">${esc(o.name)}</td><td>${esc(o.mode)}</td><td class="hide-sm mono path">${esc(home(o.worktree))}</td></tr>`).join("")}</tbody></table>
-       <div class="empty">Remove them with <span class="mono">devbox gc --yes</span> in the repository.</div>`
+       <div class="empty">${session.signed_in
+         ? repos.filter(r => r.orphans.length).map(r => act("gc", `Remove ${r.orphans.length} in ${home(r.path.replace(/\/\.git$/, ""))}…`, {repo: r.path}, "danger")).join(" ")
+         : `Remove them with <span class="mono">devbox gc --yes</span> in the repository.`}</div>`
     : `<div class="empty">None. Every preview's worktree still exists.</div>`;
 }
 
@@ -723,6 +914,11 @@ function showLogs(preview, service) {
 }
 
 document.addEventListener("click", e => {
+  for (const m of document.querySelectorAll("details.menu[open]")) if (!m.contains(e.target)) m.open = false;
+  const a = e.target.closest("[data-act]");
+  if (a) return handleAct(a);
+  if (e.target.closest("#signin-open")) { $("signin").showModal(); $("signin-password").focus(); return; }
+  if (e.target.closest("#signout")) return post("api/logout").then(loadSession);
   const det = e.target.closest("[data-details]");
   if (det) return showDetails(det.dataset.details, det.dataset.service);
   const c = e.target.closest("[data-copy]");
@@ -730,7 +926,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest("[data-logs]");
   if (b) return showLogs(b.dataset.logs, b.dataset.service);
   // Clicking anywhere on a preview row toggles it, except its link.
-  const x = e.target.closest("[data-expand]") || (!e.target.closest("a") && e.target.closest("[data-row]"));
+  const x = e.target.closest("[data-expand]") || (!e.target.closest("a, .menu") && e.target.closest("[data-row]"));
   if (x) {
     const name = x.dataset.expand || x.dataset.row;
     expanded.has(name) ? expanded.delete(name) : expanded.add(name);
@@ -762,7 +958,9 @@ setInterval(loadResources, 5000);
 $("system-open").onclick = () => { $("system").showModal(); loadResources(); };
 $("system-close").onclick = () => $("system").close();
 load();
-setInterval(() => { if (!document.hidden && !document.querySelector("dialog[open]")) load(); }, 10000);
+loadSession();
+// Refreshing redraws the rows, so it waits while a dialog or an actions menu is open.
+setInterval(() => { if (!document.hidden && !document.querySelector("dialog[open], details.menu[open]")) load(); }, 10000);
 </script>
 </body>
 </html>

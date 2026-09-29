@@ -27,7 +27,7 @@ software, or configure credentials automatically.
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devbox exec <cmd>` | Run a command in this worktree's live web container, as your user |
 | `devbox logs [-f]` | Show (or follow) this worktree's live web log |
-| `devbox web` | Serve the read-only web overview (see below) |
+| `devbox web` | Serve the web overview (see below); `devbox web password` enables its actions |
 | `devbox ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devbox stop [preview]` | Stop containers; retain data |
 | `devbox start [preview]` | Resume saved configuration; retain data |
@@ -195,8 +195,18 @@ networks, mounts, environment with secret-looking values masked, and labels), lo
 followed live), each repository's worktrees with their last commit,
 uncommitted changes, upstream distance and preview, clean-up candidates (what `devbox gc` would remove), certificate expiry,
 and Docker disk use. Everything is read live from Docker labels and Git; there is
-no database. It is read-only: lifecycle actions stay in the CLI. It is dark by default;
-a header switch picks light or auto (follows the system), remembered per browser.
+no database. It is dark by default; a header switch picks light or auto (follows the
+system), remembered per browser.
+
+Anyone on the tailnet can read it. To act from it, set a password on the host with
+`devbox web password`; only a salted PBKDF2 hash is stored, in `~/.config/devbox/config.json`.
+A browser that signs in can for 7 days start, stop, share, unshare and destroy previews,
+start a live preview or review HEAD for a worktree, and clean up previews of removed
+worktrees; changing the password signs every browser out. Each action runs the `devbox`
+binary itself, as the CLI would, and the page shows its output live. The server only
+accepts targets that exist on the host, requests from the dashboard's own page, and
+typed confirmation for destroy; five wrong passwords lock an address out for five
+minutes. `exec` stays in the CLI.
 
 `devbox web` binds to 127.0.0.1:3780. Install `box/systemd/devbox-web.service` as a
 user service (instructions in the file); the `devbox` router in

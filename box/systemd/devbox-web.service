@@ -1,4 +1,4 @@
-# Read-only devbox web overview on localhost; Traefik publishes it at devbox.DEV_DOMAIN.
+# devbox web overview on localhost; Traefik publishes it at devbox.DEV_DOMAIN.
 # Build first: go build -o bin/devbox ./cmd/devbox (in the kit). Install: cp to
 # ~/.config/systemd/user/, set DEV_DOMAIN, then
 #   systemctl --user daemon-reload && systemctl --user enable --now devbox-web

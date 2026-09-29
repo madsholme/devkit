@@ -45,8 +45,10 @@ This file covers what you need to change the kit itself.
 ## Conventions
 
 - Commit straight to `main` and push. No PRs. Short imperative commit subjects.
-- The dashboard is read-only. Lifecycle actions stay in the CLI unless the user
-  asks otherwise. The web service does expire shares in the background. Mask secret-looking values when showing container environment.
+- Reading the dashboard needs no sign-in; its actions do (`auth.go`, `actions.go`).
+  Actions run the devbox binary itself, so add a CLI command first and a dashboard
+  action on top. `planAction` must only accept targets that exist on the host. The
+  web service also expires shares in the background. Mask secret-looking values when showing container environment.
 - Project hooks live in `devbox.json` under `"hooks"` (`prepare`, `check`,
   `build`, `publish`) and run with `sh -eu` in the project root. `build` is
   required for review and `publish` for publishing; the others are optional.
