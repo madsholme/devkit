@@ -370,6 +370,12 @@ func lifecycle(action, name string) error {
 	if !isFile(path) {
 		return fail("No saved preview configuration in this repository.")
 	}
+	if action != "start" {
+		// A stopped or destroyed preview must not stay public.
+		if err := unshareIfShared(name); err != nil {
+			fmt.Fprintf(os.Stderr, "devbox: %v\n", err)
+		}
+	}
 	switch action {
 	case "stop":
 		err = composeRun(path, "stop")
@@ -440,6 +446,9 @@ func gc(apply bool) error {
 	for _, s := range stale {
 		if err := assertOwner(s.name, common); err != nil {
 			return err
+		}
+		if err := unshareIfShared(s.name); err != nil {
+			fmt.Fprintf(os.Stderr, "devbox: %v\n", err)
 		}
 		if err := destroyPreview(filepath.Join(runDir(common, s.name), "compose.json")); err != nil {
 			return err

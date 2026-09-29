@@ -295,6 +295,7 @@ func TestStopPreservesAndDestroyRemovesVolumes(t *testing.T) {
 	os.WriteFile(path, []byte("{}"), 0o600)
 	swap(t, &repository, func() (string, string, error) { return common, common, nil })
 	swap(t, &assertOwner, noOwnerCheck)
+	swap(t, &unshareIfShared, func(string) error { return nil })
 	var calls [][]string
 	swap(t, &composeRun, func(p string, args ...string) error {
 		calls = append(calls, append([]string{p}, args...))
@@ -361,6 +362,7 @@ func TestGCOnlyRemovesPreviewsOfRemovedWorktrees(t *testing.T) {
 	swap(t, &savedPreviews, func(string) (map[string]map[string]string, error) { return saved, nil })
 	swap(t, &worktreesOf, func(string) ([]worktree, error) { return []worktree{{"/wt/kept", "kept"}}, nil })
 	swap(t, &assertOwner, noOwnerCheck)
+	swap(t, &unshareIfShared, func(string) error { return nil })
 	swap[io.Writer](t, &stdout, &bytes.Buffer{})
 	removed := map[string]bool{}
 	swap(t, &destroyPreview, func(path string) error {

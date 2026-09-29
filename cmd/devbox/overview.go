@@ -107,22 +107,30 @@ type service struct {
 	Started *string `json:"started"`
 }
 
+type shareView struct {
+	URL     string `json:"url"`
+	Host    string `json:"host"`
+	Expires string `json:"expires"`
+	Fixed   bool   `json:"fixed"`
+}
+
 type preview struct {
-	Name          string    `json:"name"`
-	Mode          string    `json:"mode"`
-	Project       string    `json:"project"`
-	Branch        string    `json:"branch"`
-	Commit        string    `json:"commit"`
-	Worktree      string    `json:"worktree"`
-	URL           string    `json:"url"`
-	Repository    string    `json:"repository"`
-	Services      []service `json:"services"`
-	Status        string    `json:"status"`
-	Started       *string   `json:"started"`
-	Head          *string   `json:"head"`
-	Changes       *int      `json:"changes"`
-	Behind        *int      `json:"behind"`
-	SourceBranch  *string   `json:"source_branch"`
+	Name          string     `json:"name"`
+	Mode          string     `json:"mode"`
+	Project       string     `json:"project"`
+	Branch        string     `json:"branch"`
+	Commit        string     `json:"commit"`
+	Worktree      string     `json:"worktree"`
+	URL           string     `json:"url"`
+	Repository    string     `json:"repository"`
+	Services      []service  `json:"services"`
+	Status        string     `json:"status"`
+	Started       *string    `json:"started"`
+	Head          *string    `json:"head"`
+	Changes       *int       `json:"changes"`
+	Behind        *int       `json:"behind"`
+	SourceBranch  *string    `json:"source_branch"`
+	Share         *shareView `json:"share"`
 	statusFromWeb bool
 }
 
@@ -188,10 +196,16 @@ func overview() (overviewData, error) {
 		}
 		status := containerStatus(c.State)
 		web := labels["traefik.enable"] == "true"
-		p.Services = append(p.Services, service{Name: orDefault(labels["com.docker.compose.service"], "?"), Status: status,
+		if s, ok := shareOf(c); ok {
+			p.Share = &shareView{s.URL, s.Host, s.Expires.Format(time.RFC3339), s.Fixed}
+		}
+		serviceLabel := orDefault(labels["com.docker.compose.service"], labels["devbox.service"])
+		p.Services = append(p.Services, service{Name: orDefault(serviceLabel, "?"), Status: status,
 			Web: web, ID: c.ID[:min(12, len(c.ID))], Image: c.Config.Image, Ports: containerPorts(c), Started: startedAt(c.State)})
 		if web {
+			// The web container speaks for the preview, whichever container Docker listed first.
 			p.Status, p.Started, p.statusFromWeb = status, startedAt(c.State), true
+			p.Branch, p.Commit, p.Worktree, p.URL = labels["devbox.branch"], labels["devbox.commit"], labels["devbox.worktree"], labels["devbox.url"]
 		}
 	}
 	commons := map[string]bool{}
@@ -249,6 +263,8 @@ func overview() (overviewData, error) {
 	}
 	list := make([]*preview, 0, len(previews))
 	for _, p := range previews {
+		// The share is listed after the preview's own services.
+		sort.SliceStable(p.Services, func(i, j int) bool { return p.Services[i].Name != "share" && p.Services[j].Name == "share" })
 		if !p.statusFromWeb {
 			p.Status = "missing"
 		}

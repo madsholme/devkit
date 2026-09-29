@@ -34,6 +34,9 @@ software, or configure credentials automatically.
 | `devbox destroy [preview]` | Remove containers/networks and disposable named volumes |
 | `devbox gc [--yes]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
 | `devbox publish HEAD` | Run the project's `publish` hook with the reviewed image ID |
+| `devbox share [preview] [--host NAME] [--hours N]` | Make a running preview public until it expires (see below) |
+| `devbox unshare [preview]` | End a public share; `--expired` removes all expired ones and leftovers |
+| `devbox shares` | List public shares, their URLs and expiry |
 
 Run lifecycle commands inside the owning Git repository. `ls` works anywhere.
 Without a preview ID, `stop`, `start` and `destroy` act on the preview that belongs
@@ -137,6 +140,46 @@ policy should grant the intended users access to TCP 443 and SSH.
 
 The Traefik `v3` and Python image tags are bootstrap defaults. Pin tested versions
 or digests when commissioning the host. Do not run automatic image updates.
+
+## Public shares
+
+Previews are tailnet-only. `devbox share` makes one public for a while, e.g. for a
+coworker or to test SSO, through a Cloudflare Tunnel: no open ports, and nothing
+reaches T3 or the dashboard. Shares live on their own domain on Cloudflare, not on
+DEV_DOMAIN. Cloudflare's free certificate only covers one level below a domain, and a
+separate domain keeps test apps away from your main domain's cookies.
+
+Configure the host once in `~/.config/devbox/config.json`:
+
+```json
+{"share": {"domain": "example-share.com", "account_id": "<Cloudflare account ID>",
+           "hosts": ["sso-1", "sso-2"], "default_hours": 8, "max_hours": 72}}
+```
+
+and put an API token with **Tunnel Write** and **DNS Write** for that domain in
+`~/.config/devbox/cloudflare-token` (`chmod 600`). Optional keys: `zone_id` (looked up
+from the domain otherwise), `token_file`, and `image` (the pinned `cloudflared`).
+
+`devbox share` publishes the current worktree's preview (or the one named) at
+`<preview>.<domain>`, or at a fixed name from `hosts` with `--host sso-1`. Register
+fixed names once as OAuth callback hosts with Google, GitHub and so on; Google does
+not accept wildcards. Each share is its own tunnel and a `cloudflared` container next to the
+preview, labelled with it, so the web overview shows it in the preview's group, marked
+public with its URL and time left; `devbox shares` lists them. Running `devbox share`
+again extends the expiry.
+
+A share ends when it expires, on `devbox unshare`, and before `stop`, `destroy` or
+`gc`: devbox removes the container, the DNS record and the tunnel. The web service
+(`devbox web`) expires shares every minute; without it, run `devbox unshare --expired`.
+It also removes this machine's leftover tunnels and DNS records, e.g. after a crash
+mid-share. Tunnels are named `devbox-<machine>-<preview>` and DNS records carry the
+comment `devbox share <machine>`; devbox never touches anything else in the account.
+
+While shared, the preview's web service gets `DEVBOX_PUBLIC_URL` (the web container is
+recreated to pick it up, and again when the share ends). Let the app accept that host,
+e.g. Django's `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`, and build absolute URLs
+and OAuth callbacks from it. A share is public: anyone with the link can open it.
+Prefer review previews; a live preview may run with debug pages on.
 
 ## Web overview
 

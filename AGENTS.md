@@ -9,7 +9,8 @@ This file covers what you need to change the kit itself.
   `main.go` parses commands; `preview.go` has live/review/lifecycle/gc/ls/publish/
   exec/logs; `repo.go` Git, config and saved previews; `naming.go` preview IDs;
   `docker.go` inspect data; `overview.go`, `resources.go` and `server.go` the web
-  backend. Package variables such as `runCommand`, `dockerContainers` and
+  backend. Public shares: `share.go` (lifecycle, expiry, leftover sweep),
+  `cloudflare.go` (API client) and `hostconfig.go` (`~/.config/devbox/config.json`). Package variables such as `runCommand`, `dockerContainers` and
   `repository` are the seams tests replace.
 - `bin/devbox`: the built binary (gitignored). Build with
   `go build -o bin/devbox ./cmd/devbox`; the Go version is pinned in `mise.toml`.
@@ -45,7 +46,7 @@ This file covers what you need to change the kit itself.
 
 - Commit straight to `main` and push. No PRs. Short imperative commit subjects.
 - The dashboard is read-only. Lifecycle actions stay in the CLI unless the user
-  asks otherwise. Mask secret-looking values when showing container environment.
+  asks otherwise. The web service does expire shares in the background. Mask secret-looking values when showing container environment.
 - Project hooks live in `devbox.json` under `"hooks"` (`prepare`, `check`,
   `build`, `publish`) and run with `sh -eu` in the project root. `build` is
   required for review and `publish` for publishing; the others are optional.
@@ -60,5 +61,9 @@ This file covers what you need to change the kit itself.
   Compose changes, edit that file or destroy and recreate the preview (which
   deletes its data).
 - Do not re-enable T3's Tailscale Serve on 443. Traefik owns that listener.
-- Credentials (`box/traefik/.env`, `dns-provider.env`) are private host files and
-  must never be committed.
+- Credentials (`box/traefik/.env`, `dns-provider.env`, `~/.config/devbox/cloudflare-token`)
+  are private host files and must never be committed.
+- Share clean-up must only touch this machine's Cloudflare resources: tunnels named
+  `devbox-<machine>-*` and DNS records with the comment `devbox share <machine>`.
+- Don't use `pkill -f` with a pattern that appears in your own shell command; it
+  kills that shell. Kill by PID, or use a pattern like `[g]eckodriver`.

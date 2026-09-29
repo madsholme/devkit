@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 	"time"
@@ -118,6 +119,7 @@ func newHandler() (http.Handler, error) {
 		return nil, err
 	}
 	res := newResources()
+	go reapLoop()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		plain := "text/plain; charset=utf-8"
 		if a, ok := assets[r.URL.Path]; ok && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
@@ -163,6 +165,31 @@ func newHandler() (http.Handler, error) {
 			send(w, http.StatusBadRequest, []byte(err.Error()), plain, "no-store")
 		}
 	}), nil
+}
+
+// reapLoop removes expired shares every minute and sweeps leftover Cloudflare resources every ten.
+func reapLoop() {
+	for tick := 0; ; tick++ {
+		removed, err := reapExpired(time.Now())
+		for _, r := range removed {
+			fmt.Printf("devbox web: unshared expired %s\n", r)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "devbox web: expiring shares: %v\n", err)
+		}
+		if tick%10 == 0 {
+			if cfg, ok, err := loadShareConfig(); err == nil && ok {
+				swept, err := sweepOrphans(cfg, 10*time.Minute)
+				for _, r := range swept {
+					fmt.Printf("devbox web: removed leftover %s\n", r)
+				}
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "devbox web: sweeping shares: %v\n", err)
+				}
+			}
+		}
+		time.Sleep(time.Minute)
+	}
 }
 
 // serve runs the read-only web overview. Bind to localhost; Traefik publishes it on the tailnet.

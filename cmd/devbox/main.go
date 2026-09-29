@@ -24,11 +24,16 @@ commands:
   web [--host H] [--port P]
                        serve the read-only web overview (default 127.0.0.1:3780)
   gc [--yes]           destroy previews whose worktree no longer exists (dry run by default)
+  share [preview] [--host NAME] [--hours N]
+                       make a running preview public through a Cloudflare tunnel until it expires
+  unshare [preview]    end a preview's public share (--expired: every expired share, plus leftovers)
+  shares               list public shares
   start [preview]      resume a stopped preview; data is retained
   stop [preview]       stop a preview's containers; data is retained
   destroy [preview]    remove a preview's containers, networks and volumes
 
-Without a preview ID, start, stop and destroy act on the current worktree's preview.
+Without a preview ID, start, stop, destroy, share and unshare act on the current worktree's preview.
+stop, destroy and gc end a preview's share first.
 `
 
 func main() {
@@ -86,6 +91,36 @@ func parse(set *flag.FlagSet, args []string) error {
 		return usageError(fmt.Sprintf("%s: unexpected argument %q", set.Name(), set.Arg(0)))
 	}
 	return nil
+}
+
+// splitArgs separates flags from positional arguments in any order; valued flags take the next
+// argument or --flag=value.
+func splitArgs(args []string, valued, switches map[string]bool) (positional []string, values map[string]string, err error) {
+	values = map[string]string{}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-h" || arg == "--help" {
+			return nil, nil, helpRequested{}
+		}
+		name, value, hasValue := strings.Cut(arg, "=")
+		switch {
+		case valued[name] && hasValue:
+			values[name] = value
+		case valued[name]:
+			if i+1 >= len(args) {
+				return nil, nil, usageError(name + " needs a value")
+			}
+			i++
+			values[name] = args[i]
+		case switches[arg]:
+			values[arg] = ""
+		case strings.HasPrefix(arg, "-"):
+			return nil, nil, usageError(fmt.Sprintf("unknown option %s", arg))
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	return positional, values, nil
 }
 
 func dispatch(args []string) (int, error) {
@@ -152,6 +187,43 @@ func dispatch(args []string) (int, error) {
 			return 2, err
 		}
 		return 0, gc(*yes)
+	case "share":
+		positional, values, err := splitArgs(rest, map[string]bool{"--host": true, "--hours": true}, nil)
+		if err != nil {
+			return 2, err
+		}
+		name, err := optionalArg(command, positional)
+		if err != nil {
+			return 2, err
+		}
+		hours := 0
+		if v, ok := values["--hours"]; ok {
+			if _, err := fmt.Sscan(v, &hours); err != nil || hours < 1 {
+				return 2, usageError("--hours takes a whole number of hours")
+			}
+		}
+		return 0, sharePreview(name, values["--host"], hours)
+	case "unshare":
+		positional, values, err := splitArgs(rest, nil, map[string]bool{"--expired": true})
+		if err != nil {
+			return 2, err
+		}
+		name, err := optionalArg(command, positional)
+		if err != nil {
+			return 2, err
+		}
+		if _, expired := values["--expired"]; expired {
+			if name != "" {
+				return 2, usageError("unshare --expired takes no preview")
+			}
+			return 0, cleanShares()
+		}
+		return 0, unsharePreview(name)
+	case "shares":
+		if err := parse(flags(command), rest); err != nil {
+			return 2, err
+		}
+		return 0, listShares()
 	case "start", "stop", "destroy":
 		name, err := optionalArg(command, rest)
 		if err != nil {
