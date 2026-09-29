@@ -70,21 +70,25 @@ This v1 sample does not initialize submodules or Git LFS automatically.
 
 ## Host prerequisites
 
-Linux, Git, Python 3.10+, Docker Engine with Compose v2, Tailscale, and the
-agent runtime of your choice. Install these using their official instructions after
+Linux, Git, Docker Engine with Compose v2, Tailscale, and the agent runtime of
+your choice. Building devbox needs Go (the version is pinned in `mise.toml`).
+Python 3 is only used by the Docker acceptance check. Install these using their official instructions after
 checking the target host. Do not pipe installers into a shell without inspecting
 the host and choosing versions. The installation is intentionally separate.
 
-Install this CLI on the Linux host when ready:
+devbox is a single Go binary with the web page built in. Build and install it on
+the Linux host when ready:
 
 ```sh
+go build -o bin/devbox ./cmd/devbox
 install -d "$HOME/.local/bin"
-install -m 0755 bin/devbox "$HOME/.local/bin/devbox"
+printf '#!/bin/sh\nexport DEV_DOMAIN="${DEV_DOMAIN:-dev.your-real-domain.com}"\nexec %s/bin/devbox "$@"\n' "$PWD" \
+  > "$HOME/.local/bin/devbox" && chmod 0755 "$HOME/.local/bin/devbox"
 export PATH="$HOME/.local/bin:$PATH"
-export DEV_DOMAIN=dev.your-real-domain.com
 ```
 
-Persist PATH/DEV_DOMAIN in the environment used by your agent service as well as
+Rebuild after pulling changes; replacing the binary is safe while `devbox web` runs,
+which then needs a restart. Persist PATH/DEV_DOMAIN in the environment used by your agent service as well as
 interactive shells. A shell profile alone does not configure a systemd service.
 
 ## Private routing
@@ -224,8 +228,7 @@ Traefik. No unverified automatic worktree hook is required.
    previews should continue on the Linux host.
 8. Configure the publishing adapter and complete one team review on Hetzner.
 
-Local validation commands: `python3 -m unittest discover -s tests -v` and
-`python3 bin/devbox --help`. Full runtime acceptance requires a Docker daemon,
+Local validation commands: `go test ./...` and `bin/devbox --help`. Full runtime acceptance requires a Docker daemon,
 the Linux host, real domain/DNS settings and a configured publishing destination.
 
 The Docker-only check can run with `DEVBOX_RUNTIME_TEST=1 python3 tests/runtime_acceptance.py`.

@@ -5,10 +5,16 @@ This file covers what you need to change the kit itself.
 
 ## Layout
 
-- `bin/devbox`: the whole CLI, one Python file, stdlib only. Keep it that way.
-  It also holds the web backend: `overview()`, `container_details()`, the
-  `Resources` sampler and `serve()`.
+- `cmd/devbox/`: the whole CLI in Go, standard library only. Keep it that way.
+  `main.go` parses commands; `preview.go` has live/review/lifecycle/gc/ls/publish/
+  exec/logs; `repo.go` Git, config and saved previews; `naming.go` preview IDs;
+  `docker.go` inspect data; `overview.go`, `resources.go` and `server.go` the web
+  backend. Package variables such as `runCommand`, `dockerContainers` and
+  `repository` are the seams tests replace.
+- `bin/devbox`: the built binary (gitignored). Build with
+  `go build -o bin/devbox ./cmd/devbox`; the Go version is pinned in `mise.toml`.
 - `web/index.html`: the dashboard page. Vanilla JS, no build step, no dependencies.
+  `web/web.go` embeds it and the icons into the binary.
   `web/logo.svg`, `favicon.ico` and `apple-touch-icon.png` are the CRT skin of the
   devkit logo; `serve()` only serves files listed in its `assets` map.
 - `box/traefik/`: the edge proxy (container `devbox-edge`). `dynamic.yaml` is the
@@ -23,12 +29,14 @@ This file covers what you need to change the kit itself.
 
 ## Running things
 
-- Tests: `python3 -m unittest discover -s tests`.
-  Docker check: `DEVBOX_RUNTIME_TEST=1 python3 tests/runtime_acceptance.py`.
+- Tests: `go test ./...` (`gofmt -l .` and `go vet ./...` should be clean).
+  Docker check: `DEVBOX_RUNTIME_TEST=1 python3 tests/runtime_acceptance.py`; it
+  drives `bin/devbox` from outside, so build first.
 - `~/.local/bin/devbox` is a wrapper that sets DEV_DOMAIN and runs `bin/devbox`
-  from this checkout, so CLI edits take effect immediately.
-- The dashboard runs as the user service `devbox-web`. After editing `bin/devbox`
-  or `web/index.html`, run `systemctl --user restart devbox-web`.
+  from this checkout, so a rebuild takes effect immediately.
+- The dashboard runs as the user service `devbox-web` from `bin/devbox`. After
+  changing Go code or `web/`, rebuild and run `systemctl --user restart devbox-web`
+  (the page is embedded, so page edits need a rebuild too).
 - UI checks: jsdom in a scratch directory for behaviour, headless Firefox for
   screenshots. Firefox is a snap, so write screenshots to a non-hidden folder
   under `~`, not `/tmp` or a dot-directory.

@@ -2,8 +2,8 @@
   "$schema": "https://t3.codes/schema/t3.json",
   "iconPath": "web/logo.svg",
   "scripts": [
-    { "name": "Test", "command": "python3 -m unittest discover -s tests", "icon": "test" },
-    { "name": "Restart dashboard", "command": "systemctl --user restart devbox-web && systemctl --user --no-pager status devbox-web | head -3", "icon": "configure" },
+    { "name": "Test", "command": "go test ./...", "icon": "test" },
+    { "name": "Rebuild and restart", "command": "go build -o bin/devbox ./cmd/devbox && systemctl --user restart devbox-web && systemctl --user --no-pager status devbox-web | head -3", "icon": "configure" },
     { "name": "Dashboard logs", "command": "journalctl --user -u devbox-web -f", "icon": "debug" }
   ]
 }
