@@ -585,7 +585,7 @@ function ask({title, body, ok, danger, submit}) {
   };
   $("act").showModal();
   const first = $("act-body").querySelector("input, select");
-  if (first) first.focus();
+  (first || $("act-cancel")).focus();
 }
 
 function shareForm(preview) {
@@ -600,9 +600,9 @@ async function handleAct(button) {
   const action = button.dataset.act, target = JSON.parse(button.dataset.target);
   for (const m of document.querySelectorAll("details.menu[open]")) m.open = false;
   if (action === "destroy") return ask({title: `Destroy ${target.preview}`, ok: "Destroy", danger: true,
-    body: `<p class="note">Removes its containers, networks and volumes, so its data is gone. Type the preview ID to confirm.</p>
-      <label>Preview ID<input id="act-confirm" autocomplete="off" spellcheck="false" required></label>`,
-    submit: () => run({action, ...target, confirm: $("act-confirm").value.trim()})});
+    body: `<p class="note">Removes its containers, networks and volumes. The code stays in the worktree and devbox live
+      or review can build it again, but the preview's own data, such as its database, starts over.</p>`,
+    submit: () => run({action, ...target, confirm: target.preview})});
   if (action === "gc") return ask({title: "Clean up", ok: "Remove", danger: true,
     body: `<p class="note">Destroys the previews whose worktree is gone in ${esc(home(target.repo.replace(/\/\.git$/, "")))}, with their data.</p>`,
     submit: () => run({action, ...target, confirm: "remove"})});

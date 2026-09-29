@@ -213,7 +213,7 @@ start a live preview or review HEAD for a worktree, and clean up previews of rem
 worktrees; changing the password signs every browser out. Each action runs the `devbox`
 binary itself, as the CLI would, and the page shows its output live. The server only
 accepts targets that exist on the host, requests from the dashboard's own page, and
-typed confirmation for destroy; five wrong passwords lock an address out for five
+an explicit confirmation for destroy and clean-up; five wrong passwords lock an address out for five
 minutes. `exec` stays in the CLI.
 
 `devbox web` binds to 127.0.0.1:3780. Install `box/systemd/devbox-web.service` as a

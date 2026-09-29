@@ -96,8 +96,9 @@ func planAction(req actionRequest) (plannedAction, error) {
 			title: verb + " " + req.Preview}
 		switch req.Action {
 		case "destroy":
+			// The page confirms with a click and sends the preview ID; a stray request without it is refused.
 			if req.Confirm != req.Preview {
-				return plannedAction{}, fail("Type the preview ID to confirm destroying it and its data.")
+				return plannedAction{}, fail("Confirm destroying %s and its data.", req.Preview)
 			}
 		case "share":
 			if req.Hours < 0 {
