@@ -88,8 +88,12 @@ func planAction(req actionRequest) (plannedAction, error) {
 		if dir == "" {
 			return plannedAction{}, fail("The repository of %s is gone.", req.Preview)
 		}
+		verb := req.Action
+		if verb == "unshare" {
+			verb = "stop sharing"
+		}
 		p := plannedAction{args: []string{req.Action, req.Preview}, dir: dir, target: "preview " + req.Preview,
-			title: req.Action + " " + req.Preview}
+			title: verb + " " + req.Preview}
 		switch req.Action {
 		case "destroy":
 			if req.Confirm != req.Preview {
