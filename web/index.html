@@ -32,11 +32,8 @@ try { document.documentElement.dataset.theme = localStorage.getItem("devbox.them
     --code: #f0f0ec;
   }
 }
-.theme { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.theme button { border: 0; border-radius: 0; padding: 2px 8px; font-size: 12px; color: var(--muted); }
-.theme button + button { border-left: 1px solid var(--line); }
-.theme button[aria-pressed=true] { background: var(--code); color: var(--text); }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -47,15 +44,15 @@ h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; 
 h1 img { width: 32px; height: 32px; }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
 h3 { font-size: 14px; margin: 0 0 8px; }
-details.section > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 28px 0 10px; }
-details.section > summary::-webkit-details-marker { display: none; }
-details.section > summary h2 { margin: 0; }
-details.section > summary::before {
-  content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
-  transform: rotate(-45deg); transition: transform .15s; margin: 0 4px 0 2px;
-}
-details.section[open] > summary::before { transform: rotate(45deg); }
-details.section > summary:hover h2, details.section > summary:hover .count { color: var(--text); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 24px 0 14px; }
+.tabs button { border: 0; border-radius: 0; background: none; padding: 8px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent;
+  font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.tabs button:hover { color: var(--text); }
+.tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
+.tabs .count { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; border: 1px solid var(--warn); border-radius: 10px;
+  padding: 10px 14px; margin: 0 0 12px; font-size: 13px; }
+.notice b { color: var(--warn); }
 .count { font-size: 12px; color: var(--muted); }
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
 .filters input[type=search], .filters select {
@@ -210,6 +207,11 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 6px 20px rgb(0 0 0 / .25); }
 .menu-items button { border: 0; text-align: left; padding: 6px 10px; }
 .menu-items button:hover { background: var(--code); }
+.menu-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 10px 2px; }
+.menu-items button[aria-pressed=true]::after { content: "✓"; float: right; margin-left: 12px; color: var(--accent); }
+.settings > summary { display: inline-flex; align-items: center; padding: 3px 6px; color: var(--muted); }
+.settings > summary svg { width: 16px; height: 16px; }
+.sys-reclaim { color: var(--warn); font-size: 12.5px; }
 button.danger { color: var(--bad); }
 .wt-actions { display: flex; gap: 6px; margin-top: 6px; }
 .form { padding: 14px; display: grid; gap: 12px; }
@@ -243,9 +245,13 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <div class="facts" id="facts"></div>
     <span class="refresh" id="refreshed">loading…</span>
     <span class="auth" id="auth"></span>
-    <span class="theme" role="group" aria-label="Theme">
-      <button data-theme-pick="dark">Dark</button><button data-theme-pick="light">Light</button><button data-theme-pick="auto" title="Follow the system setting">Auto</button>
-    </span>
+    <details class="menu settings">
+      <summary title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></summary>
+      <div class="menu-items">
+        <div class="menu-label">Theme</div>
+        <button data-theme-pick="dark">Dark</button><button data-theme-pick="light">Light</button><button data-theme-pick="auto" title="Follow the system setting">Auto</button>
+      </div>
+    </details>
   </header>
   <div id="error" class="error" hidden></div>
 
@@ -253,10 +259,17 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <span class="sys-item"><span class="sys-k">CPU</span><span class="sys-v" id="sum-cpu">–</span><span class="mini" id="sum-cpu-m"></span></span>
     <span class="sys-item"><span class="sys-k">Memory</span><span class="sys-v" id="sum-mem">–</span><span class="mini" id="sum-mem-m"></span></span>
     <span class="sys-item"><span class="sys-k">Disk</span><span class="sys-v" id="sum-disk">–</span><span class="mini" id="sum-disk-m"></span></span>
+    <span class="sys-item sys-reclaim" id="sum-reclaim" hidden></span>
     <span class="sys-more">Details<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg></span>
   </button>
 
-  <h2>Previews <span class="count" id="preview-count"></span></h2>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-btn-previews" data-tab="previews" aria-controls="tab-previews">Previews <span class="count" id="preview-count"></span></button>
+    <button role="tab" id="tab-btn-worktrees" data-tab="worktrees" aria-controls="tab-worktrees">Worktrees <span class="count" id="worktree-count"></span></button>
+  </nav>
+
+  <section id="tab-previews" role="tabpanel" aria-labelledby="tab-btn-previews">
+  <div class="notice" id="orphans" hidden></div>
   <div class="filters">
     <input type="search" id="filter-text" placeholder="Filter by name, project, branch, commit, worktree…" autocomplete="off">
     <select id="filter-mode" aria-label="Mode">
@@ -270,24 +283,11 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <thead><tr><th>Preview</th><th>Status</th><th class="hide-sm">Branch · commit</th><th class="hide-sm">Up</th><th></th></tr></thead>
     <tbody id="previews"></tbody>
   </table></div>
+  </section>
 
-  <details class="section" id="sec-worktrees" open>
-    <summary><h2>Worktrees</h2><span class="count" id="worktree-count"></span></summary>
+  <section id="tab-worktrees" role="tabpanel" aria-labelledby="tab-btn-worktrees" hidden>
     <div class="repos" id="repos"></div>
-  </details>
-
-  <details class="section" id="sec-orphans" open>
-    <summary><h2>Clean-up candidates</h2><span class="count" id="orphan-count"></span></summary>
-    <div class="panel" id="orphans"></div>
-  </details>
-
-  <details class="section" id="sec-disk" open>
-    <summary><h2>Docker disk</h2><span class="count" id="disk-count"></span></summary>
-    <div class="panel"><table class="disk">
-      <thead><tr><th>Type</th><th>Size</th><th>Reclaimable</th></tr></thead>
-      <tbody id="disk"></tbody>
-    </table></div>
-  </details>
+  </section>
 </main>
 
 <dialog id="system" class="wide">
@@ -303,6 +303,11 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <div class="panel"><table>
       <thead><tr><th class="num hide-sm">PID</th><th class="hide-sm">User</th><th>Process</th><th class="num">CPU</th><th class="num">Memory</th></tr></thead>
       <tbody id="procs"></tbody>
+    </table></div>
+    <div class="subhead">Docker disk <span class="count" id="disk-count"></span></div>
+    <div class="panel"><table class="disk">
+      <thead><tr><th>Type</th><th>Size</th><th>Reclaimable</th></tr></thead>
+      <tbody id="disk"></tbody>
     </table></div>
 
   </div>
@@ -401,7 +406,10 @@ function setTheme(theme) {
   store.set("theme", theme);
   document.querySelectorAll("[data-theme-pick]").forEach(b => b.setAttribute("aria-pressed", b.dataset.themePick === theme));
 }
-document.querySelectorAll("[data-theme-pick]").forEach(b => b.addEventListener("click", () => setTheme(b.dataset.themePick)));
+document.querySelectorAll("[data-theme-pick]").forEach(b => b.addEventListener("click", () => {
+  setTheme(b.dataset.themePick);
+  b.closest("details").open = false;
+}));
 setTheme(document.documentElement.dataset.theme);
 
 const UP = new Set(["healthy", "running", "starting"]);
@@ -466,7 +474,8 @@ function gitLine(w) {
 
 function renderPreviews(all) {
   const previews = all.filter(matches);
-  $("preview-count").textContent = previews.length === all.length ? `(${all.length})` : `(${previews.length} of ${all.length})`;
+  $("preview-count").textContent = previews.length === all.length ? `${all.length}` : `${previews.length} of ${all.length}`;
+  const gone = new Set((lastData ? lastData.repositories : []).flatMap(r => r.orphans.map(o => o.name)));
   if (!all.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews. Run <span class="mono">devbox live</span> in a worktree.</td></tr>`; return; }
   if (!previews.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews match the filter.</td></tr>`; return; }
   let html = "", project = null;
@@ -477,7 +486,7 @@ function renderPreviews(all) {
     html += `<tr class="preview" data-row="${esc(p.name)}">
       <td><button class="expand" data-expand="${esc(p.name)}" aria-expanded="${open}" title="Show containers"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></button><span class="tag ${p.mode === "live" ? "live" : ""}">${esc(p.mode)}</span>
         ${p.status === "healthy" || p.status === "running" ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}
-        ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}</div>` : ""}
+        ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}${gone.has(p.name) ? ` <span class="badge warn" title="Its worktree was removed; clean up with Remove above or devbox gc">worktree gone</span>` : ""}</div>` : ""}
         ${p.share ? shareLine(p.share) : ""}</td>
       <td>${status(p.status)}${others && !open ? `<div class="services">${others}</div>` : ""}</td>
       <td class="hide-sm">${commitCell(p)}</td>
@@ -652,7 +661,8 @@ function previewLink(p) {
 function renderRepos(repos, previews) {
   const byName = Object.fromEntries(previews.map(p => [p.name, p]));
   const trees = repos.reduce((n, r) => n + r.worktrees.length, 0);
-  $("worktree-count").textContent = `${trees} in ${repos.length} ${repos.length === 1 ? "repository" : "repositories"}`;
+  $("worktree-count").textContent = `${trees}`;
+  $("worktree-count").title = `${trees} in ${repos.length} ${repos.length === 1 ? "repository" : "repositories"}`;
   $("repos").innerHTML = repos.map(r => `<div class="panel repo">
     <h3 class="mono path">${esc(home(r.path.replace(/\/\.git$/, "")))}</h3>
     <ul>${r.worktrees.map(w => `<li>
@@ -665,16 +675,16 @@ function renderRepos(repos, previews) {
   </div>`).join("") || `<div class="panel empty">No repositories yet. They appear once they have a preview or a T3 worktree.</div>`;
 }
 
+// Previews whose worktree is gone show as a notice above the preview list; usually there are none.
 function renderOrphans(repos) {
-  const rows = repos.flatMap(r => r.orphans.map(o => ({...o, repo: r.path.replace(/\/\.git$/, "")})));
-  $("orphan-count").textContent = rows.length ? `${rows.length} to remove` : "none";
-  $("orphans").innerHTML = rows.length
-    ? `<table><thead><tr><th>Preview</th><th>Mode</th><th class="hide-sm">Removed worktree</th></tr></thead><tbody>${rows.map(o =>
-        `<tr><td class="mono">${esc(o.name)}</td><td>${esc(o.mode)}</td><td class="hide-sm mono path">${esc(home(o.worktree))}</td></tr>`).join("")}</tbody></table>
-       <div class="empty">${session.signed_in
-         ? repos.filter(r => r.orphans.length).map(r => act("gc", `Remove ${r.orphans.length} in ${home(r.path.replace(/\/\.git$/, ""))}…`, {repo: r.path}, "danger")).join(" ")
-         : `Remove them with <span class="mono">devbox gc --yes</span> in the repository.`}</div>`
-    : `<div class="empty">None. Every preview's worktree still exists.</div>`;
+  const rows = repos.flatMap(r => r.orphans);
+  $("orphans").hidden = !rows.length;
+  if (!rows.length) return;
+  $("orphans").innerHTML = `<b>${plural(rows.length, "preview")} ${rows.length === 1 ? "belongs" : "belong"} to a removed worktree</b>
+    <span class="mono">${rows.map(o => esc(o.name)).join(", ")}</span>
+    ${session.signed_in
+      ? repos.filter(r => r.orphans.length).map(r => act("gc", `Remove ${r.orphans.length} in ${home(r.path.replace(/\/\.git$/, ""))}…`, {repo: r.path}, "danger")).join(" ")
+      : `<span class="muted">Remove with <span class="mono">devbox gc --yes</span> in the repository.</span>`}`;
 }
 
 function certFact(h) {
@@ -692,8 +702,12 @@ function renderHost(h) {
     <span>${esc(h.domain)}</span>
     ${certFact(h)}
     <span><b>${h.running_containers}</b> containers running</span>`;
-  const images = h.disk.find(d => d.type === "Images");
-  $("disk-count").textContent = images ? `images ${images.size}, ${images.reclaimable} reclaimable` : "";
+  // Docker's sizes are strings like "7.157GB (75%)"; the summary bar mentions reclaimable space from 5 GB up.
+  const size = text => { const m = /([\d.]+)\s*([kMGT]?)B/.exec(text || ""); return m ? m[1] * {"": 1, k: 1e3, M: 1e6, G: 1e9, T: 1e12}[m[2]] : 0; };
+  const reclaimable = h.disk.reduce((n, d) => n + size(d.reclaimable), 0);
+  $("disk-count").textContent = `${(reclaimable / 1e9).toFixed(1)} GB reclaimable`;
+  $("sum-reclaim").hidden = reclaimable < 5e9;
+  $("sum-reclaim").textContent = `${(reclaimable / 1e9).toFixed(1)} GB of Docker data reclaimable`;
   $("disk").innerHTML = h.disk.map(d => `<tr><td>${esc(d.type)}</td><td>${esc(d.size)}</td><td>${esc(d.reclaimable)}</td></tr>`).join("");
 }
 
@@ -964,12 +978,25 @@ for (const id of ["filter-text", "filter-mode", "filter-status"]) {
 }
 $("filter-text").addEventListener("keydown", e => { if (e.key === "Escape") { e.target.value = ""; e.target.dispatchEvent(new Event("input")); } });
 document.addEventListener("keydown", e => {
-  if (e.key === "/" && !e.target.closest("input, select, textarea") && !$("logs").open) { e.preventDefault(); $("filter-text").focus(); }
+  if (e.key === "/" && !e.target.closest("input, select, textarea") && !document.querySelector("dialog[open]")) {
+    e.preventDefault(); showTab("previews"); $("filter-text").focus();
+  }
 });
-for (const d of document.querySelectorAll("details.section")) {
-  if (store.get(d.id) === "closed") d.open = false;
-  d.addEventListener("toggle", () => store.set(d.id, d.open ? "open" : "closed"));
+
+// Tabs: the choice is kept in the address (#worktrees) and in the browser.
+const TABS = ["previews", "worktrees"];
+function showTab(name) {
+  if (!TABS.includes(name)) name = "previews";
+  for (const t of TABS) {
+    $("tab-" + t).hidden = t !== name;
+    $("tab-btn-" + t).setAttribute("aria-selected", t === name);
+  }
+  store.set("tab", name);
+  history.replaceState(null, "", name === "previews" ? location.pathname : "#" + name);
 }
+document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+window.addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+showTab(location.hash.slice(1) || store.get("tab") || "previews");
 
 loadResources();
 setInterval(loadResources, 5000);

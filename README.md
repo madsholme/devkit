@@ -185,18 +185,26 @@ Prefer review previews; a live preview may run with debug pages on.
 
 ## Web overview
 
-https://devbox.DEV_DOMAIN shows whether T3 and Traefik are up, days until the
-certificate expires, a CPU/memory/disk summary bar that opens a system
-monitor (10-minute history, swap, per-container usage and top host processes; containers
-and processes are sampled only while it is open), previews (mode, health, branch/commit, uptime and
-URL; a live preview shows its worktree's current commit and uncommitted changes, a
-review how far its worktree has moved on; expand one for all its containers with ports and a details view: health,
-networks, mounts, environment with secret-looking values masked, and labels), logs for any container (recent lines, or
-followed live), each repository's worktrees with their last commit,
-uncommitted changes, upstream distance and preview, clean-up candidates (what `devbox gc` would remove), certificate expiry,
-and Docker disk use. Everything is read live from Docker labels and Git; there is
-no database. It is dark by default; a header switch picks light or auto (follows the
-system), remembered per browser.
+https://devbox.DEV_DOMAIN shows whether T3 and Traefik are up and days until the
+certificate expires, then a CPU/memory/disk summary bar (it also mentions reclaimable
+Docker data from 5 GB up) that opens a system monitor: 10-minute history, swap,
+per-container usage, top host processes and Docker disk use. Containers and processes
+are sampled only while it is open.
+
+Below it are two tabs, remembered per browser and linkable (`#worktrees`):
+
+- **Previews**: mode, health, branch/commit, uptime and URL. A live preview shows its
+  worktree's current commit and uncommitted changes, a review how far its worktree has
+  moved on. Expand one for all its containers with ports, a details view (health,
+  networks, mounts, environment with secret-looking values masked, labels) and logs
+  (recent lines, or followed live). Previews whose worktree is gone (what `devbox gc`
+  would remove) are marked, with a notice above the list.
+- **Worktrees**: each repository's worktrees with their last commit, uncommitted
+  changes, upstream distance and preview.
+
+Everything is read live from Docker labels and Git; there is no database. It is dark
+by default; the settings menu (gear icon) picks light or auto (follows the system),
+remembered per browser.
 
 Anyone on the tailnet can read it. To act from it, set a password on the host with
 `devbox web password`; only a salted PBKDF2 hash is stored, in `~/.config/devbox/config.json`.
