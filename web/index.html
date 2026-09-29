@@ -209,7 +209,11 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
 .menu-items a { font-size: 12.5px; padding: 6px 10px; border-radius: 6px; }
 .share-menu > summary.tag.public { padding: 3px 9px; border-radius: 6px; font-size: 12.5px; white-space: nowrap; }
 .share-menu > summary.tag.public:hover, .share-menu[open] > summary.tag.public { background: var(--code); border-color: var(--warn); }
-.share-menu .menu-label { text-transform: none; letter-spacing: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; max-width: 44ch; overflow-wrap: anywhere; }
+/* As wide as the address needs, up to 440px; longer addresses wrap inside the menu. */
+.share-menu .menu-items { width: max-content; max-width: min(440px, calc(100vw - 16px)); }
+/* Menus sit inside the no-wrap button group; their own text wraps normally. */
+.menu-items { white-space: normal; }
+.share-menu .menu-label { text-transform: none; letter-spacing: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 0; overflow-wrap: anywhere; }
 .menu-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 10px 2px; }
 .menu-items button[aria-pressed=true]::after { content: "✓"; float: right; margin-left: 12px; color: var(--accent); }
 .settings > summary { display: inline-flex; align-items: center; padding: 3px 6px; color: var(--muted); }
