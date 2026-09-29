@@ -86,12 +86,6 @@ tr:last-child td { border-bottom: 0; }
 .tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--line); color: var(--muted); }
 .tag.live { color: var(--accent); border-color: var(--accent); }
 .tag.public { color: var(--warn); border-color: var(--warn); }
-.share-line { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; }
-.share-line .tag.public { text-decoration: none; white-space: nowrap; }
-.share-line .tag.public:hover { background: var(--code); }
-.share-host { color: var(--muted); max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.icon-btn.small { width: 22px; height: 20px; }
-.icon-btn.small svg { width: 13px; height: 13px; }
 .services { font-size: 12px; color: var(--muted); margin-top: 2px; }
 button {
   font: inherit; font-size: 12.5px; color: var(--accent); background: none;
@@ -211,7 +205,11 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
 .menu-items { position: fixed; z-index: 5; display: flex; flex-direction: column; min-width: 150px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 6px 20px rgb(0 0 0 / .25); }
 .menu-items button { border: 0; text-align: left; padding: 6px 10px; }
-.menu-items button:hover { background: var(--code); }
+.menu-items button:hover, .menu-items a:hover { background: var(--code); text-decoration: none; }
+.menu-items a { font-size: 12.5px; padding: 6px 10px; border-radius: 6px; }
+.share-menu > summary.tag.public { padding: 3px 9px; border-radius: 6px; font-size: 12.5px; white-space: nowrap; }
+.share-menu > summary.tag.public:hover, .share-menu[open] > summary.tag.public { background: var(--code); border-color: var(--warn); }
+.share-menu .menu-label { text-transform: none; letter-spacing: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; max-width: 44ch; overflow-wrap: anywhere; }
 .menu-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 10px 2px; }
 .menu-items button[aria-pressed=true]::after { content: "✓"; float: right; margin-left: 12px; color: var(--accent); }
 .settings > summary { display: inline-flex; align-items: center; padding: 3px 6px; color: var(--muted); }
@@ -445,15 +443,17 @@ function until(iso) {
   return `${Math.round(s / 86400)}d left`;
 }
 
-// A public share: anyone with the link can open it until it expires.
-function shareLine(share) {
-  const when = new Date(share.expires).toLocaleString();
-  return `<div class="share-line">
-    <a class="tag public" href="${esc(share.url)}" target="_blank" rel="noopener"
-      title="Public on the internet until ${esc(when)}${share.fixed ? " (fixed host)" : ""}. Opens ${esc(share.url)}">public · ${until(share.expires)}</a>
-    <span class="mono share-host" title="${esc(share.url)}">${esc(share.url.replace(/^https:\/\//, ""))}</span>
-    <button class="icon-btn small" data-copy="${esc(share.url)}" title="Copy the public address" aria-label="Copy the public address">${ICON.copy}${ICON.check}</button>
-  </div>`;
+// A public share: an amber pill with the time left, opening a menu to open, copy, extend or stop it.
+function shareMenu(p) {
+  const share = p.share, when = new Date(share.expires).toLocaleString();
+  const items = [
+    `<div class="menu-label" title="${share.fixed ? "Fixed host" : "Public address"}">${esc(share.url.replace(/^https:\/\//, ""))}</div>`,
+    `<a href="${esc(share.url)}" target="_blank" rel="noopener">Open public address</a>`,
+    `<button data-copy="${esc(share.url)}">Copy public address</button>`,
+  ];
+  if (session.signed_in) items.push(act("share", "Extend…", {preview: p.name}), act("unshare", "Stop sharing", {preview: p.name}));
+  return `<details class="menu share-menu"><summary class="tag public" title="Public on the internet until ${esc(when)}">public · ${until(share.expires)}</summary>
+    <div class="menu-items">${items.join("")}</div></details>`;
 }
 
 function commitCell(p) {
@@ -496,11 +496,12 @@ function renderPreviews(all) {
       <td><button class="expand" data-expand="${esc(p.name)}" aria-expanded="${open}" title="Show containers"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></button><span class="tag ${p.mode === "live" ? "live" : ""}">${esc(p.mode)}</span>
         ${p.status === "healthy" || p.status === "running" ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}
         ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}${gone.has(p.name) ? ` <span class="badge warn" title="Its worktree was removed; clean up with Remove above or devbox gc">worktree gone</span>` : ""}</div>` : ""}
-        ${p.share ? shareLine(p.share) : ""}</td>
+</td>
       <td>${status(p.status)}${others && !open ? `<div class="services">${others}</div>` : ""}</td>
       <td class="hide-sm">${commitCell(p)}</td>
       <td class="hide-sm">${ago(p.started)}</td>
       <td><div class="actions">
+        ${p.share ? shareMenu(p) : ""}
         ${UP.has(p.status) ? `<a class="icon-btn" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open ${esc(p.url)} in a new tab" aria-label="Open in a new tab">${ICON.open}</a>
         <button class="icon-btn" data-copy="${esc(p.url)}" title="Copy ${esc(p.url)}" aria-label="Copy URL">${ICON.copy}${ICON.check}</button>` : ""}
         <button data-logs="${esc(p.name)}">Logs</button>
@@ -523,8 +524,7 @@ function previewMenu(p) {
   if (!session.signed_in) return "";
   const up = UP.has(p.status), items = [];
   items.push(up ? act("stop", "Stop", {preview: p.name}) : act("start", "Start", {preview: p.name}));
-  if (session.share && up) items.push(act("share", p.share ? "Extend share…" : "Share publicly…", {preview: p.name}));
-  if (p.share) items.push(act("unshare", "Stop sharing", {preview: p.name}));
+  if (session.share && up && !p.share) items.push(act("share", "Share publicly…", {preview: p.name}));
   items.push(act("destroy", "Destroy…", {preview: p.name}, "danger"));
   return `<details class="menu"><summary>Actions</summary><div class="menu-items">${items.join("")}</div></details>`;
 }
@@ -747,7 +747,9 @@ async function copyText(text, button) {
     document.body.append(area); area.select(); document.execCommand("copy"); area.remove();
   }
   button.classList.add("copied");
-  setTimeout(() => button.classList.remove("copied"), 1200);
+  const label = button.querySelector("svg") ? null : button.textContent;
+  if (label) button.textContent = "Copied";
+  setTimeout(() => { button.classList.remove("copied"); if (label) button.textContent = label; }, 1200);
 }
 
 const kv = rows => `<table class="kv">${rows.map(([k, v]) =>
