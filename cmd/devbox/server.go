@@ -143,6 +143,15 @@ func newHandler() (http.Handler, error) {
 			if data, err = overview(); err == nil {
 				sendJSON(w, data)
 			}
+		case "/api/history":
+			limit, _ := strconv.Atoi(query.Get("limit"))
+			if limit < 1 || limit > 1000 {
+				limit = 300
+			}
+			var events []event
+			if events, err = readHistory(query.Get("preview"), limit); err == nil {
+				sendJSON(w, map[string]any{"events": events})
+			}
 		case "/api/resources":
 			sendJSON(w, res.snapshot(query.Get("full") == "1"))
 		case "/api/container":
@@ -318,6 +327,8 @@ func reapLoop() {
 
 // serve runs the web overview. Bind to localhost; Traefik publishes it on the tailnet.
 func serve(host string, port int) error {
+	// What this process does by itself, such as expiring shares, shows as "auto" in the history.
+	actor = "auto"
 	handler, err := newHandler()
 	if err != nil {
 		return err

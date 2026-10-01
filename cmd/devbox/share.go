@@ -301,10 +301,13 @@ func sharePreview(name, fixedHost string, hours int) error {
 	}
 	fmt.Fprintln(stdout, s.URL)
 	fmt.Fprintf(stdout, "share=%s preview=%s expires=%s container=%s\n", host, name, expires.Format(time.RFC3339), shortID(id))
+	happened("share", name, s.URL+" until "+localTime(expires))
 	return nil
 }
 
 func shortID(id string) string { return id[:min(12, len(id))] }
+
+func localTime(t time.Time) string { return t.Local().Format("2006-01-02 15:04") }
 
 // extendShare gives an existing share a new expiry. Labels cannot change on a running container,
 // so the connector is replaced; the tunnel, DNS record and URL stay the same.
@@ -322,6 +325,7 @@ func extendShare(cfg shareConfig, cf *cloudflare, web container, s share, expire
 	}
 	fmt.Fprintln(stdout, s.URL)
 	fmt.Fprintf(stdout, "share=%s preview=%s expires=%s (extended)\n", s.Host, s.Preview, expires.Format(time.RFC3339))
+	happened("extend", s.Preview, s.URL+" until "+localTime(expires))
 	return nil
 }
 
@@ -374,6 +378,7 @@ var unshareIfShared = func(preview string) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "unshared: %s\n", s.URL)
+	happened("unshare", preview, s.URL)
 	return nil
 }
 
@@ -393,6 +398,7 @@ func unsharePreview(name string) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "unshared: %s\n", s.URL)
+	happened("unshare", name, s.URL)
 	return nil
 }
 
@@ -410,9 +416,11 @@ func reapExpired(now time.Time) ([]string, error) {
 		}
 		if err := removeShare(s, true); err != nil {
 			problems = append(problems, err.Error())
+			failed("expire", s.Preview, err)
 			continue
 		}
 		removed = append(removed, s.URL)
+		happened("expire", s.Preview, s.URL)
 	}
 	if len(problems) > 0 {
 		return removed, errors.New(strings.Join(problems, "; "))
@@ -449,6 +457,7 @@ func sweepOrphans(cfg shareConfig, grace time.Duration) ([]string, error) {
 		if !live[t.ID] && strings.HasPrefix(t.Name, tunnelPrefix()) && t.DeletedAt == nil && old(t.CreatedAt) {
 			if err := cf.deleteTunnel(t.ID); err == nil {
 				removed = append(removed, "tunnel "+t.Name)
+				happened("sweep", "", "tunnel "+t.Name)
 			}
 		}
 	}
@@ -461,6 +470,7 @@ func sweepOrphans(cfg shareConfig, grace time.Duration) ([]string, error) {
 		if r.Comment == dnsComment() && !live[tunnelID] && old(r.CreatedOn) {
 			if err := cf.deleteDNS(r.ID); err == nil {
 				removed = append(removed, "DNS "+r.Name)
+				happened("sweep", "", "DNS record "+r.Name)
 			}
 		}
 	}

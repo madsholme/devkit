@@ -29,6 +29,8 @@ commands:
                        make a running preview public through a Cloudflare tunnel until it expires
   unshare [preview]    end a preview's public share (--expired: every expired share, plus leftovers)
   shares               list public shares
+  history [preview] [-n N]
+                       show what devbox did on this host, newest last (default the last 30 events)
   start [preview]      resume a stopped preview; data is retained
   stop [preview]       stop a preview's containers; data is retained
   destroy [preview]    remove a preview's containers, networks and volumes
@@ -139,7 +141,7 @@ func dispatch(args []string) (int, error) {
 			}
 			return 2, usageError("live takes no arguments")
 		}
-		return 0, preparePreview("live", "")
+		return 0, noted("live", "", preparePreview("live", ""))
 	case "review", "publish":
 		ref, err := optionalArg(command, rest)
 		if err != nil {
@@ -149,9 +151,9 @@ func dispatch(args []string) (int, error) {
 			ref = "HEAD"
 		}
 		if command == "review" {
-			return 0, preparePreview("review", ref)
+			return 0, noted("review", "", preparePreview("review", ref))
 		}
-		return 0, publish(ref)
+		return 0, noted("publish", "", publish(ref))
 	case "exec":
 		if len(rest) > 0 && rest[0] == "--" {
 			rest = rest[1:]
@@ -193,7 +195,10 @@ func dispatch(args []string) (int, error) {
 		if err := parse(set, rest); err != nil {
 			return 2, err
 		}
-		return 0, gc(*yes)
+		if !*yes {
+			return 0, gc(false)
+		}
+		return 0, noted("gc", "", gc(true))
 	case "share":
 		positional, values, err := splitArgs(rest, map[string]bool{"--host": true, "--hours": true}, nil)
 		if err != nil {
@@ -209,7 +214,7 @@ func dispatch(args []string) (int, error) {
 				return 2, usageError("--hours takes a whole number of hours")
 			}
 		}
-		return 0, sharePreview(name, values["--host"], hours)
+		return 0, noted("share", name, sharePreview(name, values["--host"], hours))
 	case "unshare":
 		positional, values, err := splitArgs(rest, nil, map[string]bool{"--expired": true})
 		if err != nil {
@@ -223,20 +228,36 @@ func dispatch(args []string) (int, error) {
 			if name != "" {
 				return 2, usageError("unshare --expired takes no preview")
 			}
-			return 0, cleanShares()
+			return 0, noted("unshare --expired", "", cleanShares())
 		}
-		return 0, unsharePreview(name)
+		return 0, noted("unshare", name, unsharePreview(name))
 	case "shares":
 		if err := parse(flags(command), rest); err != nil {
 			return 2, err
 		}
 		return 0, listShares()
+	case "history":
+		positional, values, err := splitArgs(rest, map[string]bool{"-n": true}, nil)
+		if err != nil {
+			return 2, err
+		}
+		name, err := optionalArg(command, positional)
+		if err != nil {
+			return 2, err
+		}
+		limit := 30
+		if v, ok := values["-n"]; ok {
+			if _, err := fmt.Sscan(v, &limit); err != nil || limit < 1 {
+				return 2, usageError("-n takes a whole number of events")
+			}
+		}
+		return 0, showHistory(name, limit)
 	case "start", "stop", "destroy":
 		name, err := optionalArg(command, rest)
 		if err != nil {
 			return 2, err
 		}
-		return 0, lifecycle(command, name)
+		return 0, noted(command, name, lifecycle(command, name))
 	}
 	return 2, usageError(fmt.Sprintf("unknown command %q", strings.TrimSpace(command)))
 }

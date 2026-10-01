@@ -37,6 +37,7 @@ software, or configure credentials automatically.
 | `devbox share [preview] [--host NAME] [--hours N]` | Make a running preview public until it expires (see below) |
 | `devbox unshare [preview]` | End a public share; `--expired` removes all expired ones and leftovers |
 | `devbox shares` | List public shares, their URLs and expiry |
+| `devbox history [preview] [-n N]` | What devbox did on this host and who did it, newest last (default 30 events) |
 
 Run lifecycle commands inside the owning Git repository. `ls` works anywhere.
 Without a preview ID, `stop`, `start` and `destroy` act on the preview that belongs
@@ -191,7 +192,7 @@ Docker data from 5 GB up) that opens a system monitor: 10-minute history, swap,
 per-container usage, top host processes and Docker disk use. Containers and processes
 are sampled only while it is open.
 
-Below it are two tabs, remembered per browser and linkable (`#worktrees`):
+Below it are three tabs, remembered per browser and linkable (`#worktrees`, `#history`):
 
 - **Previews**: mode, health, branch/commit, uptime and URL. A live preview shows its
   worktree's current commit and uncommitted changes, a review how far its worktree has
@@ -201,6 +202,8 @@ Below it are two tabs, remembered per browser and linkable (`#worktrees`):
   would remove) are marked, with a notice above the list.
 - **Worktrees**: each repository's worktrees with their last commit, uncommitted
   changes, upstream distance and preview.
+- **History**: what devbox did, newest first and grouped by day (see below). The tab
+  counts failures of the last 24 hours, and an expanded preview lists its last few events.
 
 Everything is read live from Docker labels and Git; there is no database. It is dark
 by default; the settings menu (gear icon) picks light or auto (follows the system),
@@ -215,6 +218,18 @@ binary itself, as the CLI would, and the page shows its output live. The server 
 accepts targets that exist on the host, requests from the dashboard's own page, and
 an explicit confirmation for destroy and clean-up; five wrong passwords lock an address out for five
 minutes. `exec` stays in the CLI.
+
+### History
+
+Every command that changes something records an event: live and review (created or
+resumed), start, stop, destroy (including `gc`), publish, share, extend, unshare,
+shares that expired and leftover tunnels or DNS records removed. A failed command is
+recorded too, with its error. Each event says who caused it: `cli` (also T3 actions),
+`dashboard`, or `auto` for what the web service does by itself, such as expiring shares.
+The log is one JSON line per event in `~/.local/state/devbox/history.jsonl`
+(`$XDG_STATE_HOME/devbox` if set). At 1 MB it moves to `history.jsonl.1`, replacing the
+older one, so about the last two megabytes are kept. Read it with `devbox history`
+or on the dashboard; deleting it loses nothing but the past.
 
 `devbox web` binds to 127.0.0.1:3780. Install `box/systemd/devbox-web.service` as a
 user service (instructions in the file); the `devbox` router in

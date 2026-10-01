@@ -184,6 +184,7 @@ var runAction = func(p plannedAction, out *job) error {
 	}
 	cmd := exec.Command(self, p.args...)
 	cmd.Dir, cmd.Stdout, cmd.Stderr = p.dir, out, out
+	cmd.Env = withEnv(os.Environ(), map[string]string{"DEVBOX_BY": "dashboard"})
 	return cmd.Run()
 }
 

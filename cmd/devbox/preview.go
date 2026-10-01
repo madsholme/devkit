@@ -243,6 +243,7 @@ func preparePreview(mode, ref string) (err error) {
 				break
 			}
 		}
+		record(event{Action: mode, Preview: name, Worktree: source, Detail: "resumed", OK: true})
 		return nil
 	}
 	if err := os.MkdirAll(state, 0o700); err != nil {
@@ -336,6 +337,13 @@ func preparePreview(mode, ref string) (err error) {
 	}
 	fmt.Fprintln(stdout, "https://"+host)
 	fmt.Fprintf(stdout, "preview=%s mode=%s commit=%s\n", name, mode, commit)
+	detail := "created at " + shortID(commit)
+	if previous != "" {
+		detail = "moved from removed worktree " + previous
+	} else if mode == "review" {
+		detail = "built " + shortID(commit)
+	}
+	record(event{Action: mode, Preview: name, Worktree: source, Detail: detail, OK: true})
 	return nil
 }
 
@@ -374,6 +382,7 @@ func lifecycle(action, name string) error {
 		// A stopped or destroyed preview must not stay public.
 		if err := unshareIfShared(name); err != nil {
 			fmt.Fprintf(os.Stderr, "devbox: %v\n", err)
+			failed("unshare", name, err)
 		}
 	}
 	switch action {
@@ -388,6 +397,7 @@ func lifecycle(action, name string) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "%s: %s\n", action, name)
+	happened(action, name, "")
 	return nil
 }
 
@@ -449,10 +459,12 @@ func gc(apply bool) error {
 		}
 		if err := unshareIfShared(s.name); err != nil {
 			fmt.Fprintf(os.Stderr, "devbox: %v\n", err)
+			failed("unshare", s.name, err)
 		}
 		if err := destroyPreview(filepath.Join(runDir(common, s.name), "compose.json")); err != nil {
 			return err
 		}
+		happened("destroy", s.name, "clean-up: worktree "+s.source+" is gone")
 	}
 	fmt.Fprintf(stdout, "Destroyed %d preview(s).\n", len(stale))
 	return nil
@@ -546,6 +558,7 @@ func publish(ref string) error {
 	if !published {
 		return fail("Team publishing is not configured: add a publish hook to devbox.json.")
 	}
+	happened("publish", name, "commit "+shortID(commit))
 	return nil
 }
 

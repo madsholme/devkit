@@ -10,7 +10,8 @@ This file covers what you need to change the kit itself.
   exec/logs; `repo.go` Git, config and saved previews; `naming.go` preview IDs;
   `docker.go` inspect data; `overview.go`, `resources.go` and `server.go` the web
   backend. Public shares: `share.go` (lifecycle, expiry, leftover sweep),
-  `cloudflare.go` (API client) and `hostconfig.go` (`~/.config/devbox/config.json`). Package variables such as `runCommand`, `dockerContainers` and
+  `cloudflare.go` (API client) and `hostconfig.go` (`~/.config/devbox/config.json`).
+  `history.go` is the event log (`~/.local/state/devbox/history.jsonl`). Package variables such as `runCommand`, `dockerContainers` and
   `repository` are the seams tests replace.
 - `bin/devbox`: the built binary (gitignored). Build with
   `go build -o bin/devbox ./cmd/devbox`; the Go version is pinned in `mise.toml`.
@@ -53,6 +54,9 @@ This file covers what you need to change the kit itself.
   `build`, `publish`) and run with `sh -eu` in the project root. `build` is
   required for review and `publish` for publishing; the others are optional.
   There is no justfile any more.
+- A command that changes something records it with `happened(...)` once it succeeded;
+  `noted(...)` in `dispatch` records failures. Tests write history to a temporary
+  directory (`TestMain` sets `DEVBOX_STATE_DIR`).
 - devbox never creates or deletes worktrees, and never commits, pushes or merges.
 - Update README.md when you change commands or behaviour.
 

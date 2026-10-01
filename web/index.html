@@ -230,6 +230,15 @@ button.danger { color: var(--bad); }
 button.primary { color: var(--bg); background: var(--accent); border-color: var(--accent); }
 button.primary.danger { background: var(--bad); border-color: var(--bad); color: var(--bg); }
 #act, #signin { width: min(460px, calc(100vw - 32px)); }
+.history td:first-child { width: 1%; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.history td:last-child { width: 1%; white-space: nowrap; color: var(--muted); }
+.history .detail { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.history .what { font-weight: 500; }
+.history .failed .what, .recent .failed .what { color: var(--bad); }
+.recent { list-style: none; margin: 0; padding: 8px 0 0; font-size: 12.5px; }
+.recent li { display: flex; gap: 10px; padding: 2px 0; }
+.recent time { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.recent .detail { color: var(--muted); overflow-wrap: anywhere; }
 .job-state.ok { color: var(--ok); } .job-state.bad { color: var(--bad); } .job-state { font-size: 12.5px; white-space: nowrap; }
 @media (max-width: 720px) {
   .hide-sm { display: none; }
@@ -273,6 +282,7 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-btn-previews" data-tab="previews" aria-controls="tab-previews">Previews <span class="count" id="preview-count"></span></button>
     <button role="tab" id="tab-btn-worktrees" data-tab="worktrees" aria-controls="tab-worktrees">Worktrees <span class="count" id="worktree-count"></span></button>
+    <button role="tab" id="tab-btn-history" data-tab="history" aria-controls="tab-history">History <span class="count" id="history-count"></span></button>
   </nav>
 
   <section id="tab-previews" role="tabpanel" aria-labelledby="tab-btn-previews">
@@ -294,6 +304,19 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
 
   <section id="tab-worktrees" role="tabpanel" aria-labelledby="tab-btn-worktrees" hidden>
     <div class="repos" id="repos"></div>
+  </section>
+
+  <section id="tab-history" role="tabpanel" aria-labelledby="tab-btn-history" hidden>
+    <div class="filters">
+      <input type="search" id="history-text" placeholder="Filter by preview, action, address…" autocomplete="off">
+      <select id="history-kind" aria-label="Outcome">
+        <option value="">Everything</option><option value="failed">Failures only</option>
+      </select>
+    </div>
+    <div class="panel"><table class="history">
+      <thead><tr><th>Time</th><th>What happened</th><th class="hide-sm">By</th></tr></thead>
+      <tbody id="history-rows"></tbody>
+    </table></div>
   </section>
 </main>
 
@@ -401,7 +424,7 @@ function containerRows(p) {
         <button data-logs="${esc(p.name)}" data-service="${esc(c.name)}">Logs</button>
       </div></td>
     </tr>`).join("")}</tbody>
-  </table></td></tr>`;
+  </table>${recentEvents(p.name)}</td></tr>`;
 }
 
 const store = {
@@ -725,6 +748,7 @@ function renderHost(h) {
 }
 
 async function load() {
+  loadHistory();
   try {
     const res = await fetch("api/overview");
     if (!res.ok) throw new Error(await res.text());
@@ -998,8 +1022,82 @@ document.addEventListener("keydown", e => {
   }
 });
 
+// History: what devbox did on this host, newest first, from every CLI run, dashboard action and expiry.
+let lastHistory = [];
+const VERB = {live: "live preview", review: "review", publish: "published", start: "started", stop: "stopped",
+  destroy: "destroyed", share: "shared publicly", extend: "share extended", unshare: "stopped sharing",
+  expire: "share expired", sweep: "leftover removed", gc: "clean-up", "unshare --expired": "expired shares"};
+const BY = {cli: "CLI", dashboard: "dashboard", auto: "automatic"};
+const verb = e => e.ok ? VERB[e.action] || e.action : e.action + " failed";
+const hourMinute = iso => new Date(iso).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+const stamp = iso => `${new Date(iso).toLocaleString()} · ${ago(iso)} ago`;
+
+function day(iso) {
+  const d = new Date(iso), today = new Date();
+  const days = Math.round((new Date(today.toDateString()) - new Date(d.toDateString())) / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return d.toLocaleDateString([], {weekday: "short", day: "numeric", month: "short", year: days > 300 ? "numeric" : undefined});
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch("api/history");
+    if (!res.ok) throw new Error(await res.text());
+    lastHistory = (await res.json()).events || [];
+  } catch { return; }
+  renderHistory();
+  if (lastData && expanded.size) renderPreviews(lastData.previews);
+}
+
+function renderHistory() {
+  const kind = $("history-kind").value, words = $("history-text").value.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = lastHistory.filter(e => (kind !== "failed" || !e.ok) &&
+    words.every(w => [e.action, verb(e), e.preview, e.worktree, e.detail, BY[e.by] || e.by].join(" ").toLowerCase().includes(w)));
+  // The tab shows recent failures, so a share that failed to expire is not missed.
+  const failures = lastHistory.filter(e => !e.ok && Date.now() - Date.parse(e.time) < 86400000).length;
+  $("history-count").innerHTML = failures ? `<span class="badge bad">${plural(failures, "failure")}</span>` : "";
+  if (!lastHistory.length) { $("history-rows").innerHTML = `<tr><td colspan="3" class="muted">Nothing yet. devbox records what it does from now on.</td></tr>`; return; }
+  if (!shown.length) { $("history-rows").innerHTML = `<tr><td colspan="3" class="muted">Nothing matches the filter.</td></tr>`; return; }
+  let html = "", heading = null;
+  for (const e of shown) {
+    if (day(e.time) !== heading) { heading = day(e.time); html += `<tr class="group"><td colspan="3">${esc(heading)}</td></tr>`; }
+    const target = e.preview ? `<span class="mono">${esc(e.preview)}</span>` : e.worktree ? `<span class="mono">${esc(home(e.worktree))}</span>` : "";
+    html += `<tr class="${e.ok ? "" : "failed"}">
+      <td title="${esc(stamp(e.time))}">${esc(hourMinute(e.time))}</td>
+      <td><span class="what">${esc(verb(e))}</span> ${target}${e.detail ? `<div class="detail">${esc(e.detail)}</div>` : ""}</td>
+      <td class="hide-sm">${esc(BY[e.by] || e.by)}</td>
+    </tr>`;
+  }
+  $("history-rows").innerHTML = html;
+}
+
+// recentEvents lists a preview's last few events under its containers, with a way to see them all.
+function recentEvents(name) {
+  const mine = lastHistory.filter(e => e.preview === name);
+  if (!mine.length) return "";
+  return `<ul class="recent">${mine.slice(0, 4).map(e => `<li class="${e.ok ? "" : "failed"}">
+      <time title="${esc(stamp(e.time))}">${esc(ago(e.time))} ago</time><span class="what">${esc(verb(e))}</span>
+      <span class="detail">${esc([e.detail, BY[e.by] || e.by].filter(Boolean).join(" · "))}</span></li>`).join("")}
+    ${mine.length > 4 ? `<li><button data-history="${esc(name)}">All ${mine.length} events</button></li>` : ""}</ul>`;
+}
+
+for (const id of ["history-text", "history-kind"]) {
+  const el = $(id), saved = store.get(id);
+  if (saved !== null) el.value = saved;
+  el.addEventListener("input", () => { store.set(id, el.value); renderHistory(); });
+}
+$("history-text").addEventListener("keydown", e => { if (e.key === "Escape") { e.target.value = ""; e.target.dispatchEvent(new Event("input")); } });
+document.addEventListener("click", e => {
+  const h = e.target.closest("[data-history]");
+  if (!h) return;
+  $("history-text").value = h.dataset.history;
+  $("history-text").dispatchEvent(new Event("input"));
+  showTab("history");
+});
+
 // Tabs: the choice is kept in the address (#worktrees) and in the browser.
-const TABS = ["previews", "worktrees"];
+const TABS = ["previews", "worktrees", "history"];
 function showTab(name) {
   if (!TABS.includes(name)) name = "previews";
   for (const t of TABS) {
