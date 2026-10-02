@@ -42,7 +42,19 @@ func up(path string) error {
 			return err
 		}
 	}
-	return composeRun(path, "up", "-d", "--wait", "--wait-timeout", "120")
+	return composeUp(path, saved)
+}
+
+// composeUp starts a rendered preview and waits for its health checks, as long as its web service's
+// devbox.wait-timeout label allows (default 120 seconds).
+func composeUp(path string, project map[string]any) error {
+	timeout := "120"
+	for _, s := range object(project, "services") {
+		if t := str(object(asObject(s), "labels"), "devbox.wait-timeout"); t != "" {
+			timeout = t
+		}
+	}
+	return composeRun(path, "up", "-d", "--wait", "--wait-timeout", timeout)
 }
 
 var composeRun = func(path string, args ...string) error {
@@ -134,20 +146,44 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 			return nil, fail("Only the proxy network may be shared between previews.")
 		}
 	}
-	front := asObject(services[web])
-	ensureObject(front, "networks")["proxy"] = nil
+	for _, r := range cfg.Routes {
+		if _, ok := services[r.Service]; !ok {
+			return nil, fail("Compose file has no %q service for a route in devbox.json.", r.Service)
+		}
+	}
 	ensureObject(result, "networks")["proxy"] = map[string]any{"external": true, "name": "devbox-proxy"}
-	router := preview
-	labels := object(front, "labels")
-	for k, v := range map[string]string{
-		"traefik.enable": "true", "traefik.docker.network": "devbox-proxy",
-		"traefik.http.routers." + router + ".rule":                      fmt.Sprintf("Host(`%s`)", envValue(env, "DEVBOX_HOST")),
-		"traefik.http.routers." + router + ".entrypoints":               "websecure",
-		"traefik.http.routers." + router + ".tls":                       "true",
-		"traefik.http.routers." + router + ".service":                   router,
-		"traefik.http.services." + router + ".loadbalancer.server.port": cfg.webPort(),
-	} {
-		labels[k] = v
+	host := envValue(env, "DEVBOX_HOST")
+	front := asObject(services[web])
+	expose(front, preview, preview, fmt.Sprintf("Host(`%s`)", host), cfg.webPort())
+	object(front, "labels")["devbox.web"] = "true"
+	if cfg.WaitTimeout != nil {
+		object(front, "labels")["devbox.wait-timeout"] = fmt.Sprint(cfg.WaitTimeout)
+	}
+	for i, r := range cfg.Routes {
+		service := asObject(services[r.Service])
+		rule := fmt.Sprintf("Host(`%s`)", host)
+		if r.Subdomains {
+			rule = fmt.Sprintf("HostRegexp(`^[a-z0-9-]+\\.%s$`)", regexp.QuoteMeta(host))
+		}
+		if len(r.Paths) > 0 {
+			prefixes := make([]string, len(r.Paths))
+			for j, p := range r.Paths {
+				prefixes[j] = fmt.Sprintf("PathPrefix(`%s`)", p)
+			}
+			rule += " && (" + strings.Join(prefixes, " || ") + ")"
+		}
+		router := fmt.Sprintf("%s-route%d", preview, i+1)
+		expose(service, router, preview+"-"+r.Service+"-"+r.port(), rule, r.port())
+		labels := object(service, "labels")
+		if labels["devbox.web"] == nil {
+			labels["devbox.web"] = "false"
+		}
+		if r.Subdomains {
+			// The host's wildcard certificate covers one level below DEV_DOMAIN only; this one covers the preview's subdomains.
+			labels["traefik.http.routers."+router+".tls.certresolver"] = "dns"
+			labels["traefik.http.routers."+router+".tls.domains[0].main"] = host
+			labels["traefik.http.routers."+router+".tls.domains[0].sans"] = "*." + host
+		}
 	}
 	if mode == "review" {
 		out, err := capture("docker", "image", "inspect", envValue(env, "DEVBOX_IMAGE"))
@@ -163,9 +199,25 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 		// Run precisely the built web image even if its convenient tag is later changed.
 		front["image"] = images[0].ID
 		front["pull_policy"] = "never"
-		labels["devbox.image"] = images[0].ID
+		object(front, "labels")["devbox.image"] = images[0].ID
 	}
 	return result, nil
+}
+
+// expose puts a service on the proxy network and adds a Traefik router (and its service) to it.
+func expose(service map[string]any, router, target, rule, port string) {
+	ensureObject(service, "networks")["proxy"] = nil
+	labels := object(service, "labels")
+	for k, v := range map[string]string{
+		"traefik.enable": "true", "traefik.docker.network": "devbox-proxy",
+		"traefik.http.routers." + router + ".rule":                      rule,
+		"traefik.http.routers." + router + ".entrypoints":               "websecure",
+		"traefik.http.routers." + router + ".tls":                       "true",
+		"traefik.http.routers." + router + ".service":                   target,
+		"traefik.http.services." + target + ".loadbalancer.server.port": port,
+	} {
+		labels[k] = v
+	}
 }
 
 func preparePreview(mode, ref string) (err error) {
@@ -332,7 +384,12 @@ func preparePreview(mode, ref string) (err error) {
 	if err := writeCompose(path, resolved); err != nil {
 		return err
 	}
-	if err := composeRun(path, "up", "-d", "--wait", "--wait-timeout", "120"); err != nil {
+	// A new preview builds its images from the current files: a destroyed preview of the same name
+	// leaves its images behind, and up alone would reuse them. Resuming never rebuilds.
+	if err := composeRun(path, "build"); err != nil {
+		return err
+	}
+	if err := composeUp(path, resolved); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "https://"+host)
@@ -497,7 +554,7 @@ func listing() error {
 	fmt.Fprintln(stdout, "PREVIEW\tMODE\tSTATUS\tCOMMIT\tURL")
 	for _, c := range containers {
 		labels := c.Config.Labels
-		if labels["traefik.enable"] != "true" || seen[labels["devbox.preview"]] {
+		if !isWeb(labels) || seen[labels["devbox.preview"]] {
 			continue
 		}
 		seen[labels["devbox.preview"]] = true
@@ -562,11 +619,17 @@ func publish(ref string) error {
 	return nil
 }
 
-// liveWeb returns the running web container of the current worktree's live preview.
-func liveWeb(root string) (string, error) {
-	cfg, err := loadConfig(root)
-	if err != nil {
-		return "", err
+// liveService returns a running container of the current worktree's live preview: the web service's
+// unless service names another.
+func liveService(root, service string) (string, error) {
+	if service == "" {
+		cfg, err := loadConfig(root)
+		if err != nil {
+			return "", err
+		}
+		service = cfg.webService()
+	} else if !serviceName.MatchString(service) {
+		return "", fail("Use an exact Compose service name.")
 	}
 	containers, err := dockerContainers()
 	if err != nil {
@@ -575,11 +638,11 @@ func liveWeb(root string) (string, error) {
 	for _, c := range containers {
 		labels := c.Config.Labels
 		if c.State.Running && labels["devbox.mode"] == "live" && labels["devbox.worktree"] == root &&
-			labels["com.docker.compose.service"] == cfg.webService() {
+			labels["com.docker.compose.service"] == service {
 			return c.ID, nil
 		}
 	}
-	return "", fail("No running live preview for this worktree. Run devbox live first.")
+	return "", fail("No running %s container in this worktree's live preview. Run devbox live first.", service)
 }
 
 func isTerminal(f *os.File) bool {
@@ -587,13 +650,13 @@ func isTerminal(f *os.File) bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-// execLive runs a command in the live web container and returns its exit code.
-func execLive(command []string) (int, error) {
+// execLive runs a command in a live preview container (the web service's by default) and returns its exit code.
+func execLive(service string, command []string) (int, error) {
 	root, _, err := repository()
 	if err != nil {
 		return 1, err
 	}
-	id, err := liveWeb(root)
+	id, err := liveService(root, service)
 	if err != nil {
 		return 1, err
 	}
@@ -614,12 +677,12 @@ func execLive(command []string) (int, error) {
 	return 0, nil
 }
 
-func logs(follow bool) error {
+func logs(service string, follow bool) error {
 	root, _, err := repository()
 	if err != nil {
 		return err
 	}
-	id, err := liveWeb(root)
+	id, err := liveService(root, service)
 	if err != nil {
 		return err
 	}

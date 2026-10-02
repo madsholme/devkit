@@ -737,3 +737,133 @@ func TestSavedComposeRoundTripsUnchanged(t *testing.T) {
 		t.Errorf("mode %v", info.Mode().Perm())
 	}
 }
+
+func TestRoutesExposeMoreServicesOfAPreview(t *testing.T) {
+	fakeImage(t, `{"services": {"web": {}, "api": {}, "core": {}, "db": {}}}`)
+	cfg := projectConfig{Project: "demo", WebPort: 80, Routes: []route{
+		{Service: "api", Port: 8080, Paths: []string{"/api", "/admin"}},
+		{Service: "core", Port: 8002, Subdomains: true},
+	}}
+	output, err := render(filepath.Join(kit, "project-template"), cfg, "live", composeEnv(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	services := object(output, "services")
+	labels := func(name string) map[string]any { return object(object(services, name), "labels") }
+	host := "demo-review-123.dev.example.com"
+	for _, want := range []struct{ service, key, value string }{
+		{"web", "devbox.web", "true"},
+		{"web", "traefik.http.routers.demo-review-123.rule", "Host(`" + host + "`)"},
+		{"api", "devbox.web", "false"},
+		{"api", "traefik.enable", "true"},
+		{"api", "traefik.http.routers.demo-review-123-route1.rule", "Host(`" + host + "`) && (PathPrefix(`/api`) || PathPrefix(`/admin`))"},
+		{"api", "traefik.http.routers.demo-review-123-route1.service", "demo-review-123-api-8080"},
+		{"api", "traefik.http.services.demo-review-123-api-8080.loadbalancer.server.port", "8080"},
+		{"core", "traefik.http.routers.demo-review-123-route2.rule", "HostRegexp(`^[a-z0-9-]+\\.demo-review-123\\.dev\\.example\\.com$`)"},
+		{"core", "traefik.http.routers.demo-review-123-route2.tls.certresolver", "dns"},
+		{"core", "traefik.http.routers.demo-review-123-route2.tls.domains[0].sans", "*." + host},
+		{"db", "traefik.enable", "false"},
+	} {
+		if got := str(labels(want.service), want.key); got != want.value {
+			t.Errorf("%s %s = %q, want %q", want.service, want.key, got, want.value)
+		}
+	}
+	for _, name := range []string{"web", "api", "core"} {
+		if _, ok := object(object(services, name), "networks")["proxy"]; !ok {
+			t.Errorf("%s is not on the proxy network", name)
+		}
+	}
+	if _, ok := object(object(services, "db"), "networks")["proxy"]; ok {
+		t.Error("db is on the proxy network")
+	}
+}
+
+func TestRoutesNeedAnExistingServiceAndSafeRules(t *testing.T) {
+	fakeImage(t, `{"services": {"web": {}}}`)
+	cfg := projectConfig{Project: "demo", Routes: []route{{Service: "api", Port: 80, Paths: []string{"/api"}}}}
+	if _, err := render(filepath.Join(kit, "project-template"), cfg, "live", composeEnv(), nil); err == nil {
+		t.Error("accepted a route to a missing service")
+	}
+	for _, r := range []route{
+		{Service: "api", Port: 80},
+		{Service: "api", Port: "x", Paths: []string{"/api"}},
+		{Service: "api", Port: 80, Paths: []string{"/"}},
+		{Service: "api", Port: 80, Paths: []string{"/api`) || Host(`evil"}},
+		{Service: "../api", Port: 80, Subdomains: true},
+	} {
+		if r.validate() == nil {
+			t.Errorf("accepted route %+v", r)
+		}
+	}
+	if err := (route{Service: "api", Port: json.Number("80"), Paths: []string{"/api/v1"}}).validate(); err != nil {
+		t.Errorf("rejected a valid route: %v", err)
+	}
+}
+
+func TestWebContainerOfPreviewsWithAndWithoutRoutes(t *testing.T) {
+	for _, c := range []struct {
+		labels map[string]string
+		web    bool
+	}{
+		{map[string]string{"traefik.enable": "true"}, true},
+		{map[string]string{"traefik.enable": "false"}, false},
+		{map[string]string{"traefik.enable": "true", "devbox.web": "true"}, true},
+		{map[string]string{"traefik.enable": "true", "devbox.web": "false"}, false},
+	} {
+		if isWeb(c.labels) != c.web {
+			t.Errorf("isWeb(%v) = %v", c.labels, !c.web)
+		}
+	}
+}
+
+func TestWaitTimeoutTravelsWithTheSavedPreview(t *testing.T) {
+	fakeImage(t, `{"services": {"web": {}}}`)
+	cfg := projectConfig{Project: "demo", WaitTimeout: json.Number("600")}
+	output, err := render(filepath.Join(kit, "project-template"), cfg, "live", composeEnv(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var args []string
+	swap(t, &composeRun, func(_ string, a ...string) error { args = a; return nil })
+	if err := composeUp("compose.json", output); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(args, " "); got != "up -d --wait --wait-timeout 600" {
+		t.Errorf("compose %s", got)
+	}
+	if err := composeUp("compose.json", map[string]any{}); err != nil || args[len(args)-1] != "120" {
+		t.Errorf("default timeout %v", args)
+	}
+}
+
+func TestNewPreviewsBuildAndResumedOnesDoNot(t *testing.T) {
+	r := newGitRepo(t)
+	swap(t, &repository, func() (string, string, error) { return r.root, r.common, nil })
+	swap(t, &assertOwner, noOwnerCheck)
+	swap(t, &hook, func(string, projectConfig, string, []string) (bool, error) { return true, nil })
+	swap(t, &render, func(root string, cfg projectConfig, mode string, env []string, metadata map[string]string) (map[string]any, error) {
+		labels := map[string]any{}
+		for k, v := range metadata {
+			labels[k] = v
+		}
+		return map[string]any{"services": map[string]any{"web": map[string]any{"labels": labels}}}, nil
+	})
+	var calls []string
+	swap(t, &composeRun, func(_ string, args ...string) error { calls = append(calls, args[0]); return nil })
+	swap(t, &dockerContainers, withContainers())
+	swap[io.Writer](t, &stdout, &bytes.Buffer{})
+	t.Setenv("DEV_DOMAIN", "dev.example.com")
+	if err := preparePreview("live", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(calls, " "); got != "build up" {
+		t.Errorf("new preview ran compose %q", got)
+	}
+	calls = nil
+	if err := preparePreview("live", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(calls, " "); got != "up" {
+		t.Errorf("resumed preview ran compose %q", got)
+	}
+}

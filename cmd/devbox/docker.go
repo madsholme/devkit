@@ -144,3 +144,12 @@ func containerPorts(c container) []port {
 	sort.Slice(ports, func(i, j int) bool { return ports[i].Port < ports[j].Port })
 	return ports
 }
+
+// isWeb tells whether a container is its preview's web service. Previews saved before routes existed
+// have no devbox.web label; their only Traefik-enabled container is the web service.
+func isWeb(labels map[string]string) bool {
+	if web, ok := labels["devbox.web"]; ok {
+		return web == "true"
+	}
+	return labels["traefik.enable"] == "true"
+}

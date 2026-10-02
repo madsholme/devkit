@@ -195,7 +195,7 @@ func overview() (overviewData, error) {
 			previews[name] = p
 		}
 		status := containerStatus(c.State)
-		web := labels["traefik.enable"] == "true"
+		web := isWeb(labels)
 		if s, ok := shareOf(c); ok {
 			p.Share = &shareView{s.URL, s.Host, s.Expires.Format(time.RFC3339), s.Fixed}
 		}
@@ -424,7 +424,7 @@ var previewContainer = func(name string, svc *string) (string, error) {
 	}
 	for _, c := range containers {
 		labels := c.Config.Labels
-		if (svc != nil && labels["com.docker.compose.service"] == *svc) || (svc == nil && labels["traefik.enable"] == "true") {
+		if (svc != nil && labels["com.docker.compose.service"] == *svc) || (svc == nil && isWeb(labels)) {
 			return c.ID, nil
 		}
 	}

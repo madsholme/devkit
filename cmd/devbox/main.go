@@ -18,8 +18,10 @@ commands:
   live                 start or resume a preview of working files
   review [commit]      fresh build from a committed version (default HEAD)
   publish [commit]     publish an existing reviewed image through the project publish hook
-  exec <command...>    run a command in this worktree's live web container
-  logs [-f]            show this worktree's live web log (-f, --follow to follow it)
+  exec [-s SERVICE] <command...>
+                       run a command in this worktree's live web container (or SERVICE's)
+  logs [-s SERVICE] [-f]
+                       show this worktree's live web log, or SERVICE's (-f, --follow to follow it)
   ls                   list managed previews, including stopped ones
   web [--host H] [--port P]
                        serve the web overview (default 127.0.0.1:3780)
@@ -155,21 +157,37 @@ func dispatch(args []string) (int, error) {
 		}
 		return 0, noted("publish", "", publish(ref))
 	case "exec":
+		// Only a leading -s/--service is devbox's; everything after it belongs to the command.
+		service := ""
+		if len(rest) > 0 {
+			name, value, hasValue := strings.Cut(rest[0], "=")
+			switch {
+			case (name == "-s" || name == "--service") && hasValue:
+				service, rest = value, rest[1:]
+			case rest[0] == "-s" || rest[0] == "--service":
+				if len(rest) < 2 {
+					return 2, usageError(rest[0] + " needs a value")
+				}
+				service, rest = rest[1], rest[2:]
+			}
+		}
 		if len(rest) > 0 && rest[0] == "--" {
 			rest = rest[1:]
 		}
 		if len(rest) == 0 {
-			return 1, fail("Usage: devbox exec <command> [args...]")
+			return 1, fail("Usage: devbox exec [-s service] <command> [args...]")
 		}
-		return execLive(rest)
+		return execLive(service, rest)
 	case "logs":
 		set := flags(command)
 		follow := set.Bool("follow", false, "")
 		set.BoolVar(follow, "f", false, "")
+		service := set.String("service", "", "")
+		set.StringVar(service, "s", "", "")
 		if err := parse(set, rest); err != nil {
 			return 2, err
 		}
-		return 0, logs(*follow)
+		return 0, logs(*service, *follow)
 	case "ls":
 		if err := parse(flags(command), rest); err != nil {
 			return 2, err

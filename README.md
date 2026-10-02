@@ -25,8 +25,8 @@ software, or configure credentials automatically.
 |---|---|
 | `devbox live` | Start/resume current workspace's live preview |
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
-| `devbox exec <cmd>` | Run a command in this worktree's live web container, as your user |
-| `devbox logs [-f]` | Show (or follow) this worktree's live web log |
+| `devbox exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
+| `devbox logs [-s service] [-f]` | Show (or follow) this worktree's live web log (or another service's) |
 | `devbox web` | Serve the web overview (see below); `devbox web password` enables its actions |
 | `devbox ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devbox stop [preview]` | Stop containers; retain data |
@@ -59,7 +59,9 @@ Branches are retained until you explicitly delete them.
   on every request. Python code edits need a restart; adapt the recipe to your
   real application's hot-reload server. Live services get `restart: unless-stopped`,
   so running live previews come back after a host reboot (with Traefik, which uses the
-  same policy); stopped ones stay stopped. Previews saved before this policy existed
+  same policy); stopped ones stay stopped. Creating a live preview builds its Compose images from
+  the current files; resuming one does not, so after changing a Dockerfile or dependencies,
+  destroy and recreate it. Previews saved before this policy existed
   gain it the next time `devbox live` or `devbox start` brings them up.
 - Local review: a detached checkout of an exact commit supplies build inputs.
   The web image is resolved to a Docker image ID; no review service may bind-mount
@@ -258,6 +260,31 @@ include host secrets in the Docker build context. The supplied `.dockerignore` i
 an allowlist for the sample. Rendered Compose config may contain environment secrets;
 it is stored privately at `<git-common-dir>/devbox/runs/<preview>/compose.json`.
 These are per-preview execution artifacts for restart/cleanup, not a task registry.
+
+### Routes
+
+The web service answers on the preview's host. A project with more than one public service lists
+the others under `"routes"`; each route sends part of the preview's traffic to a Compose service:
+
+```json
+"routes": [
+  {"service": "api", "port": 80, "paths": ["/api", "/admin"]},
+  {"service": "core", "port": 8002, "subdomains": true}
+]
+```
+
+- `paths`: requests to the preview's host whose path starts with one of these prefixes.
+- `subdomains`: every host one level below the preview's host, e.g. `acme.<preview>.DEV_DOMAIN`, for
+  apps that tell tenants apart by host name. The wildcard DNS record already resolves them; Traefik
+  requests a certificate for `<preview>` and `*.<preview>` from its `dns` resolver, one per preview
+  (Let's Encrypt allows 50 a week per registered domain). Combined with `paths`, both must match.
+
+`"wait_timeout"` (seconds, default 120) is how long `live`, `review` and `start` wait for every
+health check; raise it for stacks that migrate, seed or compile on start.
+
+Routed services join the proxy network like the web service. The web service stays the one that
+speaks for the preview: its health, `devbox exec`/`logs` without `-s`, and shares, which publish the
+preview's own host only.
 
 Seed data must be idempotent and wait for database readiness. A one-shot service
 (such as a separate seed job) must set `restart: "no"` in the live Compose file, or

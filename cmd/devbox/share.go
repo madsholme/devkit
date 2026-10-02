@@ -85,7 +85,7 @@ func shareTarget(preview string) (container, string, error) {
 		return container{}, "", err
 	}
 	for _, c := range containers {
-		if c.Config.Labels["traefik.enable"] != "true" {
+		if !isWeb(c.Config.Labels) {
 			continue
 		}
 		if !c.State.Running {
@@ -112,7 +112,11 @@ var setPublicURL = func(common, preview, publicURL string, apply bool) error {
 	changed := false
 	for _, s := range object(project, "services") {
 		service := asObject(s)
-		if str(object(service, "labels"), "traefik.enable") != "true" {
+		labels := map[string]string{}
+		for k, v := range object(service, "labels") {
+			labels[k], _ = v.(string)
+		}
+		if !isWeb(labels) {
 			continue
 		}
 		env := ensureObject(service, "environment")

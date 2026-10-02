@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +19,18 @@ type projectConfig struct {
 	WebPort    any               `json:"web_port"`
 	Compose    map[string]string `json:"compose"`
 	Hooks      map[string]string `json:"hooks"`
+	Routes     []route           `json:"routes"`
+	// WaitTimeout is how many seconds live, review and start wait for the preview to become healthy.
+	WaitTimeout any `json:"wait_timeout"`
+}
+
+// route sends more of the preview's traffic to a service besides the web service: requests whose path
+// starts with one of Paths, or (Subdomains) every host one level below the preview's host.
+type route struct {
+	Service    string   `json:"service"`
+	Port       any      `json:"port"`
+	Paths      []string `json:"paths"`
+	Subdomains bool     `json:"subdomains"`
 }
 
 func (c projectConfig) webService() string {
@@ -50,7 +63,39 @@ func loadConfig(root string) (projectConfig, error) {
 	if !projectSlug.MatchString(cfg.Project) {
 		return cfg, fail("devbox.json project must be a unique lowercase project slug (1–32 characters).")
 	}
+	if cfg.WaitTimeout != nil {
+		if seconds, err := strconv.Atoi(fmt.Sprint(cfg.WaitTimeout)); err != nil || seconds < 1 {
+			return cfg, fail("devbox.json wait_timeout must be a whole number of seconds.")
+		}
+	}
+	for _, r := range cfg.Routes {
+		if err := r.validate(); err != nil {
+			return cfg, err
+		}
+	}
 	return cfg, nil
+}
+
+var routePath = regexp.MustCompile(`^/[A-Za-z0-9._~/-]*$`)
+
+func (r route) port() string { return fmt.Sprint(r.Port) }
+
+func (r route) validate() error {
+	if !serviceName.MatchString(r.Service) {
+		return fail("devbox.json routes need a Compose service name.")
+	}
+	if port, err := strconv.Atoi(r.port()); err != nil || port < 1 || port > 65535 {
+		return fail("devbox.json route to %s needs a port number.", r.Service)
+	}
+	if len(r.Paths) == 0 && !r.Subdomains {
+		return fail("devbox.json route to %s needs paths, subdomains or both.", r.Service)
+	}
+	for _, p := range r.Paths {
+		if !routePath.MatchString(p) || p == "/" {
+			return fail("devbox.json route path %q must start with / and name a prefix.", p)
+		}
+	}
+	return nil
 }
 
 var domainLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
