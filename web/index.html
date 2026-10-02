@@ -409,13 +409,26 @@ const status = s => `<span class="status s-${esc(s)}"><span class="dot"></span>$
 
 const expanded = new Set();
 
+// Where Traefik sends a container's traffic: paths on the preview's own host, and "*.<preview>" for
+// routes that take every subdomain of it (shown, not linked).
+function routeLinks(c, p) {
+  if (!c.urls || !c.urls.length) return "URL";
+  const host = p.url.replace(/^https:\/\//, "");
+  return c.urls.map(u => {
+    const rest = u.replace(/^https:\/\//, "");
+    if (rest.startsWith("*.")) return `<span title="${esc(u)}">${esc(rest.replace(host, p.name))}</span>`;
+    const label = rest === host ? "/" : rest.startsWith(host + "/") ? rest.slice(host.length) : rest;
+    return `<a href="${esc(u)}" target="_blank" rel="noopener" title="Open ${esc(u)}">${esc(label)}</a>`;
+  }).join(" ");
+}
+
 function containerRows(p) {
   return `<tr class="containers"><td colspan="5"><table>
     <thead><tr><th>Container</th><th>Status</th><th>Ports</th><th class="hide-sm">Image</th><th class="hide-sm">ID</th><th class="hide-sm">Up</th><th></th></tr></thead>
     <tbody>${p.services.map(c => `<tr>
       <td class="mono">${esc(c.name)}${c.web ? ' <span class="tag">web</span>' : ""}</td>
       <td>${status(c.status)}</td>
-      <td class="mono">${c.ports.length ? c.ports.map(x => `<span${x.routed ? ' class="routed" title="Preview URL routes here through Traefik"' : ""}>${x.port}${x.protocol === "tcp" ? "" : "/" + esc(x.protocol)}${x.routed ? " ← URL" : ""}</span>`).join(", ") : '<span class="muted">—</span>'}</td>
+      <td class="mono">${c.ports.length ? c.ports.map(x => `<span${x.routed ? ' class="routed" title="Traefik routes the preview\'s traffic here"' : ""}>${x.port}${x.protocol === "tcp" ? "" : "/" + esc(x.protocol)}${x.routed ? " ← " + routeLinks(c, p) : ""}</span>`).join(", ") : '<span class="muted">—</span>'}</td>
       <td class="hide-sm mono path">${esc(c.image.startsWith("sha256:") ? c.image.slice(0, 19) : c.image)}</td>
       <td class="hide-sm mono">${esc(c.id)}</td>
       <td class="hide-sm">${ago(c.started)}</td>

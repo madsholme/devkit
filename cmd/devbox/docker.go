@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -152,4 +153,38 @@ func isWeb(labels map[string]string) bool {
 		return web == "true"
 	}
 	return labels["traefik.enable"] == "true"
+}
+
+var (
+	ruleHost      = regexp.MustCompile("Host\\(`([^`]+)`\\)")
+	ruleSubdomain = regexp.MustCompile("HostRegexp\\(`\\^\\[a-z0-9-\\]\\+\\\\\\.([^`]+)\\$`\\)")
+	rulePath      = regexp.MustCompile("PathPrefix\\(`([^`]+)`\\)")
+)
+
+// routeURLs lists where Traefik sends a container's traffic, read from its router rules: the preview's
+// host or, for a route taking every subdomain of it, "*.<host>", followed by the route's path prefixes.
+func routeURLs(labels map[string]string) []string {
+	urls := []string{}
+	for _, key := range sortedKeys(labels) {
+		if !strings.HasPrefix(key, "traefik.http.routers.") || !strings.HasSuffix(key, ".rule") {
+			continue
+		}
+		rule := labels[key]
+		host := ""
+		if m := ruleSubdomain.FindStringSubmatch(rule); m != nil {
+			host = "*." + strings.ReplaceAll(m[1], `\`, "")
+		} else if m := ruleHost.FindStringSubmatch(rule); m != nil {
+			host = m[1]
+		} else {
+			continue
+		}
+		paths := rulePath.FindAllStringSubmatch(rule, -1)
+		if len(paths) == 0 {
+			urls = append(urls, "https://"+host)
+		}
+		for _, p := range paths {
+			urls = append(urls, "https://"+host+p[1])
+		}
+	}
+	return urls
 }

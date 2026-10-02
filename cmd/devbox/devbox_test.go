@@ -867,3 +867,34 @@ func TestNewPreviewsBuildAndResumedOnesDoNot(t *testing.T) {
 		t.Errorf("resumed preview ran compose %q", got)
 	}
 }
+
+func TestRouteURLsComeFromTheRouterRules(t *testing.T) {
+	fakeImage(t, `{"services": {"web": {}, "api": {}, "core": {}, "assets": {}}}`)
+	cfg := projectConfig{Project: "demo", Routes: []route{
+		{Service: "api", Port: 80, Paths: []string{"/api", "/admin"}},
+		{Service: "core", Port: 8002, Subdomains: true},
+		{Service: "assets", Port: 3000, Paths: []string{"/_assets"}, Subdomains: true},
+	}}
+	output, err := render(filepath.Join(kit, "project-template"), cfg, "live", composeEnv(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := "demo-review-123.dev.example.com"
+	for name, want := range map[string][]string{
+		"web":    {"https://" + host},
+		"api":    {"https://" + host + "/api", "https://" + host + "/admin"},
+		"core":   {"https://*." + host},
+		"assets": {"https://*." + host + "/_assets"},
+	} {
+		labels := map[string]string{}
+		for k, v := range object(object(object(output, "services"), name), "labels") {
+			labels[k], _ = v.(string)
+		}
+		if got := routeURLs(labels); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %v, want %v", name, got, want)
+		}
+	}
+	if got := routeURLs(map[string]string{"traefik.enable": "false"}); len(got) != 0 {
+		t.Errorf("unrouted container: %v", got)
+	}
+}

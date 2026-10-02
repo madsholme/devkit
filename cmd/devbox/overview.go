@@ -98,13 +98,14 @@ func watchedRepositories() []string {
 }
 
 type service struct {
-	Name    string  `json:"name"`
-	Status  string  `json:"status"`
-	Web     bool    `json:"web"`
-	ID      string  `json:"id"`
-	Image   string  `json:"image"`
-	Ports   []port  `json:"ports"`
-	Started *string `json:"started"`
+	Name    string   `json:"name"`
+	Status  string   `json:"status"`
+	Web     bool     `json:"web"`
+	ID      string   `json:"id"`
+	Image   string   `json:"image"`
+	Ports   []port   `json:"ports"`
+	URLs    []string `json:"urls"`
+	Started *string  `json:"started"`
 }
 
 type shareView struct {
@@ -201,7 +202,8 @@ func overview() (overviewData, error) {
 		}
 		serviceLabel := orDefault(labels["com.docker.compose.service"], labels["devbox.service"])
 		p.Services = append(p.Services, service{Name: orDefault(serviceLabel, "?"), Status: status,
-			Web: web, ID: c.ID[:min(12, len(c.ID))], Image: c.Config.Image, Ports: containerPorts(c), Started: startedAt(c.State)})
+			Web: web, ID: c.ID[:min(12, len(c.ID))], Image: c.Config.Image, Ports: containerPorts(c), URLs: routeURLs(c.Config.Labels),
+			Started: startedAt(c.State)})
 		if web {
 			// The web container speaks for the preview, whichever container Docker listed first.
 			p.Status, p.Started, p.statusFromWeb = status, startedAt(c.State), true
