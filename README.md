@@ -198,7 +198,8 @@ Below it are three tabs, remembered per browser and linkable (`#worktrees`, `#hi
 
 - **Previews**: mode, health, branch/commit, uptime and URL. A live preview shows its
   worktree's current commit and uncommitted changes, a review how far its worktree has
-  moved on. Expand one for all its containers with ports, a details view (health,
+  moved on. Expand one for all its containers with ports (a routed port lists where it
+  answers: paths such as `/api` as links, subdomain routes as `*.<preview>`), a details view (health,
   networks, mounts, environment with secret-looking values masked, labels) and logs
   (recent lines, or followed live). Previews whose worktree is gone (what `devbox gc`
   would remove) are marked, with a notice above the list.
