@@ -16,7 +16,7 @@ import (
 // The history is an append-only log of what devbox changed on this host: previews started, stopped
 // and destroyed, shares created, extended, ended and expired, and commands that failed. Every devbox
 // process appends one JSON line per event; the dashboard and devbox history read it back. It is the
-// only record devbox keeps outside Docker labels, and losing it loses nothing but the past.
+// event record outside Docker labels; losing it loses nothing but the past.
 
 type event struct {
 	Time     time.Time `json:"time"`

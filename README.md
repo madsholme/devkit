@@ -251,7 +251,8 @@ in the project root. `prepare` runs before live and review, `check` and `build`
 during review, `publish` for `devbox publish`. All are optional except `build`
 (review) and `publish` (publishing). Prepare/check must not modify tracked review
 inputs. Build must produce `$DEVBOX_IMAGE`. Compose files must have health checks, isolated named volumes,
-no fixed container names and no host port publishing. Review Compose uses the built
+no fixed container names and no host port publishing in Compose. The explicit
+`media_ports` exception below lets devbox allocate Tailscale-bound media ports. Review Compose uses the built
 image and has no build entries or source mounts. `DEVBOX_URL` and `DEVBOX_COMMIT`
 are available during rendering/building for project configuration.
 
@@ -261,6 +262,59 @@ include host secrets in the Docker build context. The supplied `.dockerignore` i
 an allowlist for the sample. Rendered Compose config may contain environment secrets;
 it is stored privately at `<git-common-dir>/devbox/runs/<preview>/compose.json`.
 These are per-preview execution artifacts for restart/cleanup, not a task registry.
+
+### Media ports
+
+WebRTC and other media protocols cannot travel through an HTTP preview route.
+Opt a project into direct tailnet media by declaring named UDP/TCP listeners in
+`devbox.json`:
+
+```json
+"media_ports": [
+  {"name": "sfu_udp", "service": "web", "protocol": "udp"},
+  {"name": "ice_tcp", "service": "web", "protocol": "tcp"},
+  {"name": "turn_tls", "service": "turn", "protocol": "tcp", "target": 5349}
+]
+```
+
+Names must be unique lowercase letters, digits and underscores, starting with a
+letter (at most 32 characters). At most 16 mappings are allowed. `target` is an
+optional fixed container port; when omitted, the container listens on the same
+port devbox allocated on the host. This is useful for an SFU that advertises its
+own listener port. Each mapping gets a distinct port number in 20000–29999.
+
+During **Compose rendering**, devbox supplies `DEVBOX_MEDIA_IP` (the local
+`tailscale ip -4` address) and `DEVBOX_MEDIA_<UPPERCASE_NAME>_PORT` for each mapping:
+
+```yaml
+services:
+  web:
+    environment:
+      PLENUM_ICE_PUBLIC_IPS: ${DEVBOX_MEDIA_IP:?}
+      PLENUM_UDP_PORT: ${DEVBOX_MEDIA_SFU_UDP_PORT:?}
+      PLENUM_ICE_TCP_PORT: ${DEVBOX_MEDIA_ICE_TCP_PORT:?}
+```
+
+Do **not** put `ports` in the Compose file: devbox inserts only the mappings
+declared above, bound to its local Tailscale IPv4. Raw Compose port publishing,
+`network_mode`, and fixed container names remain rejected. HTTP/WSS still use
+the normal preview URL. Media variables are not available to prepare/check/build
+hooks; use them for runtime configuration in Compose.
+
+Allocation is serialized across CLI processes and repositories, checks listening
+host sockets and Docker bindings, and reserves stopped previews' ports. Private
+port lease files live in `~/.local/state/devbox/media-ports/` (under
+`DEVBOX_STATE_DIR` or `XDG_STATE_HOME` when configured). Saved Compose retains the
+chosen address/ports across stop/start. Destroy releases the lease; failed or
+interrupted creation without saved Compose is reclaimed on the next allocation.
+An unrelated host process can still claim a port before Docker binds it; Docker
+then fails startup rather than changing or sharing the mapping. A changed
+Tailscale address requires recreating the preview.
+
+Tailnet/firewall policy must permit the selected media ports. These are private
+tailnet listeners: a public `devbox share` only shares HTTP, and does not expose
+media. TURN-TLS services must provide their own TLS certificate/configuration;
+Traefik's HTTP routing does not terminate these raw TCP connections.
 
 ### Routes
 
@@ -340,6 +394,9 @@ the Linux host, real domain/DNS settings and a configured publishing destination
 The Docker-only check can run with `DEVBOX_RUNTIME_TEST=1 python3 tests/runtime_acceptance.py`.
 It uses temporary repositories and containers with loopback-only test HTTPS,
 does not issue certificates or alter DNS, and removes its test containers/volumes.
+The media check is `DEVBOX_RUNTIME_TEST=1 python3 tests/media_acceptance.py`; it
+requires local Tailscale, creates temporary UDP/TCP echo previews, checks distinct
+ports and restart persistence through the tailnet IP, and cleans them up.
 
 ## References
 

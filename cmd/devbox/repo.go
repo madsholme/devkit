@@ -20,6 +20,7 @@ type projectConfig struct {
 	Compose    map[string]string `json:"compose"`
 	Hooks      map[string]string `json:"hooks"`
 	Routes     []route           `json:"routes"`
+	MediaPorts []mediaPort       `json:"media_ports"`
 	// WaitTimeout is how many seconds live, review and start wait for the preview to become healthy.
 	WaitTimeout any `json:"wait_timeout"`
 }
@@ -72,6 +73,9 @@ func loadConfig(root string) (projectConfig, error) {
 		if err := r.validate(); err != nil {
 			return cfg, err
 		}
+	}
+	if err := validateMediaPorts(cfg.MediaPorts); err != nil {
+		return cfg, err
 	}
 	return cfg, nil
 }

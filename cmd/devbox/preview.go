@@ -134,6 +134,9 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 		}
 		labels["traefik.enable"] = "false"
 	}
+	if err := exposeMedia(services, cfg.MediaPorts, env); err != nil {
+		return nil, err
+	}
 	for _, v := range object(result, "volumes") {
 		volume := asObject(v)
 		if truthy(volume["external"]) || !strings.HasPrefix(str(volume, "name"), preview+"_") {
@@ -377,11 +380,8 @@ func preparePreview(mode, ref string) (err error) {
 	} else if _, err := hook(root, cfg, "prepare", env); err != nil {
 		return err
 	}
-	resolved, err := render(root, cfg, mode, env, metadata)
+	resolved, err := savePreviewCompose(root, cfg, mode, env, metadata, path)
 	if err != nil {
-		return err
-	}
-	if err := writeCompose(path, resolved); err != nil {
 		return err
 	}
 	// A new preview builds its images from the current files: a destroyed preview of the same name
@@ -409,6 +409,9 @@ var destroyPreview = func(path string) error {
 		return err
 	}
 	if err := os.Remove(path); err != nil {
+		return err
+	}
+	if err := releaseMediaPorts(path); err != nil {
 		return err
 	}
 	return os.Remove(filepath.Dir(path))

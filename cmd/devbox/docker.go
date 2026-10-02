@@ -28,6 +28,10 @@ type container struct {
 	}
 	HostConfig struct {
 		RestartPolicy struct{ Name string }
+		PortBindings  map[string][]struct {
+			HostIP   string `json:"HostIp"`
+			HostPort string
+		}
 	}
 	State           containerState
 	NetworkSettings struct {
@@ -118,7 +122,7 @@ type port struct {
 }
 
 // containerPorts lists container-internal ports, marking the one Traefik routes the preview URL to.
-// Previews never publish host ports, so these are only reachable inside Docker networks.
+// Ports are container-internal; explicit media mappings are recorded in devbox.media.* labels.
 func containerPorts(c container) []port {
 	routed := ""
 	for _, key := range sortedKeys(c.Config.Labels) {

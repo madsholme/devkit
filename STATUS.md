@@ -12,6 +12,9 @@ Installed and HTTPS commissioned on 2026-09-14.
   (built from cmd/devbox since 2026-09-29; previously a Python script)
 - Demo repository: /home/rene/work/devbox-demo
 - No pre-existing Docker workloads were altered.
+- 2026-10-02: installed opt-in `media_ports` support for per-preview TCP/UDP
+  listeners bound only to the local Tailscale IPv4. HTTP-only projects retain
+  the no-published-ports default. Allocations persist across stop/start.
 
 ## HTTPS and T3
 
@@ -45,6 +48,12 @@ Installed and HTTPS commissioned on 2026-09-14.
 - Production wildcard certificate verification.
 - Final T3 and review URLs returned HTTP 200 with TLS verification 0 from the Mac.
 - Both demo containers healthy on the server.
+- Media-port checks (2026-10-02): Go race tests and vet; two concurrent temporary
+  previews with four distinct TCP/UDP ports; echo traffic through the Tailscale
+  address; stopped-preview reservation, separate review allocation and restart
+  persistence. Temporary previews and leases were removed. Existing Docker
+  runtime acceptance also passed. External-browser WebRTC remains a consuming
+  project's acceptance test.
 
 ## Remaining work
 
