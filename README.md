@@ -199,6 +199,7 @@ coworker or to test SSO, through a Cloudflare Tunnel: no open ports, and nothing
 reaches the harness or the dashboard. Shares live on their own domain on Cloudflare, not on
 the preview domain. Cloudflare's free certificate only covers one level below a domain, and a
 separate domain keeps test apps away from your main domain's cookies.
+A self-hosted alternative to Cloudflare is planned, not built: see [docs/edge.md](docs/edge.md).
 
 Configure the host once in `~/.config/devbox/config.json`:
 
