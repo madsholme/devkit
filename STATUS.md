@@ -8,8 +8,14 @@ Installed and HTTPS commissioned on 2026-09-14.
 - Ubuntu 26.04.1; Docker Engine 29.8.0; Compose 5.5.1
 - Tailscale IPv4: 100.69.127.125
 - Kit: /home/rene/devbox-kit
-- CLI wrapper: /home/rene/.local/bin/devbox, running the Go binary /home/rene/devbox-kit/bin/devbox
+- CLI: /home/rene/.local/bin/devbox is a symlink to /home/rene/devbox-kit/bin/devbox
   (built from cmd/devbox since 2026-09-29; previously a Python script)
+- Host config: /home/rene/.config/devbox/config.json (domain, harness T3, edge, web, share);
+  the DNS token is in /home/rene/.config/devbox/dns-token.
+- 2026-10-03: moved to devbox setup. Traefik now runs from the generated
+  ~/.config/devbox/edge (same image digest and certificate volume); devbox-web.service
+  is the unit setup writes, without DEV_DOMAIN. box/traefik and its private .env and
+  dns-provider.env were removed. devbox doctor passes all checks.
 - Demo repository: /home/rene/work/devbox-demo
 - No pre-existing Docker workloads were altered.
 - 2026-10-02: installed opt-in `media_ports` support for per-preview TCP/UDP
