@@ -9,7 +9,6 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -274,17 +273,7 @@ func setWebPassword() error {
 		return err
 	}
 	ensureObject(cfg, "web")["password_hash"] = hash
-	if err := os.MkdirAll(configDir(), 0o700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(configPath(), append(data, '\n'), 0o600); err != nil {
-		return err
-	}
-	if err := os.Chmod(configPath(), 0o600); err != nil {
+	if err := writeConfigFile(cfg); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "Dashboard password set. Browsers signed in before are signed out.")

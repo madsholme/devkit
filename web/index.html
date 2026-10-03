@@ -721,7 +721,7 @@ function renderRepos(repos, previews) {
       ${worktreeActions(w, byName)}
       <div class="services">${w.previews.length ? "preview: " + w.previews.map(n => previewLink(byName[n]) || esc(n)).join(", ") : "no preview"}</div>
     </li>`).join("")}</ul>
-  </div>`).join("") || `<div class="panel empty">No repositories yet. They appear once they have a preview or a T3 worktree.</div>`;
+  </div>`).join("") || `<div class="panel empty">No repositories yet. They appear once they have a preview or a harness worktree.</div>`;
 }
 
 // Previews whose worktree is gone show as a notice above the preview list; usually there are none.
@@ -747,7 +747,7 @@ function certFact(h) {
 function renderHost(h) {
   $("facts").innerHTML = `
     ${h.services.map(s => `<span class="status s-${s.status === "up" ? "healthy" : "dead"}" title="${esc(s.name)}: ${esc(s.status)} (${esc(s.detail)})"><span class="dot"></span>${
-      s.name === "T3" ? `<a href="${esc(h.t3)}" target="_blank" rel="noopener">T3 Code</a>` : esc(s.name)}</span>`).join("")}
+      s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}</span>`).join("")}
     <span>${esc(h.domain)}</span>
     ${certFact(h)}
     <span><b>${h.running_containers}</b> containers running</span>`;

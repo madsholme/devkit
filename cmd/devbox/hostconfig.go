@@ -3,28 +3,48 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
 
-// shareConfig is the "share" section of the host config: where public shares live and how to reach Cloudflare.
-type shareConfig struct {
-	Domain       string   `json:"domain"`        // share domain on Cloudflare, e.g. "example-share.com"
-	AccountID    string   `json:"account_id"`    // Cloudflare account ID
-	ZoneID       string   `json:"zone_id"`       // optional; looked up from the domain when empty
-	TokenFile    string   `json:"token_file"`    // API token (Tunnel Write + DNS Write); must not be readable by others
-	Prefix       *string  `json:"prefix"`        // put before the preview ID in its share name; default "preview-"
-	Hosts        []string `json:"hosts"`         // fixed names under the domain, assignable with --host
-	Image        string   `json:"image"`         // cloudflared image
-	DefaultHours int      `json:"default_hours"` // share lifetime when --hours is not given
-	MaxHours     int      `json:"max_hours"`     // longest lifetime --hours may ask for
-	token        string
+// hostConfig is ~/.config/devbox/config.json: what devbox knows about this host. devbox setup
+// writes it; devbox web password adds the dashboard password.
+type hostConfig struct {
+	Domain      string         `json:"domain"`       // preview domain, e.g. "dev.example.com"; DEV_DOMAIN overrides it
+	TailscaleIP string         `json:"tailscale_ip"` // optional; read from tailscale ip -4 when empty
+	Harness     *harnessConfig `json:"harness"`      // the agent tool on this host, if any
+	Edge        *edgeConfig    `json:"edge"`         // the Traefik proxy started by devbox edge up
+	Web         struct {
+		Port int `json:"port"`
+	} `json:"web"`
 }
 
-const defaultCloudflared = "cloudflare/cloudflared:2026.9.3"
+// harnessConfig describes the agent tool (T3 Code, Orca, ...) the dashboard reports on and Traefik routes to.
+type harnessConfig struct {
+	Name      string `json:"name"`      // shown on the dashboard, e.g. "T3 Code"
+	Host      string `json:"host"`      // routed at <host>.<domain>; "" for no route
+	URL       string `json:"url"`       // where it answers on this host, e.g. "http://127.0.0.1:3773"
+	Worktrees string `json:"worktrees"` // glob of its worktrees, e.g. "~/.t3/worktrees/*/*"
+}
+
+// edgeConfig is how Traefik gets the wildcard certificate.
+type edgeConfig struct {
+	Email       string                  `json:"email"`           // Let's Encrypt account
+	DNSProvider string                  `json:"dns_provider"`    // lego DNS provider, e.g. "cloudflare"
+	DNSEnv      map[string]secretSource `json:"dns_env"`         // the provider's API credentials, e.g. CF_DNS_API_TOKEN
+	Staging     bool                    `json:"staging"`         // use Let's Encrypt's staging CA (untrusted certificates)
+	Image       string                  `json:"image,omitempty"` // Traefik image; default defaultTraefik
+}
+
+const (
+	defaultTraefik = "traefik:v3.7.13"
+	defaultWebPort = 3780
+)
 
 func configDir() string {
 	if dir := os.Getenv("DEVBOX_CONFIG_DIR"); dir != "" {
@@ -42,14 +62,170 @@ func expandHome(path string) string {
 	return path
 }
 
+// loadHostConfig reads the host config; a missing file is an empty config.
+func loadHostConfig() (hostConfig, error) {
+	var cfg hostConfig
+	data, err := os.ReadFile(configPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return cfg, nil
+	}
+	if err != nil {
+		return cfg, err
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return cfg, fail("%s: %v", configPath(), err)
+	}
+	cfg.Domain = strings.TrimRight(strings.ToLower(cfg.Domain), ".")
+	if cfg.Web.Port == 0 {
+		cfg.Web.Port = defaultWebPort
+	}
+	return cfg, nil
+}
+
+// validDomain checks a domain name label by label, so it cannot inject into Traefik rules.
+func validDomain(value string, maxLength int) bool {
+	parts := strings.Split(value, ".")
+	valid := len(parts) >= 2 && len(value) <= maxLength
+	for _, part := range parts {
+		valid = valid && domainLabel.MatchString(part)
+	}
+	return valid
+}
+
+// tailscaleIP is this host's Tailscale IPv4: the configured one, or what tailscale ip -4 reports.
+var tailscaleIP = func() (string, error) {
+	cfg, err := loadHostConfig()
+	if err != nil {
+		return "", err
+	}
+	value := cfg.TailscaleIP
+	if value == "" {
+		out, err := capture("tailscale", "ip", "-4")
+		if err != nil {
+			return "", fail("Tailscale is not running here: %v", err)
+		}
+		value, _, _ = strings.Cut(strings.TrimSpace(out), "\n")
+	}
+	ip, err := netip.ParseAddr(value)
+	if err != nil || !tailscaleRange.Contains(ip) {
+		return "", fail("%q is not a Tailscale IPv4 address.", value)
+	}
+	return ip.String(), nil
+}
+
+// secretSource says where a secret comes from: a private file, an environment variable or a
+// command such as "op read op://dev/cloudflare/token". Exactly one is set.
+type secretSource struct {
+	File    string `json:"file,omitempty"`
+	Env     string `json:"env,omitempty"`
+	Command string `json:"command,omitempty"`
+}
+
+func (s secretSource) String() string {
+	switch {
+	case s.File != "":
+		return "file " + expandHome(s.File)
+	case s.Env != "":
+		return "environment variable " + s.Env
+	}
+	return "command " + s.Command
+}
+
+func (s secretSource) read() (string, error) {
+	set := 0
+	for _, v := range []string{s.File, s.Env, s.Command} {
+		if v != "" {
+			set++
+		}
+	}
+	if set != 1 {
+		return "", fail("A secret needs exactly one of file, env or command.")
+	}
+	var value string
+	switch {
+	case s.File != "":
+		path := expandHome(s.File)
+		info, err := os.Stat(path)
+		if err != nil {
+			return "", fail("Secret file %s is missing.", path)
+		}
+		if info.Mode().Perm()&0o077 != 0 {
+			return "", fail("Secret file %s must not be readable by others (chmod 600).", path)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		value = string(data)
+	case s.Env != "":
+		value = os.Getenv(s.Env)
+	default:
+		out, err := runCommand([]string{"sh", "-c", s.Command}, runOpts{capture: true})
+		if err != nil {
+			return "", fail("Secret command %q failed: %v", s.Command, err)
+		}
+		value = out
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fail("Secret from %s is empty.", s)
+	}
+	return value, nil
+}
+
+// writeSecretFile stores a secret typed during setup, readable only by this user.
+func writeSecretFile(path, value string) error {
+	path = expandHome(path)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, []byte(value+"\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
+}
+
+// writeConfigFile saves the generic host config privately.
+func writeConfigFile(cfg map[string]any) error {
+	if err := os.MkdirAll(configDir(), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(configPath(), append(data, '\n'), 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(configPath(), 0o600)
+}
+
+// shareConfig is the "share" section of the host config: where public shares live and how to reach Cloudflare.
+type shareConfig struct {
+	Domain       string        `json:"domain"`        // share domain on Cloudflare, e.g. "example-share.com"
+	AccountID    string        `json:"account_id"`    // Cloudflare account ID
+	ZoneID       string        `json:"zone_id"`       // optional; looked up from the domain when empty
+	Token        *secretSource `json:"token"`         // API token (Tunnel Write + DNS Write); default the file below
+	TokenFile    string        `json:"token_file"`    // older form of token.file
+	Prefix       *string       `json:"prefix"`        // put before the preview ID in its share name; default "preview-"
+	Hosts        []string      `json:"hosts"`         // fixed names under the domain, assignable with --host
+	Image        string        `json:"image"`         // cloudflared image
+	DefaultHours int           `json:"default_hours"` // share lifetime when --hours is not given
+	MaxHours     int           `json:"max_hours"`     // longest lifetime --hours may ask for
+	token        string
+}
+
+const defaultCloudflared = "cloudflare/cloudflared:2026.9.3"
+
 const shareConfigHelp = `Public shares need the "share" section in %s, e.g.
   {"share": {"domain": "example-share.com", "account_id": "<Cloudflare account ID>",
              "hosts": ["sso-1", "sso-2"], "default_hours": 8, "max_hours": 72}}
-and an API token with Tunnel Write and DNS Write in %s (chmod 600).`
+and an API token with Tunnel Write and DNS Write in %s (chmod 600),
+or "token": {"env": "..."} or {"command": "..."} to read it from elsewhere.`
 
 // loadShareConfig reads the share settings and the Cloudflare token; ok is false when sharing is not configured.
 func loadShareConfig() (cfg shareConfig, ok bool, err error) {
-	path := filepath.Join(configDir(), "config.json")
+	path := configPath()
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return cfg, false, nil
@@ -68,10 +244,13 @@ func loadShareConfig() (cfg shareConfig, ok bool, err error) {
 	}
 	cfg = *file.Share
 	cfg.Domain = strings.TrimRight(strings.ToLower(cfg.Domain), ".")
-	if cfg.TokenFile == "" {
-		cfg.TokenFile = filepath.Join(configDir(), "cloudflare-token")
+	if cfg.Token == nil {
+		file := cfg.TokenFile
+		if file == "" {
+			file = filepath.Join(configDir(), "cloudflare-token")
+		}
+		cfg.Token = &secretSource{File: file}
 	}
-	cfg.TokenFile = expandHome(cfg.TokenFile)
 	if cfg.Prefix == nil {
 		prefix := "preview-"
 		cfg.Prefix = &prefix
@@ -88,12 +267,7 @@ func loadShareConfig() (cfg shareConfig, ok bool, err error) {
 	if cfg.MaxHours <= 0 {
 		cfg.MaxHours = 72
 	}
-	parts := strings.Split(cfg.Domain, ".")
-	valid := len(parts) >= 2
-	for _, part := range parts {
-		valid = valid && domainLabel.MatchString(part)
-	}
-	if !valid || cfg.AccountID == "" {
+	if !validDomain(cfg.Domain, 253) || cfg.AccountID == "" {
 		return cfg, false, fail("%s: share needs a domain and an account_id.", path)
 	}
 	for _, host := range cfg.Hosts {
@@ -101,20 +275,8 @@ func loadShareConfig() (cfg shareConfig, ok bool, err error) {
 			return cfg, false, fail("%s: share host %q must be a single DNS label.", path, host)
 		}
 	}
-	info, err := os.Stat(cfg.TokenFile)
-	if err != nil {
-		return cfg, false, fail("Cloudflare token file %s is missing.", cfg.TokenFile)
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return cfg, false, fail("Cloudflare token file %s must not be readable by others (chmod 600).", cfg.TokenFile)
-	}
-	token, err := os.ReadFile(cfg.TokenFile)
-	if err != nil {
-		return cfg, false, err
-	}
-	cfg.token = strings.TrimSpace(string(token))
-	if cfg.token == "" {
-		return cfg, false, fail("Cloudflare token file %s is empty.", cfg.TokenFile)
+	if cfg.token, err = cfg.Token.read(); err != nil {
+		return cfg, false, fmt.Errorf("Cloudflare token: %w", err)
 	}
 	return cfg, true, nil
 }
@@ -123,7 +285,7 @@ func loadShareConfig() (cfg shareConfig, ok bool, err error) {
 func requireShareConfig() (shareConfig, error) {
 	cfg, ok, err := loadShareConfig()
 	if err == nil && !ok {
-		err = fail(shareConfigHelp, filepath.Join(configDir(), "config.json"), filepath.Join(configDir(), "cloudflare-token"))
+		err = fail(shareConfigHelp, configPath(), filepath.Join(configDir(), "cloudflare-token"))
 	}
 	return cfg, err
 }

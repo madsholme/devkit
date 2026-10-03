@@ -58,14 +58,11 @@ func (p mediaPort) envKey() string { return "DEVBOX_MEDIA_" + strings.ToUpper(p.
 
 // mediaHostIP only accepts the local Tailscale IPv4, never a public/wildcard bind.
 var mediaHostIP = func() (string, error) {
-	out, err := capture("tailscale", "ip", "-4")
+	value, err := tailscaleIP()
 	if err != nil {
 		return "", fail("media_ports requires a running local Tailscale connection: %v", err)
 	}
-	ip, err := netip.ParseAddr(strings.TrimSpace(out))
-	if err != nil || !tailscaleRange.Contains(ip) {
-		return "", fail("tailscale ip -4 did not return a Tailscale IPv4 address.")
-	}
+	ip := netip.MustParseAddr(value)
 	addresses, err := net.InterfaceAddrs()
 	if err != nil {
 		return "", err

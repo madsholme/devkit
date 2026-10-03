@@ -18,11 +18,14 @@ Start a live preview whenever you want a longer back-and-forth session.
 devbox does not create or delete worktrees. Your tools (T3 Code, Orca, or plain
 `git worktree add`) own them; devbox only manages the environment (containers,
 volumes, preview URL) of whichever worktree it runs in. Creating a worktree does
-not start services. The kit does not commit, push Git, merge, install system
-software, or configure credentials automatically.
+not start services. The kit does not commit, push Git, merge or install system
+software; `devbox setup` configures the rest of the host from your answers.
 
 | Command | Behavior |
 |---|---|
+| `devbox setup` | Configure this host step by step; safe to run again (see [Host setup](#host-setup)) |
+| `devbox doctor` | Check the host and say how to fix what is missing |
+| `devbox edge up` | Write Traefik's configuration from the host config and start or update it |
 | `devbox live` | Start/resume current workspace's live preview |
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devbox exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
@@ -74,82 +77,127 @@ Commit the project recipe before using `review`; it reads configuration from the
 selected commit. Generated inputs should be deterministic and dependencies locked.
 This v1 sample does not initialize submodules or Git LFS automatically.
 
-## Host prerequisites
+## Host setup
 
-Linux, Git, Docker Engine with Compose v2, Tailscale, and the agent runtime of
-your choice. Building devbox needs Go (the version is pinned in `mise.toml`).
-Python 3 is only used by the Docker acceptance check. Install these using their official instructions after
-checking the target host. Do not pipe installers into a shell without inspecting
-the host and choosing versions. The installation is intentionally separate.
+Linux, Git, Docker Engine with Compose v2 (usable without sudo), Tailscale and a
+systemd user session; the agent tool is your choice. Install these with their official
+instructions; devbox checks for them but installs no system software. Building devbox
+needs Go (the version is pinned in `mise.toml`). Python 3 is only used by the Docker
+acceptance checks. You need a domain whose DNS provider Traefik supports (Cloudflare gets
+the guided path) for the wildcard certificate.
 
-devbox is a single Go binary with the web page built in. Build and install it on
-the Linux host when ready:
+devbox is a single Go binary with the dashboard and the Traefik configuration built in.
+Build it, put it on PATH and run setup:
 
 ```sh
 go build -o bin/devbox ./cmd/devbox
-install -d "$HOME/.local/bin"
-printf '#!/bin/sh\nexport DEV_DOMAIN="${DEV_DOMAIN:-dev.your-real-domain.com}"\nexec %s/bin/devbox "$@"\n' "$PWD" \
-  > "$HOME/.local/bin/devbox" && chmod 0755 "$HOME/.local/bin/devbox"
-export PATH="$HOME/.local/bin:$PATH"
+install -d "$HOME/.local/bin" && ln -sf "$PWD/bin/devbox" "$HOME/.local/bin/devbox"
+devbox setup
 ```
 
-Rebuild after pulling changes; replacing the binary is safe while `devbox web` runs,
-which then needs a restart. Persist PATH/DEV_DOMAIN in the environment used by your agent service as well as
-interactive shells. A shell profile alone does not configure a systemd service.
+`devbox setup` asks for each setting, offering the current one as default, and can be run
+again at any time to change something or repair the host. It:
 
-## Private routing
+1. Checks Docker, Compose, Tailscale and systemd, and notes if lingering is off (`sudo loginctl
+   enable-linger $USER` keeps user services running after you log out).
+2. Asks for the preview domain (`dev.example.com`), the agent harness (`t3`, `none` or
+   `custom`), the email for the Let's Encrypt account and the DNS provider.
+3. Asks where each DNS credential comes from (see [Secrets](#secrets)) and checks it; a
+   Cloudflare token needs Zone / DNS / Edit and Zone / Zone / Read for the domain's zone.
+4. Checks that `*.<domain>` resolves to the Tailscale IP. On Cloudflare it offers to create the
+   DNS-only record `*.<domain> A <tailscale ip>`; elsewhere create it yourself.
+5. Starts Traefik (`devbox edge up`). Without a trusted certificate yet, it first gets one from
+   Let's Encrypt's staging service, whose rate limits forgive mistakes, then switches to production.
+6. Installs and starts the dashboard as the user service `devbox-web`, running this binary.
+7. Runs `devbox doctor`.
 
-Create one DNS-only public A record:
+`devbox setup --yes` takes every default without asking (`--domain`, `--email`, `--harness`
+set them) and fails where there is none, e.g. a credential that is not configured yet.
+`devbox doctor` checks the same things at any time: config, Docker, Tailscale, DNS, the proxy
+network, Traefik, the certificate (trusted, days left), the dashboard service, lingering, the
+harness and the Cloudflare tokens. Each line ends with how to fix it; it exits non-zero when a
+check fails.
 
-```dns
-*.dev.your-real-domain.com. A <Linux-host-Tailscale-IPv4>
+Rebuild after pulling changes; replacing the binary is safe while `devbox web` runs, which
+then needs `systemctl --user restart devbox-web`. If you move the binary, run setup again so
+the service follows it.
+
+### Host config
+
+Everything lives in `~/.config/devbox/config.json` (`DEVBOX_CONFIG_DIR` moves the directory),
+which setup writes and which you may edit:
+
+```json
+{
+  "domain": "dev.example.com",
+  "harness": {"name": "T3 Code", "host": "t3", "url": "http://127.0.0.1:3773",
+              "worktrees": "~/.t3/worktrees/*/*"},
+  "edge": {"email": "you@example.com", "dns_provider": "cloudflare",
+           "dns_env": {"CF_DNS_API_TOKEN": {"file": "~/.config/devbox/dns-token"}}},
+  "web": {"port": 3780},
+  "share": {"…": "see Public shares"}
+}
 ```
 
-The LAN address `192.168.1.21` is not the Tailscale IP. Get the latter with
-`tailscale ip -4`. Names are flat and readable: a live preview is
-`<project>-<branch>` (e.g. `demo-fix-login.dev.example.com`), a review
-`<project>-<branch>-<sha7>` (e.g. `demo-fix-login-3052f1e`), with the full branch
-name kept (`t3code/x` becomes `t3code-x`). If a name is already taken, e.g. by
-branches `try/a` and `try-a`, the newer preview gets a 4-character suffix. Previews
-created before readable names keep their hashed IDs until destroyed.
+- `domain`: previews are `<name>.<domain>`, the dashboard `devbox.<domain>`. `DEV_DOMAIN`
+  overrides it, e.g. for tests.
+- `tailscale_ip`: optional; read from `tailscale ip -4` when empty.
+- `harness`: the agent tool. `name` is shown on the dashboard with whether `url` answers,
+  Traefik routes `<host>.<domain>` to `url`, and repositories with worktrees matching the
+  `worktrees` glob appear on the dashboard. `null` for none.
+- `edge`: `dns_provider` is a [lego provider](https://go-acme.github.io/lego/dns/) and `dns_env`
+  its credentials by variable name. Optional: `image` (a pinned Traefik), `staging`.
+- `web.port`: where `devbox web` listens on localhost.
 
-In `box/traefik`:
+After editing `domain`, `harness`, `edge` or `web.port`, run `devbox edge up`; doctor says
+when Traefik is out of date.
 
-1. Copy `.env.example` to `.env` and enter the real settings.
-2. Copy `dns-provider.env.example` to `dns-provider.env`; add the selected provider's
-   API environment variables. Keep this file private (`chmod 600`).
-3. Create the Docker network once: `docker network create devbox-proxy`.
-4. Run `docker compose config --quiet`, then `docker compose up -d`.
-5. Start a sample preview and inspect issuance logs.
-6. The template defaults to Let's Encrypt staging. After successful validation,
-   change ACME_CA_SERVER to production and ACME_STORAGE to `/certs/acme.json`,
-   then recreate Traefik for trusted HTTPS. Separate storage keeps staging
-   certificates out of the production certificate store.
+### Secrets
 
-On Linux, Traefik uses host networking and binds HTTPS specifically to the
-Tailscale IP. This also lets it reach the T3 backend on localhost:3773. Its
-file-provider configuration requests one wildcard certificate via the default TLS
-store and routes t3.DEV_DOMAIN to T3; application routes come from Docker labels.
-No public inbound challenge port is required. The wildcard certificate covers no
-base URL, as agreed. Browser DNS
-must resolve the public record; rebinding filters may require a domain exception
-or split DNS. The shared proxy network is not a security boundary between apps.
-The Docker socket gives Traefik powerful Docker access even when mounted `:ro`.
-This v1 assumes your trusted development host, not hostile tenants.
+Every credential setting (`edge.dns_env.*`, `share.token`) takes exactly one source:
 
-Only expose the application frontend to `devbox-proxy`; keep databases on their
-Compose-scoped networks. Do not publish database ports. Host firewall/Tailscale
-policy should grant the intended users access to TCP 443 and SSH.
+- `{"file": "~/.config/devbox/dns-token"}`: a file only you can read (`chmod 600`). This is
+  what setup writes when you type a secret.
+- `{"env": "CF_DNS_API_TOKEN"}`: an environment variable, so a secret manager can inject it:
+  `op run --env-file=devbox.env -- devbox edge up` (1Password), `bws run`, `doppler run`, ...
+- `{"command": "op read op://dev/cloudflare/token"}`: a command that prints it, run each time
+  it is needed (`sh -c`), so nothing is written to disk.
 
-The Traefik `v3` and Python image tags are bootstrap defaults. Pin tested versions
-or digests when commissioning the host. Do not run automatic image updates.
+Traefik needs the DNS credentials for as long as it renews certificates, so `devbox edge up`
+hands them to its container through the environment of `docker compose`. They are not written
+to the edge directory, but Docker keeps them in the container's configuration.
+
+### Private routing
+
+Traefik (`devbox edge up`, Compose project `devbox-edge`) runs with host networking and binds
+HTTPS only to the Tailscale IP. Its files are generated into `~/.config/devbox/edge/`; edit the
+host config rather than these. It requests one wildcard certificate for `*.<domain>` by DNS-01,
+so no public inbound port is needed, routes `devbox.<domain>` to the dashboard and the harness
+host to the harness, and takes preview routes from Docker labels on the `devbox-proxy` network.
+The wildcard certificate does not cover the bare domain.
+
+The wildcard DNS record must point at the Tailscale IP (`tailscale ip -4`), not the LAN
+address. Browser DNS must resolve the public record; rebinding filters may need a domain
+exception or split DNS. Names are flat and readable: a live preview is `<project>-<branch>`
+(e.g. `demo-fix-login.dev.example.com`), a review `<project>-<branch>-<sha7>` (e.g.
+`demo-fix-login-3052f1e`), with the full branch name kept (`t3code/x` becomes `t3code-x`). If a
+name is already taken, e.g. by branches `try/a` and `try-a`, the newer preview gets a
+4-character suffix. Previews created before readable names keep their hashed IDs until destroyed.
+
+The shared proxy network is not a security boundary between apps. The Docker socket gives
+Traefik powerful Docker access even when mounted `:ro`. This v1 assumes your trusted
+development host, not hostile tenants. Only expose the application frontend to `devbox-proxy`;
+keep databases on their Compose-scoped networks. Do not publish database ports. Host
+firewall/Tailscale policy should grant the intended users access to TCP 443 and SSH.
+
+Traefik's image is pinned (`edge.image` overrides it). Do not run automatic image updates.
 
 ## Public shares
 
 Previews are tailnet-only. `devbox share` makes one public for a while, e.g. for a
 coworker or to test SSO, through a Cloudflare Tunnel: no open ports, and nothing
-reaches T3 or the dashboard. Shares live on their own domain on Cloudflare, not on
-DEV_DOMAIN. Cloudflare's free certificate only covers one level below a domain, and a
+reaches the harness or the dashboard. Shares live on their own domain on Cloudflare, not on
+the preview domain. Cloudflare's free certificate only covers one level below a domain, and a
 separate domain keeps test apps away from your main domain's cookies.
 
 Configure the host once in `~/.config/devbox/config.json`:
@@ -160,8 +208,9 @@ Configure the host once in `~/.config/devbox/config.json`:
 ```
 
 and put an API token with **Tunnel Write** and **DNS Write** for that domain in
-`~/.config/devbox/cloudflare-token` (`chmod 600`). Optional keys: `zone_id` (looked up
-from the domain otherwise), `token_file`, `prefix`, and `image` (the pinned `cloudflared`).
+`~/.config/devbox/cloudflare-token` (`chmod 600`), or name another [source](#secrets) with
+`"token"`. Optional keys: `zone_id` (looked up from the domain otherwise), `prefix`, and
+`image` (the pinned `cloudflared`).
 
 `devbox share` publishes the current worktree's preview (or the one named) at
 `preview-<preview>.<domain>`, or at a fixed name from `hosts` with `--host sso-1`. Change
@@ -188,7 +237,7 @@ Prefer review previews; a live preview may run with debug pages on.
 
 ## Web overview
 
-https://devbox.DEV_DOMAIN shows whether T3 and Traefik are up and days until the
+https://devbox.<domain> shows whether the harness (e.g. T3) and Traefik are up and days until the
 certificate expires, then a CPU/memory/disk summary bar (it also mentions reclaimable
 Docker data from 5 GB up) that opens a system monitor: 10-minute history, swap,
 per-container usage, top host processes and Docker disk use. Containers and processes
@@ -224,8 +273,8 @@ minutes. `exec` stays in the CLI.
 
 ### History
 
-Every command that changes something records an event: live and review (created or
-resumed), start, stop, destroy (including `gc`), publish, share, extend, unshare,
+Every command that changes something records an event: setup, edge up, a DNS record
+setup created, live and review (created or resumed), start, stop, destroy (including `gc`), publish, share, extend, unshare,
 shares that expired and leftover tunnels or DNS records removed. A failed command is
 recorded too, with its error. Each event says who caused it: `cli` (also T3 actions),
 `dashboard`, or `auto` for what the web service does by itself, such as expiring shares.
@@ -234,10 +283,9 @@ The log is one JSON line per event in `~/.local/state/devbox/history.jsonl`
 older one, so about the last two megabytes are kept. Read it with `devbox history`
 or on the dashboard; deleting it loses nothing but the past.
 
-`devbox web` binds to 127.0.0.1:3780. Install `box/systemd/devbox-web.service` as a
-user service (instructions in the file); the `devbox` router in
-`box/traefik/dynamic.yaml` publishes it on the tailnet. Repositories appear once
-they have at least one preview or a T3 worktree (under `~/.t3/worktrees`).
+`devbox web` binds to 127.0.0.1 and `web.port` (3780). `devbox setup` installs it as the user
+service `devbox-web`, and Traefik publishes it at `devbox.<domain>` on the tailnet. Repositories
+appear once they have at least one preview or a worktree matching the harness's `worktrees` glob.
 
 ## Project recipe
 
@@ -329,7 +377,7 @@ the others under `"routes"`; each route sends part of the preview's traffic to a
 ```
 
 - `paths`: requests to the preview's host whose path starts with one of these prefixes.
-- `subdomains`: every host one level below the preview's host, e.g. `acme.<preview>.DEV_DOMAIN`, for
+- `subdomains`: every host one level below the preview's host, e.g. `acme.<preview>.<domain>`, for
   apps that tell tenants apart by host name. The wildcard DNS record already resolves them; Traefik
   requests a certificate for `<preview>` and `*.<preview>` from its `dns` resolver, one per preview
   (Let's Encrypt allows 50 a week per registered domain). Combined with `paths`, both must match.

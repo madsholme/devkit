@@ -81,10 +81,14 @@ func commitsBetween(root, base, head string) *int {
 	return &count
 }
 
-// watchedRepositories finds the Git common dirs of harness worktrees (T3 keeps them under ~/.t3/worktrees/<repo>/<id>).
+// watchedRepositories finds the Git common dirs of the harness's worktrees (its "worktrees" glob,
+// e.g. ~/.t3/worktrees/*/* for T3).
 func watchedRepositories() []string {
-	home, _ := os.UserHomeDir()
-	trees, _ := filepath.Glob(filepath.Join(home, ".t3", "worktrees", "*", "*"))
+	cfg, err := loadHostConfig()
+	if err != nil || cfg.Harness == nil || cfg.Harness.Worktrees == "" {
+		return nil
+	}
+	trees, _ := filepath.Glob(expandHome(cfg.Harness.Worktrees))
 	sort.Strings(trees)
 	var found []string
 	for _, tree := range trees {
@@ -338,17 +342,23 @@ type serviceStatus struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
 	Detail string `json:"detail"`
+	URL    string `json:"url,omitempty"` // where the browser reaches it
 }
 
-// t3Status reports whether T3 answers on localhost:3773; any HTTP response counts as up.
-func t3Status() serviceStatus {
+// harnessStatus reports whether the harness answers at its local URL; any HTTP response counts as up.
+func harnessStatus(h harnessConfig, dom string) serviceStatus {
+	status := serviceStatus{Name: h.Name, Status: "up", Detail: h.URL}
+	if h.Host != "" {
+		status.URL = "https://" + h.Host + "." + dom
+	}
 	client := http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:3773/")
+	resp, err := client.Get(h.URL)
 	if err != nil {
-		return serviceStatus{"T3", "down", errorKind(err)}
+		status.Status, status.Detail = "down", errorKind(err)
+		return status
 	}
 	resp.Body.Close()
-	return serviceStatus{"T3", "up", "localhost:3773"}
+	return status
 }
 
 // edgeStatus reports the Traefik container of the devbox-edge Compose project.
@@ -356,22 +366,21 @@ func edgeStatus() serviceStatus {
 	ids, err := capture("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=devbox-edge")
 	fields := strings.Fields(ids)
 	if err != nil || len(fields) == 0 {
-		return serviceStatus{"Traefik", "down", "no devbox-edge container"}
+		return serviceStatus{Name: "Traefik", Status: "down", Detail: "no devbox-edge container"}
 	}
 	containers, err := inspect(fields[0])
 	if err != nil || len(containers) == 0 {
-		return serviceStatus{"Traefik", "down", "not inspectable"}
+		return serviceStatus{Name: "Traefik", Status: "down", Detail: "not inspectable"}
 	}
 	status := containerStatus(containers[0].State)
 	if status == "running" || status == "healthy" {
-		return serviceStatus{"Traefik", "up", status}
+		return serviceStatus{Name: "Traefik", Status: "up", Detail: status}
 	}
-	return serviceStatus{"Traefik", "down", status}
+	return serviceStatus{Name: "Traefik", Status: "down", Detail: status}
 }
 
 type hostInfo struct {
 	Domain             string          `json:"domain"`
-	T3                 string          `json:"t3"`
 	CertificateExpires string          `json:"certificate_expires"`
 	CertificateDays    *int            `json:"certificate_days"`
 	Services           []serviceStatus `json:"services"`
@@ -405,9 +414,18 @@ var hostFactsFn = func() (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	expires, days := certExpiry("t3." + dom)
-	return hostInfo{Domain: dom, T3: "https://t3." + dom, CertificateExpires: expires, CertificateDays: days,
-		Services: []serviceStatus{t3Status(), edgeStatus()}, RunningContainers: len(strings.Fields(running)), Disk: disk}, nil
+	cfg, err := loadHostConfig()
+	if err != nil {
+		return nil, err
+	}
+	services := []serviceStatus{}
+	if cfg.Harness != nil && cfg.Harness.URL != "" {
+		services = append(services, harnessStatus(*cfg.Harness, dom))
+	}
+	services = append(services, edgeStatus())
+	expires, days := certExpiry("devbox." + dom)
+	return hostInfo{Domain: dom, CertificateExpires: expires, CertificateDays: days,
+		Services: services, RunningContainers: len(strings.Fields(running)), Disk: disk}, nil
 }
 
 var serviceName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)

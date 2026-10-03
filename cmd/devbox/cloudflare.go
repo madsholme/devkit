@@ -24,9 +24,10 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
+func cloudflareClient() *http.Client { return &http.Client{Timeout: 30 * time.Second} }
+
 func newCloudflare(cfg shareConfig) *cloudflare {
-	return &cloudflare{token: cfg.token, account: cfg.AccountID, zone: cfg.ZoneID,
-		client: &http.Client{Timeout: 30 * time.Second}}
+	return &cloudflare{token: cfg.token, account: cfg.AccountID, zone: cfg.ZoneID, client: cloudflareClient()}
 }
 
 // call sends one API request and decodes its result into result (if not nil).

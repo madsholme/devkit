@@ -15,6 +15,10 @@ const usage = `usage: devbox <command> [arguments]
 Small, single-host preview runner for Git worktrees.
 
 commands:
+  setup [--yes] [--domain D] [--email E] [--harness t3|none|custom]
+                       configure this host: settings, credentials, DNS, Traefik and the dashboard
+  doctor               check this host and say how to fix what is missing
+  edge up              write Traefik's configuration from the host config and start or update it
   live                 start or resume a preview of working files
   review [commit]      fresh build from a committed version (default HEAD)
   publish [commit]     publish an existing reviewed image through the project publish hook
@@ -24,7 +28,7 @@ commands:
                        show this worktree's live web log, or SERVICE's (-f, --follow to follow it)
   ls                   list managed previews, including stopped ones
   web [--host H] [--port P]
-                       serve the web overview (default 127.0.0.1:3780)
+                       serve the web overview (default 127.0.0.1 and the configured port, 3780)
   web password         set the password that lets the web overview run actions
   gc [--yes]           destroy previews whose worktree no longer exists (dry run by default)
   share [preview] [--host NAME] [--hours N]
@@ -136,6 +140,30 @@ func dispatch(args []string) (int, error) {
 	switch command {
 	case "-h", "--help", "help":
 		return 0, helpRequested{}
+	case "setup":
+		set := flags(command)
+		var opts setupOptions
+		set.BoolVar(&opts.yes, "yes", false, "")
+		set.StringVar(&opts.domain, "domain", "", "")
+		set.StringVar(&opts.email, "email", "", "")
+		set.StringVar(&opts.harness, "harness", "", "")
+		if err := parse(set, rest); err != nil {
+			return 2, err
+		}
+		return 0, noted("setup", "", setup(opts))
+	case "doctor":
+		if err := parse(flags(command), rest); err != nil {
+			return 2, err
+		}
+		return doctor()
+	case "edge":
+		if len(rest) != 1 || rest[0] != "up" {
+			if len(rest) == 1 && (rest[0] == "-h" || rest[0] == "--help") {
+				return 0, helpRequested{}
+			}
+			return 2, usageError("usage: devbox edge up")
+		}
+		return 0, noted("edge up", "", edgeUp())
 	case "live":
 		if len(rest) > 0 {
 			if _, err := optionalArg(command, rest); err != nil {
@@ -200,9 +228,13 @@ func dispatch(args []string) (int, error) {
 			}
 			return 0, setWebPassword()
 		}
+		cfg, err := loadHostConfig()
+		if err != nil {
+			return 1, err
+		}
 		set := flags(command)
 		host := set.String("host", "127.0.0.1", "")
-		port := set.Int("port", 3780, "")
+		port := set.Int("port", cfg.Web.Port, "")
 		if err := parse(set, rest); err != nil {
 			return 2, err
 		}

@@ -1,0 +1,288 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+)
+
+// hostWith writes a host config into a fresh config directory.
+func hostWith(t *testing.T, config string) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("DEVBOX_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestDomainComesFromTheConfigUnlessDevDomainIsSet(t *testing.T) {
+	hostWith(t, `{"domain": "Dev.Example.com."}`)
+	t.Setenv("DEV_DOMAIN", "")
+	if got, err := domain(); err != nil || got != "dev.example.com" {
+		t.Errorf("domain() = %q, %v", got, err)
+	}
+	t.Setenv("DEV_DOMAIN", "other.example.org")
+	if got, _ := domain(); got != "other.example.org" {
+		t.Errorf("DEV_DOMAIN should win, got %q", got)
+	}
+	hostWith(t, `{"domain": "dev.example.com`+"`"+`)"}`)
+	t.Setenv("DEV_DOMAIN", "")
+	if _, err := domain(); err == nil {
+		t.Error("injected domain accepted")
+	}
+}
+
+func TestSecretSources(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "token")
+	os.WriteFile(path, []byte(" from-file \n"), 0o600)
+	if got, err := (secretSource{File: path}).read(); err != nil || got != "from-file" {
+		t.Errorf("file: %q, %v", got, err)
+	}
+	os.Chmod(path, 0o640)
+	if _, err := (secretSource{File: path}).read(); err == nil || !strings.Contains(err.Error(), "chmod 600") {
+		t.Errorf("group-readable file accepted: %v", err)
+	}
+	t.Setenv("DEVBOX_TEST_TOKEN", "from-env")
+	if got, err := (secretSource{Env: "DEVBOX_TEST_TOKEN"}).read(); err != nil || got != "from-env" {
+		t.Errorf("env: %q, %v", got, err)
+	}
+	if _, err := (secretSource{Env: "DEVBOX_TEST_UNSET"}).read(); err == nil {
+		t.Error("unset variable accepted")
+	}
+	var ran []string
+	swap(t, &runCommand, func(args []string, o runOpts) (string, error) {
+		ran = args
+		return "from-command", nil
+	})
+	if got, err := (secretSource{Command: "op read op://dev/cf/token"}).read(); err != nil || got != "from-command" {
+		t.Errorf("command: %q, %v", got, err)
+	}
+	if !slices.Equal(ran, []string{"sh", "-c", "op read op://dev/cf/token"}) {
+		t.Errorf("ran %q", ran)
+	}
+	for _, s := range []secretSource{{}, {File: path, Env: "X"}} {
+		if _, err := s.read(); err == nil {
+			t.Errorf("%+v accepted", s)
+		}
+	}
+}
+
+func TestShareTokenCanComeFromTheEnvironment(t *testing.T) {
+	hostWith(t, `{"share": {"domain": "share.test", "account_id": "acct", "token": {"env": "DEVBOX_TEST_CF"}}}`)
+	t.Setenv("DEVBOX_TEST_CF", "env-token")
+	cfg, ok, err := loadShareConfig()
+	if err != nil || !ok || cfg.token != "env-token" {
+		t.Errorf("token %q ok=%v err=%v", cfg.token, ok, err)
+	}
+	// The older token_file key still works.
+	hostWith(t, `{"share": {"domain": "share.test", "account_id": "acct", "token_file": "/nonexistent/token"}}`)
+	if _, _, err := loadShareConfig(); err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Errorf("token_file ignored: %v", err)
+	}
+}
+
+func edgeHost() hostConfig {
+	cfg := hostConfig{Domain: "dev.example.com",
+		Harness: &harnessConfig{Name: "T3 Code", Host: "t3", URL: "http://127.0.0.1:3773"},
+		Edge: &edgeConfig{Email: "me@example.com", DNSProvider: "cloudflare",
+			DNSEnv: map[string]secretSource{"CF_DNS_API_TOKEN": {Env: "X"}}}}
+	cfg.Web.Port = 3780
+	return cfg
+}
+
+func TestEdgeFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T) {
+	cfg := edgeHost()
+	compose, dynamic := edgeFiles(cfg, "dev.example.com", "100.64.0.9")
+	traefik := object(object(compose, "services"), "traefik")
+	command := traefik["command"].([]string)
+	for _, want := range []string{"--entrypoints.websecure.address=100.64.0.9:443",
+		"--certificatesresolvers.dns.acme.storage=/certs/acme.json",
+		"--certificatesresolvers.dns.acme.caserver=" + productionCA,
+		"--certificatesresolvers.dns.acme.dnschallenge.provider=cloudflare"} {
+		if !slices.Contains(command, want) {
+			t.Errorf("missing %s in %q", want, command)
+		}
+	}
+	if traefik["image"] != defaultTraefik || compose["name"] != edgeProject {
+		t.Errorf("image %v, name %v", traefik["image"], compose["name"])
+	}
+	if env := object(traefik, "environment"); !strings.HasPrefix(env["CF_DNS_API_TOKEN"].(string), "${CF_DNS_API_TOKEN:?") {
+		t.Errorf("the token must be interpolated, not written: %v", env)
+	}
+	routers := object(object(dynamic, "http"), "routers")
+	if object(routers, "devbox")["rule"] != "Host(`devbox.dev.example.com`)" || object(routers, "harness")["rule"] != "Host(`t3.dev.example.com`)" {
+		t.Errorf("routers %v", routers)
+	}
+
+	cfg.Edge.Staging, cfg.Harness = true, nil
+	compose, dynamic = edgeFiles(cfg, "dev.example.com", "100.64.0.9")
+	command = object(object(compose, "services"), "traefik")["command"].([]string)
+	if !slices.Contains(command, "--certificatesresolvers.dns.acme.storage=/certs/acme-staging.json") ||
+		!slices.Contains(command, "--certificatesresolvers.dns.acme.caserver="+stagingCA) {
+		t.Errorf("staging not used: %q", command)
+	}
+	if _, has := object(object(dynamic, "http"), "routers")["harness"]; has {
+		t.Error("harness routed without a harness")
+	}
+}
+
+func TestEdgeConfigRejectsInjection(t *testing.T) {
+	for _, change := range []func(*edgeConfig){
+		func(e *edgeConfig) { e.Email = "me@example.com --api.insecure" },
+		func(e *edgeConfig) { e.Email = "${HOME}@example.com" },
+		func(e *edgeConfig) { e.DNSProvider = "cloudflare --x" },
+		func(e *edgeConfig) { e.DNSEnv = map[string]secretSource{"bad key": {Env: "X"}} },
+		func(e *edgeConfig) { e.DNSEnv = nil },
+	} {
+		e := *edgeHost().Edge
+		change(&e)
+		if err := checkEdge(&e); err == nil {
+			t.Errorf("accepted %+v", e)
+		}
+	}
+	if err := checkEdge(edgeHost().Edge); err != nil {
+		t.Error(err)
+	}
+	for _, h := range []harnessConfig{{Host: "t3.evil"}, {URL: "http://x`)"}, {URL: "file:///etc"}} {
+		if err := checkHarness(&h); err == nil {
+			t.Errorf("accepted %+v", h)
+		}
+	}
+}
+
+func TestEdgeUpPassesSecretsOnlyThroughTheEnvironment(t *testing.T) {
+	cfg := edgeHost()
+	data, _ := json.Marshal(cfg)
+	dir := hostWith(t, string(data))
+	t.Setenv("X", "cf-secret")
+	t.Setenv("DEV_DOMAIN", "")
+	swap(t, &tailscaleIP, func() (string, error) { return "100.64.0.9", nil })
+	swap[io.Writer](t, &stdout, &bytes.Buffer{})
+	var up runOpts
+	var calls [][]string
+	swap(t, &runCommand, func(args []string, o runOpts) (string, error) {
+		calls = append(calls, args)
+		if slices.Contains(args, "up") {
+			up = o
+		}
+		return "", nil
+	})
+	if err := edgeUp(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(up.env, "CF_DNS_API_TOKEN=cf-secret") {
+		t.Error("compose did not get the token")
+	}
+	for _, name := range []string{"compose.yaml", "dynamic.yaml"} {
+		data, err := os.ReadFile(filepath.Join(dir, "edge", name))
+		if err != nil || strings.Contains(string(data), "cf-secret") {
+			t.Errorf("%s: %v, or it holds the secret", name, err)
+		}
+	}
+	if !edgeCurrent(cfg, "dev.example.com", "100.64.0.9") {
+		t.Error("files on disk do not match the config")
+	}
+	cfg.Web.Port = 9999
+	if edgeCurrent(cfg, "dev.example.com", "100.64.0.9") {
+		t.Error("a changed config should make the files stale")
+	}
+	if !slices.ContainsFunc(calls, func(c []string) bool {
+		return slices.Equal(c, []string{"docker", "network", "inspect", "--format", "{{.Name}}", proxyNetwork})
+	}) {
+		t.Errorf("network not checked: %q", calls)
+	}
+}
+
+func TestHarnessWorktreesAreWatchedOnlyWhenConfigured(t *testing.T) {
+	hostWith(t, `{"domain": "dev.example.com"}`)
+	if got := watchedRepositories(); got != nil {
+		t.Errorf("watched %q without a harness", got)
+	}
+}
+
+func TestWebUnitRunsThisBinaryWithoutEnvironment(t *testing.T) {
+	unit := webUnit("/opt/dev box/devbox")
+	if !strings.Contains(unit, `ExecStart="/opt/dev box/devbox" web`) || strings.Contains(unit, "DEV_DOMAIN") {
+		t.Error(unit)
+	}
+}
+
+func TestSetupTriesStagingBeforeProduction(t *testing.T) {
+	hostWith(t, `{}`)
+	swap[io.Writer](t, &stdout, &bytes.Buffer{})
+	swap(t, &certificatePoll, time.Millisecond)
+	stage := "none" // what Traefik serves: none, staging, production
+	var ups []bool
+	edge := edgeHost().Edge
+	swap(t, &setupEdge, func() error {
+		ups = append(ups, edge.Staging)
+		if edge.Staging {
+			stage = "staging"
+		} else {
+			stage = "production"
+		}
+		return nil
+	})
+	swap(t, &servedCertificate, func(ip, host string) (*x509.Certificate, error, error) {
+		switch stage {
+		case "staging":
+			return &x509.Certificate{Issuer: pkix.Name{CommonName: "(STAGING) Counterfeit Cashew R10"}}, errors.New("untrusted"), nil
+		case "production":
+			return &x509.Certificate{Issuer: pkix.Name{CommonName: "R10"}}, nil, nil
+		}
+		return &x509.Certificate{Issuer: pkix.Name{CommonName: "TRAEFIK DEFAULT CERT"}}, errors.New("untrusted"), nil
+	})
+	raw := map[string]any{}
+	if err := startEdgeWithCertificate(raw, edge, "dev.example.com", "100.64.0.9"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(ups, []bool{true, false}) {
+		t.Errorf("edge started with staging=%v", ups)
+	}
+	if cfg, _ := loadHostConfig(); cfg.Edge == nil || cfg.Edge.Staging {
+		t.Errorf("config left on staging: %+v", cfg.Edge)
+	}
+
+	// With a trusted certificate already served, setup goes straight to production.
+	ups = nil
+	if err := startEdgeWithCertificate(raw, edge, "dev.example.com", "100.64.0.9"); err != nil || !slices.Equal(ups, []bool{false}) {
+		t.Errorf("ups %v, %v", ups, err)
+	}
+
+	// A certificate that never comes fails with a pointer to the logs.
+	swap(t, &certificateTimeout, 5*time.Millisecond)
+	stage = "stuck"
+	swap(t, &setupEdge, func() error { return nil })
+	if err := startEdgeWithCertificate(raw, edge, "dev.example.com", "100.64.0.9"); err == nil || !strings.Contains(err.Error(), "docker logs") {
+		t.Errorf("timeout: %v", err)
+	}
+}
+
+func TestPrompterTakesDefaultsAndRepeatsInvalidChoices(t *testing.T) {
+	p := &prompter{in: bufioReader("\nmaybe\nnone\n")}
+	if got, _ := p.ask("Domain", "dev.example.com"); got != "dev.example.com" {
+		t.Errorf("ask = %q", got)
+	}
+	if got, _ := p.choose("Harness", []string{"t3", "none"}, "t3"); got != "none" {
+		t.Errorf("choose = %q", got)
+	}
+	yes := &prompter{yes: true}
+	if _, err := yes.ask("Email", ""); err == nil {
+		t.Error("--yes without a default should fail")
+	}
+}
+
+func bufioReader(s string) *bufio.Reader { return bufio.NewReader(strings.NewReader(s)) }

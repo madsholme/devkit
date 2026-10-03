@@ -104,15 +104,19 @@ func (r route) validate() error {
 
 var domainLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
+// domain is the preview domain: DEV_DOMAIN if set, the host config's otherwise.
 func domain() (string, error) {
-	value := strings.TrimRight(strings.ToLower(os.Getenv("DEV_DOMAIN")), ".")
-	parts := strings.Split(value, ".")
-	valid := len(parts) >= 2 && len(value) <= 180
-	for _, part := range parts {
-		valid = valid && domainLabel.MatchString(part)
+	value := os.Getenv("DEV_DOMAIN")
+	if value == "" {
+		cfg, err := loadHostConfig()
+		if err != nil {
+			return "", err
+		}
+		value = cfg.Domain
 	}
-	if !valid {
-		return "", fail("Set DEV_DOMAIN to your real preview domain, without a wildcard prefix.")
+	value = strings.TrimRight(strings.ToLower(value), ".")
+	if !validDomain(value, 180) {
+		return "", fail("Set the preview domain with devbox setup (or DEV_DOMAIN), without a wildcard prefix.")
 	}
 	return value, nil
 }

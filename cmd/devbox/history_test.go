@@ -17,6 +17,8 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("DEVBOX_STATE_DIR", dir)
+	// Nor read the real host config.
+	os.Setenv("DEVBOX_CONFIG_DIR", filepath.Join(dir, "config"))
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

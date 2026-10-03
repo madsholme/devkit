@@ -12,3 +12,4 @@ work/
 
 # Built by: go build -o bin/devbox ./cmd/devbox
 /bin/
+/cmd/devbox/devbox
