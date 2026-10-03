@@ -9,14 +9,14 @@ import (
 	"strings"
 )
 
-// devbox edge up writes the Traefik proxy (Compose project devbox-edge) from the host config into
-// ~/.config/devbox/edge and starts it. Traefik listens only on the Tailscale IP, gets one wildcard
+// devbox proxy up writes the Traefik proxy (Compose project devbox-proxy) from the host config into
+// ~/.config/devbox/proxy and starts it. Traefik listens only on the Tailscale IP, gets one wildcard
 // certificate for the domain by DNS-01, routes the dashboard and the harness from its file provider
 // and previews from Docker labels. The DNS credentials reach the container through the environment
-// of docker compose, so they are not written to the edge directory.
+// of docker compose, so they are not written to the proxy directory.
 
 const (
-	edgeProject  = "devbox-edge"
+	proxyProject = "devbox-proxy"
 	proxyNetwork = "devbox-proxy"
 	stagingCA    = "https://acme-staging-v02.api.letsencrypt.org/directory"
 	productionCA = "https://acme-v02.api.letsencrypt.org/directory"
@@ -28,36 +28,36 @@ var (
 	emailAddress = regexp.MustCompile(`^[^\s@$"'\x60\\{}]+@[a-z0-9.-]+\.[a-z]+$`)
 )
 
-func edgeDir() string { return filepath.Join(configDir(), "edge") }
+func proxyDir() string { return filepath.Join(configDir(), "proxy") }
 
-// checkEdge validates the edge section before any of it reaches Traefik's command line or rules.
-func checkEdge(e *edgeConfig) error {
+// checkProxy validates the proxy section before any of it reaches Traefik's command line or rules.
+func checkProxy(e *proxyConfig) error {
 	if e == nil {
 		return fail("Traefik is not configured; run devbox setup.")
 	}
 	if !emailAddress.MatchString(e.Email) {
-		return fail("edge.email %q is not a usable email address.", e.Email)
+		return fail("proxy.email %q is not a usable email address.", e.Email)
 	}
 	if !providerName.MatchString(e.DNSProvider) {
-		return fail("edge.dns_provider %q is not a lego DNS provider name (see https://go-acme.github.io/lego/dns/).", e.DNSProvider)
+		return fail("proxy.dns_provider %q is not a lego DNS provider name (see https://go-acme.github.io/lego/dns/).", e.DNSProvider)
 	}
 	if len(e.DNSEnv) == 0 {
-		return fail("edge.dns_env names no credentials for the %s DNS provider.", e.DNSProvider)
+		return fail("proxy.dns_env names no credentials for the %s DNS provider.", e.DNSProvider)
 	}
 	for key := range e.DNSEnv {
 		if !envName.MatchString(key) {
-			return fail("edge.dns_env: %q is not an environment variable name.", key)
+			return fail("proxy.dns_env: %q is not an environment variable name.", key)
 		}
 	}
 	if strings.ContainsAny(e.Image, " $\"'") {
-		return fail("edge.image %q is not an image reference.", e.Image)
+		return fail("proxy.image %q is not an image reference.", e.Image)
 	}
 	return nil
 }
 
-// edgeFiles renders Traefik's Compose project and file-provider configuration.
-func edgeFiles(cfg hostConfig, dom, ip string) (compose, dynamic map[string]any) {
-	e := cfg.Edge
+// proxyFiles renders Traefik's Compose project and file-provider configuration.
+func proxyFiles(cfg hostConfig, dom, ip string) (compose, dynamic map[string]any) {
+	e := cfg.Proxy
 	ca, storage := productionCA, "/certs/acme.json"
 	if e.Staging {
 		// Separate storage keeps staging certificates out of the production store.
@@ -69,10 +69,10 @@ func edgeFiles(cfg hostConfig, dom, ip string) (compose, dynamic map[string]any)
 	}
 	environment := map[string]any{}
 	for _, key := range sortedKeys(e.DNSEnv) {
-		environment[key] = "${" + key + ":?Start Traefik with devbox edge up}"
+		environment[key] = "${" + key + ":?Start Traefik with devbox proxy up}"
 	}
 	compose = map[string]any{
-		"name": edgeProject,
+		"name": proxyProject,
 		"services": map[string]any{"traefik": map[string]any{
 			"image":        image,
 			"restart":      "unless-stopped",
@@ -132,11 +132,11 @@ func checkHarness(h *harnessConfig) error {
 	return nil
 }
 
-// writeEdgeFiles writes the project files; JSON is valid YAML for both Compose and Traefik.
+// writeProxyFiles writes the project files; JSON is valid YAML for both Compose and Traefik.
 // The files are rewritten in place: Traefik watches dynamic.yaml through a bind mount of the file,
 // which a rename would detach.
-func writeEdgeFiles(compose, dynamic map[string]any) error {
-	if err := os.MkdirAll(edgeDir(), 0o700); err != nil {
+func writeProxyFiles(compose, dynamic map[string]any) error {
+	if err := os.MkdirAll(proxyDir(), 0o700); err != nil {
 		return err
 	}
 	for name, value := range map[string]map[string]any{"compose.yaml": compose, "dynamic.yaml": dynamic} {
@@ -144,7 +144,7 @@ func writeEdgeFiles(compose, dynamic map[string]any) error {
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(edgeDir(), name), append(data, '\n'), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(proxyDir(), name), append(data, '\n'), 0o600); err != nil {
 			return err
 		}
 	}
@@ -160,13 +160,13 @@ func ensureProxyNetwork() error {
 	return err
 }
 
-// edgeUp is devbox edge up: (re)write Traefik's files and start or update it.
-func edgeUp() error {
+// proxyUp is devbox proxy up: (re)write Traefik's files and start or update it.
+func proxyUp() error {
 	cfg, err := loadHostConfig()
 	if err != nil {
 		return err
 	}
-	if err := checkEdge(cfg.Edge); err != nil {
+	if err := checkProxy(cfg.Proxy); err != nil {
 		return err
 	}
 	if err := checkHarness(cfg.Harness); err != nil {
@@ -181,28 +181,28 @@ func edgeUp() error {
 		return err
 	}
 	secrets := map[string]string{}
-	for _, key := range sortedKeys(cfg.Edge.DNSEnv) {
-		if secrets[key], err = cfg.Edge.DNSEnv[key].read(); err != nil {
+	for _, key := range sortedKeys(cfg.Proxy.DNSEnv) {
+		if secrets[key], err = cfg.Proxy.DNSEnv[key].read(); err != nil {
 			return fmt.Errorf("%s: %w", key, err)
 		}
 	}
 	if err := ensureProxyNetwork(); err != nil {
 		return err
 	}
-	compose, dynamic := edgeFiles(cfg, dom, ip)
-	if err := writeEdgeFiles(compose, dynamic); err != nil {
+	compose, dynamic := proxyFiles(cfg, dom, ip)
+	if err := writeProxyFiles(compose, dynamic); err != nil {
 		return err
 	}
-	args := []string{"docker", "compose", "--project-directory", edgeDir(), "-f", filepath.Join(edgeDir(), "compose.yaml"),
+	args := []string{"docker", "compose", "--project-directory", proxyDir(), "-f", filepath.Join(proxyDir(), "compose.yaml"),
 		"up", "-d", "--remove-orphans"}
 	if _, err := runCommand(args, runOpts{env: withEnv(os.Environ(), secrets)}); err != nil {
 		return err
 	}
 	ca := "production"
-	if cfg.Edge.Staging {
+	if cfg.Proxy.Staging {
 		ca = "staging"
 	}
 	fmt.Fprintf(stdout, "Traefik is up on %s:443 for *.%s (Let's Encrypt %s).\n", ip, dom, ca)
-	happened("edge up", "", fmt.Sprintf("*.%s on %s, %s certificates", dom, ip, ca))
+	happened("proxy up", "", fmt.Sprintf("*.%s on %s, %s certificates", dom, ip, ca))
 	return nil
 }

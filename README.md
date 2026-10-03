@@ -25,7 +25,7 @@ software; `devbox setup` configures the rest of the host from your answers.
 |---|---|
 | `devbox setup` | Configure this host step by step; safe to run again (see [Host setup](#host-setup)) |
 | `devbox doctor` | Check the host and say how to fix what is missing |
-| `devbox edge up` | Write Traefik's configuration from the host config and start or update it |
+| `devbox proxy up` | Write Traefik's configuration from the host config and start or update it |
 | `devbox live` | Start/resume current workspace's live preview |
 | `devbox review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devbox exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
@@ -106,7 +106,7 @@ again at any time to change something or repair the host. It:
    Cloudflare token needs Zone / DNS / Edit and Zone / Zone / Read for the domain's zone.
 4. Checks that `*.<domain>` resolves to the Tailscale IP. On Cloudflare it offers to create the
    DNS-only record `*.<domain> A <tailscale ip>`; elsewhere create it yourself.
-5. Starts Traefik (`devbox edge up`). Without a trusted certificate yet, it first gets one from
+5. Starts Traefik (`devbox proxy up`). Without a trusted certificate yet, it first gets one from
    Let's Encrypt's staging service, whose rate limits forgive mistakes, then switches to production.
 6. Installs and starts the dashboard as the user service `devbox-web`, running this binary.
 7. Runs `devbox doctor`.
@@ -132,8 +132,8 @@ which setup writes and which you may edit:
   "domain": "dev.example.com",
   "harness": {"name": "T3 Code", "host": "t3", "url": "http://127.0.0.1:3773",
               "worktrees": "~/.t3/worktrees/*/*"},
-  "edge": {"email": "you@example.com", "dns_provider": "cloudflare",
-           "dns_env": {"CF_DNS_API_TOKEN": {"file": "~/.config/devbox/dns-token"}}},
+  "proxy": {"email": "you@example.com", "dns_provider": "cloudflare",
+            "dns_env": {"CF_DNS_API_TOKEN": {"file": "~/.config/devbox/dns-token"}}},
   "web": {"port": 3780},
   "share": {"…": "see Public shares"}
 }
@@ -145,32 +145,32 @@ which setup writes and which you may edit:
 - `harness`: the agent tool. `name` is shown on the dashboard with whether `url` answers,
   Traefik routes `<host>.<domain>` to `url`, and repositories with worktrees matching the
   `worktrees` glob appear on the dashboard. `null` for none.
-- `edge`: `dns_provider` is a [lego provider](https://go-acme.github.io/lego/dns/) and `dns_env`
+- `proxy`: `dns_provider` is a [lego provider](https://go-acme.github.io/lego/dns/) and `dns_env`
   its credentials by variable name. Optional: `image` (a pinned Traefik), `staging`.
 - `web.port`: where `devbox web` listens on localhost.
 
-After editing `domain`, `harness`, `edge` or `web.port`, run `devbox edge up`; doctor says
+After editing `domain`, `harness`, `proxy` or `web.port`, run `devbox proxy up`; doctor says
 when Traefik is out of date.
 
 ### Secrets
 
-Every credential setting (`edge.dns_env.*`, `share.token`) takes exactly one source:
+Every credential setting (`proxy.dns_env.*`, `share.token`) takes exactly one source:
 
 - `{"file": "~/.config/devbox/dns-token"}`: a file only you can read (`chmod 600`). This is
   what setup writes when you type a secret.
 - `{"env": "CF_DNS_API_TOKEN"}`: an environment variable, so a secret manager can inject it:
-  `op run --env-file=devbox.env -- devbox edge up` (1Password), `bws run`, `doppler run`, ...
+  `op run --env-file=devbox.env -- devbox proxy up` (1Password), `bws run`, `doppler run`, ...
 - `{"command": "op read op://dev/cloudflare/token"}`: a command that prints it, run each time
   it is needed (`sh -c`), so nothing is written to disk.
 
-Traefik needs the DNS credentials for as long as it renews certificates, so `devbox edge up`
+Traefik needs the DNS credentials for as long as it renews certificates, so `devbox proxy up`
 hands them to its container through the environment of `docker compose`. They are not written
-to the edge directory, but Docker keeps them in the container's configuration.
+to the proxy directory, but Docker keeps them in the container's configuration.
 
 ### Private routing
 
-Traefik (`devbox edge up`, Compose project `devbox-edge`) runs with host networking and binds
-HTTPS only to the Tailscale IP. Its files are generated into `~/.config/devbox/edge/`; edit the
+Traefik (`devbox proxy up`, Compose project `devbox-proxy`) runs with host networking and binds
+HTTPS only to the Tailscale IP. Its files are generated into `~/.config/devbox/proxy/`; edit the
 host config rather than these. It requests one wildcard certificate for `*.<domain>` by DNS-01,
 so no public inbound port is needed, routes `devbox.<domain>` to the dashboard and the harness
 host to the harness, and takes preview routes from Docker labels on the `devbox-proxy` network.
@@ -190,7 +190,7 @@ development host, not hostile tenants. Only expose the application frontend to `
 keep databases on their Compose-scoped networks. Do not publish database ports. Host
 firewall/Tailscale policy should grant the intended users access to TCP 443 and SSH.
 
-Traefik's image is pinned (`edge.image` overrides it). Do not run automatic image updates.
+Traefik's image is pinned (`proxy.image` overrides it). Do not run automatic image updates.
 
 ## Public shares
 
@@ -273,7 +273,7 @@ minutes. `exec` stays in the CLI.
 
 ### History
 
-Every command that changes something records an event: setup, edge up, a DNS record
+Every command that changes something records an event: setup, proxy up, a DNS record
 setup created, live and review (created or resumed), start, stop, destroy (including `gc`), publish, share, extend, unshare,
 shares that expired and leftover tunnels or DNS records removed. A failed command is
 recorded too, with its error. Each event says who caused it: `cli` (also T3 actions),

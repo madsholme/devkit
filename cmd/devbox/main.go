@@ -18,7 +18,7 @@ commands:
   setup [--yes] [--domain D] [--email E] [--harness t3|none|custom]
                        configure this host: settings, credentials, DNS, Traefik and the dashboard
   doctor               check this host and say how to fix what is missing
-  edge up              write Traefik's configuration from the host config and start or update it
+  proxy up             write Traefik's configuration from the host config and start or update it
   live                 start or resume a preview of working files
   review [commit]      fresh build from a committed version (default HEAD)
   publish [commit]     publish an existing reviewed image through the project publish hook
@@ -156,14 +156,14 @@ func dispatch(args []string) (int, error) {
 			return 2, err
 		}
 		return doctor()
-	case "edge":
+	case "proxy":
 		if len(rest) != 1 || rest[0] != "up" {
 			if len(rest) == 1 && (rest[0] == "-h" || rest[0] == "--help") {
 				return 0, helpRequested{}
 			}
-			return 2, usageError("usage: devbox edge up")
+			return 2, usageError("usage: devbox proxy up")
 		}
-		return 0, noted("edge up", "", edgeUp())
+		return 0, noted("proxy up", "", proxyUp())
 	case "live":
 		if len(rest) > 0 {
 			if _, err := optionalArg(command, rest); err != nil {

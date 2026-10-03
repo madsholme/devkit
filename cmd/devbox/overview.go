@@ -361,12 +361,12 @@ func harnessStatus(h harnessConfig, dom string) serviceStatus {
 	return status
 }
 
-// edgeStatus reports the Traefik container of the devbox-edge Compose project.
-func edgeStatus() serviceStatus {
-	ids, err := capture("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=devbox-edge")
+// proxyStatus reports the Traefik container of the devbox-proxy Compose project.
+func proxyStatus() serviceStatus {
+	ids, err := capture("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project="+proxyProject)
 	fields := strings.Fields(ids)
 	if err != nil || len(fields) == 0 {
-		return serviceStatus{Name: "Traefik", Status: "down", Detail: "no devbox-edge container"}
+		return serviceStatus{Name: "Traefik", Status: "down", Detail: "no " + proxyProject + " container"}
 	}
 	containers, err := inspect(fields[0])
 	if err != nil || len(containers) == 0 {
@@ -422,7 +422,7 @@ var hostFactsFn = func() (any, error) {
 	if cfg.Harness != nil && cfg.Harness.URL != "" {
 		services = append(services, harnessStatus(*cfg.Harness, dom))
 	}
-	services = append(services, edgeStatus())
+	services = append(services, proxyStatus())
 	expires, days := certExpiry("devbox." + dom)
 	return hostInfo{Domain: dom, CertificateExpires: expires, CertificateDays: days,
 		Services: services, RunningContainers: len(strings.Fields(running)), Disk: disk}, nil

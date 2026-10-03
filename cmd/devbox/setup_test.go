@@ -94,18 +94,18 @@ func TestShareTokenCanComeFromTheEnvironment(t *testing.T) {
 	}
 }
 
-func edgeHost() hostConfig {
+func proxyHost() hostConfig {
 	cfg := hostConfig{Domain: "dev.example.com",
 		Harness: &harnessConfig{Name: "T3 Code", Host: "t3", URL: "http://127.0.0.1:3773"},
-		Edge: &edgeConfig{Email: "me@example.com", DNSProvider: "cloudflare",
+		Proxy: &proxyConfig{Email: "me@example.com", DNSProvider: "cloudflare",
 			DNSEnv: map[string]secretSource{"CF_DNS_API_TOKEN": {Env: "X"}}}}
 	cfg.Web.Port = 3780
 	return cfg
 }
 
-func TestEdgeFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T) {
-	cfg := edgeHost()
-	compose, dynamic := edgeFiles(cfg, "dev.example.com", "100.64.0.9")
+func TestProxyFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T) {
+	cfg := proxyHost()
+	compose, dynamic := proxyFiles(cfg, "dev.example.com", "100.64.0.9")
 	traefik := object(object(compose, "services"), "traefik")
 	command := traefik["command"].([]string)
 	for _, want := range []string{"--entrypoints.websecure.address=100.64.0.9:443",
@@ -116,7 +116,7 @@ func TestEdgeFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T)
 			t.Errorf("missing %s in %q", want, command)
 		}
 	}
-	if traefik["image"] != defaultTraefik || compose["name"] != edgeProject {
+	if traefik["image"] != defaultTraefik || compose["name"] != proxyProject {
 		t.Errorf("image %v, name %v", traefik["image"], compose["name"])
 	}
 	if env := object(traefik, "environment"); !strings.HasPrefix(env["CF_DNS_API_TOKEN"].(string), "${CF_DNS_API_TOKEN:?") {
@@ -127,8 +127,8 @@ func TestEdgeFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T)
 		t.Errorf("routers %v", routers)
 	}
 
-	cfg.Edge.Staging, cfg.Harness = true, nil
-	compose, dynamic = edgeFiles(cfg, "dev.example.com", "100.64.0.9")
+	cfg.Proxy.Staging, cfg.Harness = true, nil
+	compose, dynamic = proxyFiles(cfg, "dev.example.com", "100.64.0.9")
 	command = object(object(compose, "services"), "traefik")["command"].([]string)
 	if !slices.Contains(command, "--certificatesresolvers.dns.acme.storage=/certs/acme-staging.json") ||
 		!slices.Contains(command, "--certificatesresolvers.dns.acme.caserver="+stagingCA) {
@@ -139,21 +139,21 @@ func TestEdgeFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T)
 	}
 }
 
-func TestEdgeConfigRejectsInjection(t *testing.T) {
-	for _, change := range []func(*edgeConfig){
-		func(e *edgeConfig) { e.Email = "me@example.com --api.insecure" },
-		func(e *edgeConfig) { e.Email = "${HOME}@example.com" },
-		func(e *edgeConfig) { e.DNSProvider = "cloudflare --x" },
-		func(e *edgeConfig) { e.DNSEnv = map[string]secretSource{"bad key": {Env: "X"}} },
-		func(e *edgeConfig) { e.DNSEnv = nil },
+func TestProxyConfigRejectsInjection(t *testing.T) {
+	for _, change := range []func(*proxyConfig){
+		func(e *proxyConfig) { e.Email = "me@example.com --api.insecure" },
+		func(e *proxyConfig) { e.Email = "${HOME}@example.com" },
+		func(e *proxyConfig) { e.DNSProvider = "cloudflare --x" },
+		func(e *proxyConfig) { e.DNSEnv = map[string]secretSource{"bad key": {Env: "X"}} },
+		func(e *proxyConfig) { e.DNSEnv = nil },
 	} {
-		e := *edgeHost().Edge
+		e := *proxyHost().Proxy
 		change(&e)
-		if err := checkEdge(&e); err == nil {
+		if err := checkProxy(&e); err == nil {
 			t.Errorf("accepted %+v", e)
 		}
 	}
-	if err := checkEdge(edgeHost().Edge); err != nil {
+	if err := checkProxy(proxyHost().Proxy); err != nil {
 		t.Error(err)
 	}
 	for _, h := range []harnessConfig{{Host: "t3.evil"}, {URL: "http://x`)"}, {URL: "file:///etc"}} {
@@ -163,8 +163,8 @@ func TestEdgeConfigRejectsInjection(t *testing.T) {
 	}
 }
 
-func TestEdgeUpPassesSecretsOnlyThroughTheEnvironment(t *testing.T) {
-	cfg := edgeHost()
+func TestProxyUpPassesSecretsOnlyThroughTheEnvironment(t *testing.T) {
+	cfg := proxyHost()
 	data, _ := json.Marshal(cfg)
 	dir := hostWith(t, string(data))
 	t.Setenv("X", "cf-secret")
@@ -180,23 +180,23 @@ func TestEdgeUpPassesSecretsOnlyThroughTheEnvironment(t *testing.T) {
 		}
 		return "", nil
 	})
-	if err := edgeUp(); err != nil {
+	if err := proxyUp(); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Contains(up.env, "CF_DNS_API_TOKEN=cf-secret") {
 		t.Error("compose did not get the token")
 	}
 	for _, name := range []string{"compose.yaml", "dynamic.yaml"} {
-		data, err := os.ReadFile(filepath.Join(dir, "edge", name))
+		data, err := os.ReadFile(filepath.Join(dir, "proxy", name))
 		if err != nil || strings.Contains(string(data), "cf-secret") {
 			t.Errorf("%s: %v, or it holds the secret", name, err)
 		}
 	}
-	if !edgeCurrent(cfg, "dev.example.com", "100.64.0.9") {
+	if !proxyCurrent(cfg, "dev.example.com", "100.64.0.9") {
 		t.Error("files on disk do not match the config")
 	}
 	cfg.Web.Port = 9999
-	if edgeCurrent(cfg, "dev.example.com", "100.64.0.9") {
+	if proxyCurrent(cfg, "dev.example.com", "100.64.0.9") {
 		t.Error("a changed config should make the files stale")
 	}
 	if !slices.ContainsFunc(calls, func(c []string) bool {
@@ -226,10 +226,10 @@ func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	swap(t, &certificatePoll, time.Millisecond)
 	stage := "none" // what Traefik serves: none, staging, production
 	var ups []bool
-	edge := edgeHost().Edge
-	swap(t, &setupEdge, func() error {
-		ups = append(ups, edge.Staging)
-		if edge.Staging {
+	proxy := proxyHost().Proxy
+	swap(t, &setupProxy, func() error {
+		ups = append(ups, proxy.Staging)
+		if proxy.Staging {
 			stage = "staging"
 		} else {
 			stage = "production"
@@ -246,27 +246,27 @@ func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 		return &x509.Certificate{Issuer: pkix.Name{CommonName: "TRAEFIK DEFAULT CERT"}}, errors.New("untrusted"), nil
 	})
 	raw := map[string]any{}
-	if err := startEdgeWithCertificate(raw, edge, "dev.example.com", "100.64.0.9"); err != nil {
+	if err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9"); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(ups, []bool{true, false}) {
-		t.Errorf("edge started with staging=%v", ups)
+		t.Errorf("proxy started with staging=%v", ups)
 	}
-	if cfg, _ := loadHostConfig(); cfg.Edge == nil || cfg.Edge.Staging {
-		t.Errorf("config left on staging: %+v", cfg.Edge)
+	if cfg, _ := loadHostConfig(); cfg.Proxy == nil || cfg.Proxy.Staging {
+		t.Errorf("config left on staging: %+v", cfg.Proxy)
 	}
 
 	// With a trusted certificate already served, setup goes straight to production.
 	ups = nil
-	if err := startEdgeWithCertificate(raw, edge, "dev.example.com", "100.64.0.9"); err != nil || !slices.Equal(ups, []bool{false}) {
+	if err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9"); err != nil || !slices.Equal(ups, []bool{false}) {
 		t.Errorf("ups %v, %v", ups, err)
 	}
 
 	// A certificate that never comes fails with a pointer to the logs.
 	swap(t, &certificateTimeout, 5*time.Millisecond)
 	stage = "stuck"
-	swap(t, &setupEdge, func() error { return nil })
-	if err := startEdgeWithCertificate(raw, edge, "dev.example.com", "100.64.0.9"); err == nil || !strings.Contains(err.Error(), "docker logs") {
+	swap(t, &setupProxy, func() error { return nil })
+	if err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9"); err == nil || !strings.Contains(err.Error(), "docker logs") {
 		t.Errorf("timeout: %v", err)
 	}
 }

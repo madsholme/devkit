@@ -18,7 +18,7 @@ type hostConfig struct {
 	Domain      string         `json:"domain"`       // preview domain, e.g. "dev.example.com"; DEV_DOMAIN overrides it
 	TailscaleIP string         `json:"tailscale_ip"` // optional; read from tailscale ip -4 when empty
 	Harness     *harnessConfig `json:"harness"`      // the agent tool on this host, if any
-	Edge        *edgeConfig    `json:"edge"`         // the Traefik proxy started by devbox edge up
+	Proxy       *proxyConfig   `json:"proxy"`        // the Traefik proxy started by devbox proxy up
 	Web         struct {
 		Port int `json:"port"`
 	} `json:"web"`
@@ -32,8 +32,8 @@ type harnessConfig struct {
 	Worktrees string `json:"worktrees"` // glob of its worktrees, e.g. "~/.t3/worktrees/*/*"
 }
 
-// edgeConfig is how Traefik gets the wildcard certificate.
-type edgeConfig struct {
+// proxyConfig is how Traefik gets the wildcard certificate.
+type proxyConfig struct {
 	Email       string                  `json:"email"`           // Let's Encrypt account
 	DNSProvider string                  `json:"dns_provider"`    // lego DNS provider, e.g. "cloudflare"
 	DNSEnv      map[string]secretSource `json:"dns_env"`         // the provider's API credentials, e.g. CF_DNS_API_TOKEN

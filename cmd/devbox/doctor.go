@@ -173,12 +173,12 @@ func doctorChecks() []check {
 	}
 
 	if _, err := capture("docker", "network", "inspect", "--format", "{{.Name}}", proxyNetwork); err != nil {
-		checks = append(checks, bad("network", "Docker network %s is missing: run devbox edge up", proxyNetwork))
+		checks = append(checks, bad("network", "Docker network %s is missing: run devbox proxy up", proxyNetwork))
 	} else {
 		checks = append(checks, ok("network", "%s", proxyNetwork))
 	}
 
-	checks = append(checks, edgeChecks(cfg, dom, ip)...)
+	checks = append(checks, proxyChecks(cfg, dom, ip)...)
 
 	if self, err := webExecutable(); err == nil {
 		want := webUnit(self)
@@ -228,15 +228,15 @@ func doctorChecks() []check {
 	return checks
 }
 
-// edgeChecks covers Traefik: configuration, credentials, the running container and its certificate.
-func edgeChecks(cfg hostConfig, dom, ip string) []check {
-	if err := checkEdge(cfg.Edge); err != nil {
+// proxyChecks covers Traefik: configuration, credentials, the running container and its certificate.
+func proxyChecks(cfg hostConfig, dom, ip string) []check {
+	if err := checkProxy(cfg.Proxy); err != nil {
 		return []check{bad("traefik", "%v", err)}
 	}
 	var checks []check
 	tokens := true
-	for _, key := range sortedKeys(cfg.Edge.DNSEnv) {
-		source := cfg.Edge.DNSEnv[key]
+	for _, key := range sortedKeys(cfg.Proxy.DNSEnv) {
+		source := cfg.Proxy.DNSEnv[key]
 		value, err := source.read()
 		if err != nil {
 			checks = append(checks, bad("dns token", "%s: %v", key, err))
@@ -253,23 +253,23 @@ func edgeChecks(cfg hostConfig, dom, ip string) []check {
 		}
 	}
 	if tokens && len(checks) == 0 {
-		checks = append(checks, ok("dns token", "%s read", strings.Join(sortedKeys(cfg.Edge.DNSEnv), ", ")))
+		checks = append(checks, ok("dns token", "%s read", strings.Join(sortedKeys(cfg.Proxy.DNSEnv), ", ")))
 	}
 
-	ids, _ := capture("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project="+edgeProject)
+	ids, _ := capture("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project="+proxyProject)
 	containers, err := inspect(strings.Fields(ids)...)
 	if err != nil || len(containers) == 0 {
-		return append(checks, bad("traefik", "not running: run devbox edge up"))
+		return append(checks, bad("traefik", "not running: run devbox proxy up"))
 	}
 	c := containers[0]
 	status := containerStatus(c.State)
 	if status != "running" && status != "healthy" {
 		return append(checks, bad("traefik", "%s: docker logs %s", status, strings.TrimPrefix(c.Name, "/")))
 	}
-	if dir := c.Config.Labels["com.docker.compose.project.working_dir"]; dir != edgeDir() {
-		checks = append(checks, warn("traefik", "running from %s, not devbox's %s: run devbox edge up", dir, edgeDir()))
-	} else if dom != "" && ip != "" && !edgeCurrent(cfg, dom, ip) {
-		checks = append(checks, warn("traefik", "the host config changed since Traefik started: run devbox edge up"))
+	if dir := c.Config.Labels["com.docker.compose.project.working_dir"]; dir != proxyDir() {
+		checks = append(checks, warn("traefik", "running from %s, not devbox's %s: run devbox proxy up", dir, proxyDir()))
+	} else if dom != "" && ip != "" && !proxyCurrent(cfg, dom, ip) {
+		checks = append(checks, warn("traefik", "the host config changed since Traefik started: run devbox proxy up"))
 	} else {
 		checks = append(checks, ok("traefik", "running %s", c.Config.Image))
 	}
@@ -297,11 +297,11 @@ func edgeChecks(cfg hostConfig, dom, ip string) []check {
 	return checks
 }
 
-// edgeCurrent reports whether the edge files on disk are what the host config renders now.
-func edgeCurrent(cfg hostConfig, dom, ip string) bool {
-	compose, dynamic := edgeFiles(cfg, dom, ip)
+// proxyCurrent reports whether the proxy files on disk are what the host config renders now.
+func proxyCurrent(cfg hostConfig, dom, ip string) bool {
+	compose, dynamic := proxyFiles(cfg, dom, ip)
 	for name, want := range map[string]map[string]any{"compose.yaml": compose, "dynamic.yaml": dynamic} {
-		data, err := os.ReadFile(filepath.Join(edgeDir(), name))
+		data, err := os.ReadFile(filepath.Join(proxyDir(), name))
 		if err != nil {
 			return false
 		}

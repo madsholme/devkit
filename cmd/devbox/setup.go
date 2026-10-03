@@ -84,7 +84,7 @@ var t3Harness = harnessConfig{Name: "T3 Code", Host: "t3", URL: "http://127.0.0.
 
 // Setup's slow or outward steps; tests replace them.
 var (
-	setupEdge          = edgeUp
+	setupProxy         = proxyUp
 	certificateTimeout = 4 * time.Minute
 	certificatePoll    = 5 * time.Second
 )
@@ -141,27 +141,27 @@ func setup(opts setupOptions) error {
 	if err != nil {
 		return err
 	}
-	edge := cfg.Edge
-	if edge == nil {
-		edge = &edgeConfig{DNSProvider: "cloudflare", Staging: true}
+	proxy := cfg.Proxy
+	if proxy == nil {
+		proxy = &proxyConfig{DNSProvider: "cloudflare", Staging: true}
 	}
-	email := firstOf(opts.email, edge.Email)
+	email := firstOf(opts.email, proxy.Email)
 	if email == "" {
 		email, _ = capture("git", "config", "--global", "user.email")
 	}
-	if edge.Email, err = p.ask("Email for the Let's Encrypt account", email); err != nil {
+	if proxy.Email, err = p.ask("Email for the Let's Encrypt account", email); err != nil {
 		return err
 	}
-	provider := edge.DNSProvider
-	if edge.DNSProvider, err = p.ask("DNS provider for the certificate (a lego provider: cloudflare, route53, hetzner, ...)", provider); err != nil {
+	provider := proxy.DNSProvider
+	if proxy.DNSProvider, err = p.ask("DNS provider for the certificate (a lego provider: cloudflare, route53, hetzner, ...)", provider); err != nil {
 		return err
 	}
-	if edge.DNSProvider != provider {
-		edge.DNSEnv = nil
+	if proxy.DNSProvider != provider {
+		proxy.DNSEnv = nil
 	}
 
 	step("Credentials")
-	if edge.DNSEnv, err = askDNSCredentials(p, edge.DNSProvider, edge.DNSEnv, dom); err != nil {
+	if proxy.DNSEnv, err = askDNSCredentials(p, proxy.DNSProvider, proxy.DNSEnv, dom); err != nil {
 		return err
 	}
 	raw["domain"] = dom
@@ -170,12 +170,12 @@ func setup(opts setupOptions) error {
 	} else {
 		raw["harness"] = harness
 	}
-	raw["edge"] = edge
+	raw["proxy"] = proxy
 	if err := writeConfigFile(raw); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "Saved %s\n", configPath())
-	if err := checkEdge(edge); err != nil {
+	if err := checkProxy(proxy); err != nil {
 		return err
 	}
 	if err := checkHarness(harness); err != nil {
@@ -183,12 +183,12 @@ func setup(opts setupOptions) error {
 	}
 
 	step("DNS")
-	if err := ensureWildcard(p, dom, ip, edge); err != nil {
+	if err := ensureWildcard(p, dom, ip, proxy); err != nil {
 		return err
 	}
 
 	step("Traefik and certificate")
-	if err := startEdgeWithCertificate(raw, edge, dom, ip); err != nil {
+	if err := startProxyWithCertificate(raw, proxy, dom, ip); err != nil {
 		return err
 	}
 
@@ -365,7 +365,7 @@ func askSecret(p *prompter, key, file string) (secretSource, error) {
 		if source.Env, err = p.ask("Variable name", key); err != nil {
 			return source, err
 		}
-		fmt.Fprintf(stdout, "devbox edge up and devbox doctor then need %s set, e.g. op run --env-file=... -- devbox edge up\n", source.Env)
+		fmt.Fprintf(stdout, "devbox proxy up and devbox doctor then need %s set, e.g. op run --env-file=... -- devbox proxy up\n", source.Env)
 	case "command":
 		if source.Command, err = p.ask("Command", ""); err != nil {
 			return source, err
@@ -378,14 +378,14 @@ func askSecret(p *prompter, key, file string) (secretSource, error) {
 }
 
 // ensureWildcard checks that *.domain resolves to the Tailscale IP and, on Cloudflare, offers to create the record.
-func ensureWildcard(p *prompter, dom, ip string, edge *edgeConfig) error {
+func ensureWildcard(p *prompter, dom, ip string, proxy *proxyConfig) error {
 	if addresses, err := lookupHost(randomLabel() + "." + dom); err == nil && slices.Contains(addresses, ip) {
 		fmt.Fprintf(stdout, "*.%s resolves to %s.\n", dom, ip)
 		return nil
 	}
 	fmt.Fprintf(stdout, "Previews need a DNS-only record: *.%s A %s\n", dom, ip)
-	source, ok := edge.DNSEnv["CF_DNS_API_TOKEN"]
-	if edge.DNSProvider != "cloudflare" || !ok {
+	source, ok := proxy.DNSEnv["CF_DNS_API_TOKEN"]
+	if proxy.DNSProvider != "cloudflare" || !ok {
 		fmt.Fprintln(stdout, "Create it with your DNS provider; devbox doctor checks it. The certificate does not depend on it.")
 		return nil
 	}
@@ -424,17 +424,17 @@ func ensureWildcard(p *prompter, dom, ip string, edge *edgeConfig) error {
 	return nil
 }
 
-// startEdgeWithCertificate starts Traefik. Without a trusted certificate yet it proves issuance against
+// startProxyWithCertificate starts Traefik. Without a trusted certificate yet it proves issuance against
 // Let's Encrypt's staging service first, whose limits forgive mistakes, then switches to production.
-func startEdgeWithCertificate(raw map[string]any, edge *edgeConfig, dom, ip string) error {
+func startProxyWithCertificate(raw map[string]any, proxy *proxyConfig, dom, ip string) error {
 	host := "devbox." + dom
 	run := func(staging bool, want string, accept func(*x509.Certificate, error) bool) error {
-		edge.Staging = staging
-		raw["edge"] = edge
+		proxy.Staging = staging
+		raw["proxy"] = proxy
 		if err := writeConfigFile(raw); err != nil {
 			return err
 		}
-		if err := setupEdge(); err != nil {
+		if err := setupProxy(); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "Waiting for a %s certificate for *.%s (up to %s)...\n", want, dom, certificateTimeout)
@@ -446,7 +446,7 @@ func startEdgeWithCertificate(raw map[string]any, edge *edgeConfig, dom, ip stri
 			}
 			if time.Now().After(deadline) {
 				return fail("No %s certificate after %s. See docker logs %s-traefik-1, fix the cause and run devbox setup again.",
-					want, certificateTimeout, edgeProject)
+					want, certificateTimeout, proxyProject)
 			}
 			time.Sleep(certificatePoll)
 		}

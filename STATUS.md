@@ -10,12 +10,15 @@ Installed and HTTPS commissioned on 2026-09-14.
 - Kit: /home/rene/devbox-kit
 - CLI: /home/rene/.local/bin/devbox is a symlink to /home/rene/devbox-kit/bin/devbox
   (built from cmd/devbox since 2026-09-29; previously a Python script)
-- Host config: /home/rene/.config/devbox/config.json (domain, harness T3, edge, web, share);
+- Host config: /home/rene/.config/devbox/config.json (domain, harness T3, proxy, web, share);
   the DNS token is in /home/rene/.config/devbox/dns-token.
 - 2026-10-03: moved to devbox setup. Traefik now runs from the generated
-  ~/.config/devbox/edge (same image digest and certificate volume); devbox-web.service
+  ~/.config/devbox/proxy (same image digest and certificate); devbox-web.service
   is the unit setup writes, without DEV_DOMAIN. box/traefik and its private .env and
-  dns-provider.env were removed. devbox doctor passes all checks.
+  dns-provider.env were removed. devbox doctor passes all checks. Later that day the
+  command became `devbox proxy up` (Compose project devbox-proxy, config key "proxy");
+  the certificates were copied into the devbox-proxy_certificates volume and the old
+  devbox-edge volume and directory removed.
 - Demo repository: /home/rene/work/devbox-demo
 - No pre-existing Docker workloads were altered.
 - 2026-10-02: installed opt-in `media_ports` support for per-preview TCP/UDP
@@ -29,7 +32,7 @@ Installed and HTTPS commissioned on 2026-09-14.
 - Cloudflare token zone access verified after user corrected permissions.
 - Let's Encrypt staging issuance passed; production issuance then passed.
 - Certificate SAN: *.dev.steenfeldt.net only. Initial expiry: 2026-12-13.
-- Production ACME state: /certs/acme.json in devbox-edge_certificates volume.
+- Production ACME state: /certs/acme.json in the devbox-proxy_certificates volume.
   Staging state remains separate at /certs/acme-staging.json.
 - Traefik uses Linux host networking, bound to 100.69.127.125:443.
 - The old Tailscale Serve 443 mapping was removed after trusted HTTPS worked.
