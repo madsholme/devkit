@@ -301,7 +301,7 @@ func (h *actionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // reapLoop removes expired shares every minute, sweeps leftover Cloudflare resources every ten
-// and prunes Docker build cache and old images once a day, starting an hour after it starts.
+// and, unless the host config turns it off, prunes Docker once a day, starting an hour in.
 func reapLoop() {
 	for tick := 0; ; tick++ {
 		removed, err := reapExpired(time.Now())
@@ -322,7 +322,7 @@ func reapLoop() {
 				}
 			}
 		}
-		if tick%(24*60) == 60 {
+		if tick%(24*60) == 60 && dailyPrune() {
 			if err := prune(true); err != nil {
 				failed("prune", "", err)
 				fmt.Fprintf(os.Stderr, "devbox web: pruning Docker: %v\n", err)
@@ -330,6 +330,13 @@ func reapLoop() {
 		}
 		time.Sleep(time.Minute)
 	}
+}
+
+// dailyPrune says whether the web service prunes Docker by itself; it reads the config each time
+// so a change takes effect without a restart.
+func dailyPrune() bool {
+	cfg, err := loadHostConfig()
+	return err == nil && *cfg.Prune.Daily
 }
 
 // serve runs the web overview. Bind to localhost; Traefik publishes it on the tailnet.

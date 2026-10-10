@@ -36,7 +36,7 @@ software; `devbox setup` configures the rest of the host from your answers.
 | `devbox start [preview]` | Resume saved configuration; retain data |
 | `devbox destroy [preview]` | Remove containers/networks and disposable named volumes |
 | `devbox gc [--yes]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
-| `devbox prune [--yes]` | Trim Docker build cache to 30 GB and remove unused images older than a week, host-wide; dry run without `--yes` |
+| `devbox prune [--yes]` | Trim Docker build cache and remove old unused images, host-wide (limits in the host config); dry run without `--yes` |
 | `devbox publish HEAD` | Run the project's `publish` hook with the reviewed image ID |
 | `devbox share [preview] [--host NAME] [--hours N]` | Make a running preview public until it expires (see below) |
 | `devbox unshare [preview]` | End a public share; `--expired` removes all expired ones and leftovers |
@@ -62,6 +62,7 @@ and go. `devbox prune --yes` trims the Docker build cache to 30 GB and removes i
 older than a week that no container, running or stopped, uses. It works host-wide,
 not only on devbox images, and never touches volumes. The web service runs it once a
 day; without it, run it yourself. `devbox prune` alone shows `docker system df`.
+The limits and the daily run are set in the host config's `prune` section.
 
 ## Three modes
 
@@ -142,6 +143,7 @@ which setup writes and which you may edit:
   "proxy": {"email": "you@example.com", "dns_provider": "cloudflare",
             "dns_env": {"CF_DNS_API_TOKEN": {"file": "~/.config/devbox/dns-token"}}},
   "web": {"port": 3780},
+  "prune": {"build_cache_gb": 30, "image_age_days": 7, "daily": true},
   "share": {"…": "see Public shares"}
 }
 ```
@@ -155,6 +157,9 @@ which setup writes and which you may edit:
 - `proxy`: `dns_provider` is a [lego provider](https://go-acme.github.io/lego/dns/) and `dns_env`
   its credentials by variable name. Optional: `image` (a pinned Traefik), `staging`.
 - `web.port`: where `devbox web` listens on localhost.
+- `prune`: optional; what `devbox prune` keeps. `build_cache_gb` of Docker build cache
+  (default 30), unused images newer than `image_age_days` (default 7), and `daily: false`
+  stops the web service pruning by itself (default true; read each day, no restart needed).
 
 After editing `domain`, `harness`, `proxy` or `web.port`, run `devbox proxy up`; doctor says
 when Traefik is out of date.

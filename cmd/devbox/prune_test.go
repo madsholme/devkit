@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"os"
 	"strings"
 	"testing"
 )
@@ -42,6 +43,32 @@ func TestPruneDryRunOnlyReportsAndApplyNeverTouchesVolumes(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "build cache 12.5GB, images 3.1GB") {
 		t.Errorf("output %q", out.String())
+	}
+}
+
+func TestPruneUsesHostConfig(t *testing.T) {
+	t.Setenv("DEVBOX_CONFIG_DIR", t.TempDir())
+	if err := os.WriteFile(configPath(), []byte(`{"prune": {"build_cache_gb": 50, "image_age_days": 3, "daily": false}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var calls []string
+	swap(t, &runCommand, func(args []string, o runOpts) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return "", nil
+	})
+	swap[io.Writer](t, &stdout, &bytes.Buffer{})
+	if err := prune(true); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"docker builder prune --force --max-used-space 50GB",
+		"docker image prune --all --force --filter until=72h",
+	}
+	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
+		t.Errorf("ran %v, want %v", calls, want)
+	}
+	if dailyPrune() {
+		t.Error("daily prune is on although the config turns it off")
 	}
 }
 

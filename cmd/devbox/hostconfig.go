@@ -22,6 +22,14 @@ type hostConfig struct {
 	Web         struct {
 		Port int `json:"port"`
 	} `json:"web"`
+	Prune pruneConfig `json:"prune"` // Docker clean-up by devbox prune and the web service
+}
+
+// pruneConfig is how much Docker build output devbox keeps. Every key is optional.
+type pruneConfig struct {
+	BuildCacheGB int   `json:"build_cache_gb"` // build cache kept so rebuilds stay fast; default 30
+	ImageAgeDays int   `json:"image_age_days"` // unused images older than this are removed; default 7
+	Daily        *bool `json:"daily"`          // the web service prunes once a day; default true
 }
 
 // harnessConfig describes the agent tool (T3 Code, Orca, ...) the dashboard reports on and Traefik routes to.
@@ -62,22 +70,34 @@ func expandHome(path string) string {
 	return path
 }
 
-// loadHostConfig reads the host config; a missing file is an empty config.
+// loadHostConfig reads the host config with its defaults; a missing file is an empty config.
 func loadHostConfig() (hostConfig, error) {
 	var cfg hostConfig
 	data, err := os.ReadFile(configPath())
-	if errors.Is(err, fs.ErrNotExist) {
-		return cfg, nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return cfg, err
 	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return cfg, fail("%s: %v", configPath(), err)
+	if err == nil {
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return cfg, fail("%s: %v", configPath(), err)
+		}
 	}
 	cfg.Domain = strings.TrimRight(strings.ToLower(cfg.Domain), ".")
 	if cfg.Web.Port == 0 {
 		cfg.Web.Port = defaultWebPort
+	}
+	if cfg.Prune.BuildCacheGB < 0 || cfg.Prune.ImageAgeDays < 0 {
+		return cfg, fail("%s: prune build_cache_gb and image_age_days must not be negative.", configPath())
+	}
+	if cfg.Prune.BuildCacheGB == 0 {
+		cfg.Prune.BuildCacheGB = 30
+	}
+	if cfg.Prune.ImageAgeDays == 0 {
+		cfg.Prune.ImageAgeDays = 7
+	}
+	if cfg.Prune.Daily == nil {
+		daily := true
+		cfg.Prune.Daily = &daily
 	}
 	return cfg, nil
 }
