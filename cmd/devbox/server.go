@@ -300,7 +300,8 @@ func (h *actionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// reapLoop removes expired shares every minute and sweeps leftover Cloudflare resources every ten.
+// reapLoop removes expired shares every minute, sweeps leftover Cloudflare resources every ten
+// and prunes Docker build cache and old images once a day, starting an hour after it starts.
 func reapLoop() {
 	for tick := 0; ; tick++ {
 		removed, err := reapExpired(time.Now())
@@ -319,6 +320,12 @@ func reapLoop() {
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "devbox web: sweeping shares: %v\n", err)
 				}
+			}
+		}
+		if tick%(24*60) == 60 {
+			if err := prune(true); err != nil {
+				failed("prune", "", err)
+				fmt.Fprintf(os.Stderr, "devbox web: pruning Docker: %v\n", err)
 			}
 		}
 		time.Sleep(time.Minute)

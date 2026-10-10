@@ -36,6 +36,7 @@ software; `devbox setup` configures the rest of the host from your answers.
 | `devbox start [preview]` | Resume saved configuration; retain data |
 | `devbox destroy [preview]` | Remove containers/networks and disposable named volumes |
 | `devbox gc [--yes]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
+| `devbox prune [--yes]` | Trim Docker build cache to 30 GB and remove unused images older than a week, host-wide; dry run without `--yes` |
 | `devbox publish HEAD` | Run the project's `publish` hook with the reviewed image ID |
 | `devbox share [preview] [--host NAME] [--hours N]` | Make a running preview public until it expires (see below) |
 | `devbox unshare [preview]` | End a public share; `--expired` removes all expired ones and leftovers |
@@ -55,6 +56,12 @@ only considers previews of the current repository and never touches a preview
 whose worktree still exists. Review previews created before devbox recorded
 `devbox.worktree` are never collected; destroy them by ID.
 Branches are retained until you explicitly delete them.
+
+Every review is a fresh build, so build cache and images pile up as previews come
+and go. `devbox prune --yes` trims the Docker build cache to 30 GB and removes images
+older than a week that no container, running or stopped, uses. It works host-wide,
+not only on devbox images, and never touches volumes. The web service runs it once a
+day; without it, run it yourself. `devbox prune` alone shows `docker system df`.
 
 ## Three modes
 
@@ -275,10 +282,10 @@ minutes. `exec` stays in the CLI.
 ### History
 
 Every command that changes something records an event: setup, proxy up, a DNS record
-setup created, live and review (created or resumed), start, stop, destroy (including `gc`), publish, share, extend, unshare,
+setup created, live and review (created or resumed), start, stop, destroy (including `gc`), prune, publish, share, extend, unshare,
 shares that expired and leftover tunnels or DNS records removed. A failed command is
 recorded too, with its error. Each event says who caused it: `cli` (also T3 actions),
-`dashboard`, or `auto` for what the web service does by itself, such as expiring shares.
+`dashboard`, or `auto` for what the web service does by itself, such as expiring shares or the daily prune.
 The log is one JSON line per event in `~/.local/state/devbox/history.jsonl`
 (`$XDG_STATE_HOME/devbox` if set). At 1 MB it moves to `history.jsonl.1`, replacing the
 older one, so about the last two megabytes are kept. Read it with `devbox history`

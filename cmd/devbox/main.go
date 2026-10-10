@@ -31,6 +31,7 @@ commands:
                        serve the web overview (default 127.0.0.1 and the configured port, 3780)
   web password         set the password that lets the web overview run actions
   gc [--yes]           destroy previews whose worktree no longer exists (dry run by default)
+  prune [--yes]        trim Docker build cache and old unused images host-wide (dry run by default)
   share [preview] [--host NAME] [--hours N]
                        make a running preview public through a Cloudflare tunnel until it expires
   unshare [preview]    end a preview's public share (--expired: every expired share, plus leftovers)
@@ -249,6 +250,16 @@ func dispatch(args []string) (int, error) {
 			return 0, gc(false)
 		}
 		return 0, noted("gc", "", gc(true))
+	case "prune":
+		set := flags(command)
+		yes := set.Bool("yes", false, "")
+		if err := parse(set, rest); err != nil {
+			return 2, err
+		}
+		if !*yes {
+			return 0, prune(false)
+		}
+		return 0, noted("prune", "", prune(true))
 	case "share":
 		positional, values, err := splitArgs(rest, map[string]bool{"--host": true, "--hours": true}, nil)
 		if err != nil {
