@@ -93,7 +93,7 @@ On a devkit (`~/.config/devkit/config.json`):
 ```
 
 `"via": "cloudflare"` (the default, today's behaviour) keeps the current fields. The key
-is a [secret source](../README.md#secrets).
+is a [secret source](setup.md#secrets).
 
 On the edge (`devkit edge serve --config edge.json`):
 

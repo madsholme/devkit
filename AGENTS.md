@@ -1,6 +1,6 @@
 # Agent notes for devkit
 
-Read README.md for what the kit does. On a host that runs it, `~/.config/devkit/STATUS.md`
+Read README.md for what the kit does and `docs/` for how each part works. On a host that runs it, `~/.config/devkit/STATUS.md`
 may record that host's state; it is not part of the repository.
 This file covers what you need to change the kit itself.
 
@@ -25,7 +25,7 @@ old names are dropped on purpose.
 - `bootstrap.sh`: installs the system prerequisites (Docker, Tailscale, docker group,
   firewall for tailscale0, lingering) on Ubuntu/Debian (and derivatives) and Fedora with sudo. POSIX sh, idempotent. devkit itself never uses sudo.
 - `bundle.sh`: builds `bin/devkit-linux-<arch>.tar.gz` (static binary, bootstrap.sh, template,
-  README, LICENSE) for hosts without Go; `DEVKIT_VERSION` stamps a release tag into the binary.
+  README, docs, LICENSE) for hosts without Go; `DEVKIT_VERSION` stamps a release tag into the binary.
   `.github/workflows/release.yml` runs it for amd64 and arm64 on a `v*` tag and publishes a
   GitHub release; a manual run only builds the bundles as an artifact.
 - `bin/devkit`: the built binary (gitignored). Build with
@@ -77,7 +77,10 @@ old names are dropped on purpose.
   `noted(...)` in `dispatch` records failures. Tests write history to a temporary
   directory (`TestMain` sets `DEVKIT_STATE_DIR`).
 - devkit never creates or deletes worktrees, and never commits, pushes or merges.
-- Update README.md when you change commands or behaviour.
+- Update the docs when you change commands or behaviour: README.md is the front page (pitch,
+  quick start, command table), `docs/` has the details (setup, previews, projects, dashboard,
+  shares, testing). `docs/images/` holds the README screenshots, taken from the real page with
+  made-up demo data; never use a real host's previews or names for them.
 
 ## Gotchas
 

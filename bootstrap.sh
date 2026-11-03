@@ -19,7 +19,7 @@ case "$ID ${ID_LIKE:-}" in
 fedora*) family=dnf docker_os=fedora ;;
 ubuntu* | *" ubuntu"*) family=apt docker_os=ubuntu ;;
 debian* | *" debian"*) family=apt docker_os=debian ;;
-*) die "only Ubuntu, Debian (and their derivatives) and Fedora are supported, not $ID; install Docker, Tailscale and lingering by hand (see README.md)" ;;
+*) die "only Ubuntu, Debian (and their derivatives) and Fedora are supported, not $ID; install Docker, Tailscale and lingering by hand (see docs/setup.md)" ;;
 esac
 [ -d /run/systemd/system ] || die "systemd is not running; devkit needs systemd user services"
 user=$(id -un)
@@ -140,7 +140,7 @@ If devkit is not found, log in again: most distributions add ~/.local/bin to PAT
 EOF
 else
 	cat <<EOF
-Next, build devkit in this checkout and configure the host (see README.md, Host setup):
+Next, build devkit in this checkout and configure the host (see docs/setup.md):
 
   cd "$here"
   curl https://mise.run | sh                # if you have no Go yet; mise.toml pins it

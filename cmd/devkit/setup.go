@@ -233,7 +233,7 @@ func setup(opts setupOptions) error {
 		fmt.Fprintln(stdout, "Set a password with devkit web password to act from it.")
 	}
 	if _, configured, _ := loadShareConfig(); !configured {
-		fmt.Fprintln(stdout, "Public shares are optional; README.md (Public shares) explains the share section.")
+		fmt.Fprintln(stdout, "Public shares are optional; docs/shares.md explains the share section.")
 	}
 	return nil
 }
