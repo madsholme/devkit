@@ -57,9 +57,10 @@ flowchart LR
   review -. "devkit share, for a few hours" .-> public["The internet,<br>via Cloudflare Tunnel"]
 ```
 
-Everything runs on one Linux host. Traefik listens only on the host's Tailscale address and holds
-a wildcard certificate for `*.<your domain>`, obtained through your DNS provider's API, so no port
-is open to the internet. Each preview is a Docker Compose project described by a small
+Everything runs on one Linux host. Traefik listens only on the host's Tailscale address (unless
+you [add others](docs/setup.md#beyond-the-tailnet), such as its LAN address) and holds a wildcard
+certificate for `*.<your domain>`, obtained through your DNS provider's API, so no port is open to
+the internet. Each preview is a Docker Compose project described by a small
 `devkit.json` in your repository, and Traefik routes to it by its Docker labels. devkit itself is
 one Go binary with the dashboard built in. It keeps no database: Git knows the worktrees and
 Docker labels know the previews.

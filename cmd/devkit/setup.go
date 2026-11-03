@@ -179,6 +179,12 @@ func setup(opts setupOptions) error {
 	if proxy.DNSProvider != provider {
 		proxy.DNSEnv = nil
 	}
+	listen, err := p.ask("Traefik listens on the Tailscale IP. Other addresses of this host for it, or 0.0.0.0 for every interface (empty for none)",
+		strings.Join(proxy.Listen, " "))
+	if err != nil {
+		return err
+	}
+	proxy.Listen = strings.Fields(strings.ReplaceAll(listen, ",", " "))
 
 	step("Credentials")
 	if proxy.DNSEnv, err = askDNSCredentials(p, proxy.DNSProvider, proxy.DNSEnv, dom); err != nil {

@@ -105,7 +105,7 @@ func proxyHost() hostConfig {
 
 func TestProxyFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T) {
 	cfg := proxyHost()
-	compose, dynamic := proxyFiles(cfg, "dev.example.com", "100.64.0.9")
+	compose, dynamic := proxyFiles(cfg, "dev.example.com", []string{"100.64.0.9"})
 	traefik := object(object(compose, "services"), "traefik")
 	command := traefik["command"].([]string)
 	for _, want := range []string{"--entrypoints.websecure.address=100.64.0.9:443",
@@ -128,7 +128,7 @@ func TestProxyFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T
 	}
 
 	cfg.Proxy.Staging, cfg.Harness = true, nil
-	compose, dynamic = proxyFiles(cfg, "dev.example.com", "100.64.0.9")
+	compose, dynamic = proxyFiles(cfg, "dev.example.com", []string{"100.64.0.9"})
 	command = object(object(compose, "services"), "traefik")["command"].([]string)
 	if !slices.Contains(command, "--certificatesresolvers.dns.acme.storage=/certs/acme-staging.json") ||
 		!slices.Contains(command, "--certificatesresolvers.dns.acme.caserver="+stagingCA) {
@@ -340,5 +340,68 @@ func TestSetupInstallsT3OnlyWhereMissingAndAsked(t *testing.T) {
 	up, installed, service, ran = false, false, false, nil
 	if err := ensureT3(&prompter{in: bufioReader("n\n")}, "dev.example.com"); err != nil || len(ran) != 0 || installed {
 		t.Errorf("declined: ran %q, %v", ran, err)
+	}
+}
+
+func TestTraefikListensOnTheTailnetAndWhereTheConfigAdds(t *testing.T) {
+	for _, c := range []struct{ listen, want []string }{
+		{nil, []string{"100.64.0.9"}},
+		{[]string{"192.168.1.20", "tailscale", "192.168.1.20"}, []string{"100.64.0.9", "192.168.1.20"}},
+		{[]string{"fd00::5"}, []string{"100.64.0.9", "fd00::5"}},
+		{[]string{"192.168.1.20", "0.0.0.0"}, []string{"0.0.0.0"}},
+		{[]string{"0.0.0.0", "::"}, []string{"::"}},
+	} {
+		if got := listenAddresses(&proxyConfig{Listen: c.listen}, "100.64.0.9"); !slices.Equal(got, c.want) {
+			t.Errorf("%q: %q, want %q", c.listen, got, c.want)
+		}
+	}
+	cfg := proxyHost()
+	compose, dynamic := proxyFiles(cfg, "dev.example.com", []string{"100.64.0.9", "fd00::5"})
+	command := object(object(compose, "services"), "traefik")["command"].([]string)
+	for _, want := range []string{"--entrypoints.websecure.address=100.64.0.9:443", "--entrypoints.websecure2.address=[fd00::5]:443"} {
+		if !slices.Contains(command, want) {
+			t.Errorf("missing %s in %q", want, command)
+		}
+	}
+	for name, router := range object(object(dynamic, "http"), "routers") {
+		if _, pinned := asObject(router)["entryPoints"]; pinned {
+			t.Errorf("router %s should answer on every entrypoint", name)
+		}
+	}
+	for _, listen := range [][]string{{"lan"}, {"fe80::1%eth0"}, {"192.168.1.20:443"}} {
+		cfg.Proxy.Listen = listen
+		if checkProxy(cfg.Proxy) == nil {
+			t.Errorf("accepted listen %q", listen)
+		}
+	}
+	cfg.Proxy.Listen = []string{"tailscale", "0.0.0.0", "192.168.1.20"}
+	if err := checkProxy(cfg.Proxy); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestListenAddressesMustBeThisHostsAndEveryInterfaceIsCalledOut(t *testing.T) {
+	swap(t, &hostAddresses, func() []string { return []string{"127.0.0.1", "100.64.0.9", "192.168.1.20", "fd7a:115c:a1e0::9"} })
+	if err := checkListen([]string{"100.64.0.9", "192.168.1.20"}); err != nil {
+		t.Error(err)
+	}
+	if err := checkListen([]string{"0.0.0.0"}); err != nil {
+		t.Error(err)
+	}
+	if err := checkListen([]string{"100.64.0.9", "192.168.1.21"}); err == nil || !strings.Contains(err.Error(), "192.168.1.21") {
+		t.Errorf("a missing address: %v", err)
+	}
+	if note := listenNote([]string{"100.64.0.9"}, "100.64.0.9", "dev.example.com"); note != "" {
+		t.Errorf("tailnet only needs no note: %q", note)
+	}
+	if note := listenNote([]string{"100.64.0.9", "192.168.1.20"}, "100.64.0.9", "dev.example.com"); !strings.Contains(note, "*.dev.example.com") {
+		t.Errorf("a LAN address needs local DNS: %q", note)
+	}
+	if note := listenNote([]string{"0.0.0.0"}, "100.64.0.9", "dev.example.com"); strings.Contains(note, "public") {
+		t.Errorf("no public address here: %q", note)
+	}
+	swap(t, &hostAddresses, func() []string { return []string{"100.64.0.9", "203.0.113.5", "2001:db8::5"} })
+	if note := listenNote([]string{"0.0.0.0"}, "100.64.0.9", "dev.example.com"); !strings.Contains(note, "public 203.0.113.5, 2001:db8::5") {
+		t.Errorf("every interface on a public host: %q", note)
 	}
 }
