@@ -50,8 +50,8 @@ func validateVMSelectors(selectors []vmSelector) error {
 // Reuse Docker's devkit.worktree labels and the harness worktree glob, without
 // running Git scans or requiring Docker for VM-only projects. Never read environments.
 func vmProjectRoots(ctx context.Context, cfg hostConfig, rows []virtualMachine) ([]string, []string) {
-	roots := append([]string{}, cfg.VMProjects...)
-	warnings := []string{}
+	roots, warnings := projectDirectories(cfg)
+	roots = append(roots, cfg.VMProjects...)
 	for _, root := range cfg.VMProjects {
 		if info, err := os.Stat(expandHome(root)); err != nil || !info.IsDir() {
 			warnings = append(warnings, "A vm_projects directory is unavailable; check the host configuration.")

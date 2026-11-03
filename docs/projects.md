@@ -27,6 +27,28 @@ an allowlist for the sample. Rendered Compose config may contain environment sec
 it is stored privately at `<git-common-dir>/devkit/runs/<preview>/compose.json`.
 These are per-preview execution artifacts for restart/cleanup, not a task registry.
 
+## Discovering projects before launch
+
+Set `"projects_dir": "~/Work"` in the host's `~/.config/devkit/config.json`, using
+whatever directory contains your main project folders. Every immediate non-hidden
+folder appears in **Projects**, including folders without a recipe. Git supplies the
+main checkout and linked worktrees, even when T3 or another tool places them elsewhere.
+The main checkout is Git's original working directory, not necessarily the `main` branch.
+Independent clones remain separate; repeated discovery of one repository is deduplicated.
+Child symlinks and nested folders are not scanned. Keep explicit `vm_projects` for
+VM recipes outside that parent.
+
+Sign in to the dashboard and use **Launch containers** on the main checkout or a
+worktree to run `devkit up` there. It needs a Git checkout and a valid recipe whose
+`compose.live` file exists (or the default `compose.live.yaml`); it must stay inside
+the checkout. A running preview has **Open app** and **Stop containers**;
+a stopped one has **Start containers**. Reading the tree never executes hooks.
+
+Associated VMs show their existing **Start**, **Stop** and **Restart** controls;
+**Details & connect** opens their inventory and private connection instructions.
+Each VM still needs an explicit mapping and lifecycle adapter below. Launching
+containers never implicitly starts VMs, and launching a VM never starts containers.
+
 ## Virtual machines
 
 Use the same `project` slug as your Docker previews, and list the VMs that belong
@@ -57,13 +79,13 @@ those VMs stay in **Other VMs** with an explanation. The same project can repeat
 its mapping across worktrees without causing a conflict. Grouping is informational;
 it does not grant access or change VM ownership, lifecycle or SSH authentication.
 
-Recipe discovery uses Docker preview worktree labels, the harness's worktree glob,
+Recipe discovery uses the host projects_dir folders, Docker preview worktree labels, the harness's worktree glob,
 the current CLI directory, and readable QEMU working directories. For nested
 working directories it reads the nearest recipe. A working directory only helps
 find a recipe: the VM still needs an explicit mapping. No disk-path inference or
 recursive home-directory scan is performed.
 
-For a VM-only project (particularly libvirt), add its directory to the host's
+For a VM-only project outside projects_dir (particularly libvirt), add its directory to the host's
 `~/.config/devkit/config.json` so the dashboard can find it independently of Docker:
 
 ```json
@@ -135,7 +157,7 @@ devkit vms --json                         # includes stopped managed guests/cont
 Names and UUIDs resolve within the current project's recipe when present;
 otherwise they must uniquely identify a discovered definition. The opaque
 `control_id` shown by `vms` works anywhere and is what dashboard buttons use.
-Use `vm_projects` above so the dashboard can still discover a VM's recipe after
+Use `projects_dir` or `vm_projects` above so the dashboard can still discover a VM's recipe after
 its last guest stops. Settings are read again when an action runs; removing
 `control` revokes it. No VM actions are implicit: `devkit up` without `--vm` is
 an alias for the existing Docker `live` command. Docker `start`/`stop` keep their

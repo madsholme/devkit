@@ -21,8 +21,10 @@ def main():
         raise SystemExit('Set DEVKIT_VM_RUNTIME_TEST=1 to test a disposable QEMU guest.')
     binary = os.environ.get('DEVKIT_VM_BINARY', str(Path(__file__).resolve().parents[1] / 'bin/devkit'))
     with tempfile.TemporaryDirectory(prefix='devkit-vm-control-') as tmp:
-        root = Path(tmp)
-        env = dict(os.environ, DEVKIT_CONFIG_DIR=tmp, DEVKIT_STATE_DIR=tmp)
+        parent = Path(tmp)
+        root = parent / "project"
+        root.mkdir()
+        env = dict(os.environ, DEVKIT_CONFIG_DIR=str(root), DEVKIT_STATE_DIR=str(root))
         name = 'devkit-control-' + uuid.uuid4().hex[:8]
         disk = root / 'guest.qcow2'
         subprocess.run(['qemu-img', 'create', '-f', 'qcow2', str(disk), '32M'], check=True, capture_output=True)
@@ -52,7 +54,7 @@ with socket.socket(socket.AF_UNIX) as s:
         recipe = {'project': 'vm-lifecycle-test', 'vms': [{'name': name, 'control': {
             'start': shlex.join(start), 'stop': 'python3 stop.py', 'timeout_seconds': 10}}]}
         (root / 'devkit.json').write_text(json.dumps(recipe))
-        (root / 'config.json').write_text(json.dumps({'vm_projects': [tmp], 'prune': {'daily': False}}))
+        (root / 'config.json').write_text(json.dumps({'projects_dir': tmp, 'prune': {'daily': False}}))
         # Bound optional external probes and never expose real Docker state.
         fakebin = root / 'bin'
         fakebin.mkdir()
@@ -61,7 +63,7 @@ with socket.socket(socket.AF_UNIX) as s:
             (fakebin / tool).chmod(0o755)
         env['PATH'] = str(fakebin) + ':' + env['PATH']
         def run(*args):
-            return subprocess.check_output([binary, *args], cwd=tmp, env=env, text=True, timeout=15)
+            return subprocess.check_output([binary, *args], cwd=root, env=env, text=True, timeout=15)
         def vm():
             rows = [v for v in json.loads(run('vms', '--json'))['vms'] if v['name'] == name]
             assert len(rows) == 1, rows
@@ -82,7 +84,7 @@ with socket.socket(socket.AF_UNIX) as s:
             # Fail shutdown and verify restart leaves the same running guest alone.
             recipe['vms'][0]['control']['stop'] = 'exit 7'
             (root / 'devkit.json').write_text(json.dumps(recipe))
-            failure = subprocess.run([binary, 'restart', '--vm', name], cwd=tmp, env=env, capture_output=True, timeout=15)
+            failure = subprocess.run([binary, 'restart', '--vm', name], cwd=root, env=env, capture_output=True, timeout=15)
             assert failure.returncode != 0 and vm()['pid'] == restarted['pid']
             recipe['vms'][0]['control']['stop'] = 'python3 stop.py'
             (root / 'devkit.json').write_text(json.dumps(recipe))
@@ -108,7 +110,7 @@ with socket.socket(socket.AF_UNIX) as s:
                 listener.bind(('127.0.0.1', 0))
                 webport = listener.getsockname()[1]
             server = subprocess.Popen([binary, 'web', '--host', '127.0.0.1', '--port', str(webport)],
-                                      cwd=tmp, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                      cwd=parent, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             origin = f'http://127.0.0.1:{webport}'
             client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
             def request(path, payload=None):
@@ -125,6 +127,11 @@ with socket.socket(socket.AF_UNIX) as s:
                     time.sleep(.05)
             else:
                 raise AssertionError('test HTTP server did not start')
+            catalog = request('/api/projects')
+            assert len(catalog['projects']) == 1, catalog
+            assert catalog['projects'][0]['main']['project'] == 'vm-lifecycle-test', catalog
+            rows = [v for v in request('/api/vms')['vms'] if v['name'] == name]
+            assert len(rows) == 1 and rows[0]['state'] == 'stopped', rows
             payload = {'action': 'vm-start', 'vm': stopped['control_id']}
             try:
                 request('/api/action', payload)
@@ -155,7 +162,7 @@ with socket.socket(socket.AF_UNIX) as s:
                 except subprocess.TimeoutExpired: server.kill(); server.wait()
             # Clean only this fixture's monitor, even if an assertion failed.
             if (root / 'monitor.sock').exists():
-                subprocess.run(['python3', str(stop)], cwd=tmp, timeout=5, capture_output=True)
+                subprocess.run(['python3', str(stop)], cwd=root, timeout=5, capture_output=True)
 
 if __name__ == '__main__':
     main()

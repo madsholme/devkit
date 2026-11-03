@@ -8,7 +8,16 @@ also mentions reclaimable Docker data from 5 GB up) that opens a system monitor:
 per-container usage, top host processes and Docker disk use. Containers and processes
 are sampled only while it is open.
 
-Below it are four tabs, remembered per browser and linkable (`#vms`, `#worktrees`, `#history`):
+Below it are five tabs, remembered per browser and linkable (`#projects`, `#previews`, `#vms`, `#worktrees`, `#history`):
+
+- **Projects** (default for new browsers): each main checkout with its linked Git worktrees,
+  container previews and explicitly associated VMs. Configure `projects_dir` in the host
+  config to discover projects before anything runs. Expand/collapse projects or filter by
+  name, path, branch or VM; expansion is preserved on refresh. Signed-in users can launch
+  containers and control configured VMs directly here. Folders needing recipes stay visible.
+  The read-only `/api/projects` catalog remains available with a warning if Docker fails;
+  VM inventory and controls work independently. Paths and Git metadata are readable just
+  like the Worktrees tab; recipe commands and VM disk paths are never returned.
 
 - **Previews**: mode, health, branch/commit, uptime and URL. A live preview shows its
   worktree's current commit and uncommitted changes, a review how far its worktree has
@@ -58,7 +67,8 @@ or on the dashboard; deleting it loses nothing but the past.
 
 `devkit web` binds to 127.0.0.1 and `web.port` (3780). `devkit setup` installs it as the user
 service `devkit-web`, and Traefik publishes it at `devkit.<domain>` on the tailnet. Repositories
-appear once they have at least one preview or a worktree matching the harness's `worktrees` glob.
+appear from `projects_dir`, a preview, or a worktree matching the harness's `worktrees` glob.
+The Projects tree also includes explicit `vm_projects` folders. See [project discovery](projects.md#discovering-projects-before-launch).
 
 ## Virtual machines
 
@@ -69,7 +79,7 @@ Unmatched or ambiguous VMs appear under **Other VMs**, after the project groups.
 Each VM includes a `project` slug (empty if unassigned) and, for conflicts, a
 `project_note`; JSON remains a flat list. Filters match project names as well as VM
 names. Group counts reflect the filtered rows.
-The dashboard refreshes while the VM tab is visible (every ten seconds, pausing
+The dashboard refreshes VMs while the Projects or VM tab is visible (every ten seconds, pausing
 while a VM control has keyboard focus). It retains expanded connection sections.
 A failed libvirt provider is a warning; other VM sources and Docker stay usable.
 
@@ -135,7 +145,7 @@ this sanitized inventory; connecting still requires SSH and guest authentication
 VMs with [project lifecycle settings](projects.md#start-stop-and-restart-vms) show
 Start when stopped, and Stop/Restart when running, after you sign in. Plain VM
 mappings remain read-only. The page lists stopped managed guests too; register
-VM-only projects in host `vm_projects` so their recipes remain discoverable.
+VM-only projects through host `projects_dir` or `vm_projects` so their recipes remain discoverable.
 Unavailable providers or conflicting definitions show an explanation instead of
 action buttons. Paused guests offer Stop; resume with their existing manager
 before restarting.

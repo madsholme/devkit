@@ -753,7 +753,7 @@ func (v *vmInventory) snapshot(ctx context.Context) vmSnapshot {
 	rows := mergeVMs(processes, domains)
 	cfg, configErr := loadHostConfig()
 	if configErr != nil {
-		warnings = append(warnings, "Host configuration is invalid; check vm_projects and other host settings.")
+		warnings = append(warnings, "Host configuration is invalid; check projects_dir, vm_projects and other host settings.")
 		cfg = hostConfig{}
 	}
 	roots, rootWarnings := vmProjectRoots(ctx, cfg, rows)
@@ -762,7 +762,8 @@ func (v *vmInventory) snapshot(ctx context.Context) vmSnapshot {
 	warnings = append(warnings, problems...)
 	assignVMProjects(rows, projects)
 	targets := managedVMs(ctx, rows, projects, processWarnings)
-	if len(problems) > 0 || configErr != nil {
+	_, directoryWarnings := projectDirectories(cfg)
+	if len(problems) > 0 || configErr != nil || len(directoryWarnings) > 0 {
 		for i := range targets {
 			targets[i].vm.Actions = nil
 			targets[i].vm.ControlNote = "VM recipe discovery is incomplete; fix configuration before controlling VMs."

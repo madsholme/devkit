@@ -23,7 +23,10 @@ requires local Tailscale, creates temporary UDP/TCP echo previews, checks distin
 ports and restart persistence through the tailnet IP, and cleans them up.
 
 
-QEMU discovery regression tests run with `go test ./...`. Installer behavior is
+Project discovery and QEMU regression tests run with `go test ./...`. They cover
+shallow directory discovery, external linked worktrees, recipe validation, Docker
+failure and rejection of arbitrary or removed launch paths.
+Installer behavior is
 checked without sudo, package installation, or host changes by
 `python3 tests/bootstrap_acceptance.py` (mocked Ubuntu/Fedora commands, architecture
 profiles, existing daemon preservation, repeated group setup and failures).

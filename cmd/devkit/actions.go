@@ -36,7 +36,7 @@ type plannedAction struct {
 	title  string
 }
 
-// knownRepos maps each repository devkit knows (from previews and harness worktrees) to its worktrees.
+// knownRepos maps repositories from previews, project roots and harness worktrees to their checkouts.
 func knownRepos(containers []container) map[string][]worktree {
 	repos := map[string][]worktree{}
 	for _, c := range containers {
@@ -121,9 +121,12 @@ func planAction(req actionRequest) (plannedAction, error) {
 			}
 		}
 		return p, nil
-	case "live", "review":
+	case "up", "live", "review":
 		for _, trees := range repos {
 			if _, ok := branchOf(trees, req.Worktree); ok && req.Worktree != "" {
+				if req.Action == "up" && !checkoutProject(worktree{Path: req.Worktree}, nil).Docker {
+					return plannedAction{}, fail("This checkout needs a valid live Compose recipe before launching containers.")
+				}
 				p := plannedAction{args: []string{req.Action}, dir: req.Worktree, target: "worktree " + req.Worktree,
 					title: req.Action + " " + filepath.Base(req.Worktree)}
 				if req.Action == "review" {

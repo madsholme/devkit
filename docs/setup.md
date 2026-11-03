@@ -120,6 +120,7 @@ which setup writes and which you may edit:
 ```json
 {
   "domain": "dev.example.com",
+  "projects_dir": "~/Work",
   "harness": {"name": "T3 Code", "host": "t3", "url": "http://127.0.0.1:3773",
               "worktrees": "~/.t3/worktrees/*/*"},
   "proxy": {"email": "you@example.com", "dns_provider": "cloudflare",
@@ -131,6 +132,14 @@ which setup writes and which you may edit:
 }
 ```
 
+- `projects_dir`: optional parent directory of your main projects, absolute or starting
+  with `~/` (for example `~/Work` or `~/Projects`). The dashboard discovers up to 128
+  immediate non-hidden subdirectories; it does not recurse or follow child symlinks.
+  Missing/unreadable directories and discovery limits show a warning and disable VM
+  lifecycle controls until fixed, since unseen recipes could contain conflicting claims. Folders without
+  recipes remain visible as **Setup needed**. Changes take effect on refresh.
+  Discovered repositories also appear in Worktrees, and recipes supply stopped VM
+  definitions without requiring a preview, a running VM or T3.
 - `vm_projects`: optional list of absolute or `~/` project directories whose VM mappings
   the dashboard should read, including VM-only and libvirt projects. See [VM mappings](projects.md#virtual-machines).
 - `name`: optional; the dashboard's title, the hostname by default.

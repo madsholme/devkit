@@ -21,7 +21,10 @@ old names are dropped on purpose.
   `vms.go` discovers active QEMU/libvirt VMs read-only (`devkit vms`, `/api/vms`):
   allowlisted metadata only, bounded probes, UUID deduplication and private SSH connection commands.
   `vm_projects.go` matches explicit project `vms` selectors (UUID before name), discovers recipes
-  from Docker/harness/cwd and host `vm_projects` roots, and leaves ambiguous claims unassigned.
+  from projects_dir/Docker/harness/cwd and host `vm_projects` roots, and leaves ambiguous claims unassigned.
+  `projects.go` discovers direct project folders from host `projects_dir`, groups Git checkouts
+  by common directory, and serves the independent `/api/projects` tree with launch capabilities.
+  Discovery never runs hooks; authenticated `up` actions revalidate Git membership and recipe.
   `vm_control.go` provides opt-in launcher/libvirt lifecycle adapters, stopped managed inventory,
   exact control resolution and a host-wide lifecycle lock. Plain mappings never authorize actions.
   `pair.go` issues T3 Code pairing links (`devkit pair`, `/api/pair`) and `qr.go` draws them as QR

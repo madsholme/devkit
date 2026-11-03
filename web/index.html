@@ -203,6 +203,29 @@ tr.preview:hover td { background: var(--code); }
 .containers td { background: var(--code); padding: 0 12px 10px 34px; }
 .containers table { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 .containers th, .containers td td { padding: 6px 10px; background: none; }
+.project-tree { margin-bottom: 12px; }
+.project-tree > summary { padding: 14px 16px; cursor: pointer; overflow-wrap: anywhere; }
+.project-tree > summary:hover { background: var(--code); }
+.project-tree > summary strong { margin-right: 10px; }
+.project-tree > summary .path { display: block; margin: 4px 0 0 18px; font-size: 12px; color: var(--muted); }
+.project-content { padding: 0 16px 14px 34px; }
+.project-content ul { list-style: none; padding: 0; margin: 0; }
+.project-content > ul > li { padding: 12px 0; border-top: 1px solid var(--line); }
+.project-content ul ul { margin: 8px 0 0 8px; padding-left: 16px; border-left: 1px solid var(--line); }
+.project-content ul ul > li + li { margin-top: 16px; }
+.project-line { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: center; }
+.project-line > div { min-width: 0; overflow-wrap: anywhere; }
+.project-line .actions { flex-wrap: wrap; white-space: normal; }
+.project-content .path { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.project-content .note { margin: 5px 0 0; }
+.project-content .vm-actions { padding: 0; margin: 0; }
+@media (max-width: 600px) {
+  .project-content { padding-left: 16px; }
+  .project-line { align-items: flex-start; }
+  .project-content ul ul { margin-left: 0; padding-left: 12px; }
+  .tabs { overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  .tabs button { flex-shrink: 0; }
+}
 .repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .repo { padding: 14px 16px; }
 .repo ul { list-style: none; margin: 0; padding: 0; }
@@ -334,11 +357,20 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
   </button>
 
   <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-btn-projects" data-tab="projects" aria-controls="tab-projects">Projects <span class="count" id="project-count"></span></button>
     <button role="tab" id="tab-btn-previews" data-tab="previews" aria-controls="tab-previews">Previews <span class="count" id="preview-count"></span></button>
     <button role="tab" id="tab-btn-vms" data-tab="vms" aria-controls="tab-vms">Virtual machines <span class="count" id="vm-count"></span></button>
     <button role="tab" id="tab-btn-worktrees" data-tab="worktrees" aria-controls="tab-worktrees">Worktrees <span class="count" id="worktree-count"></span></button>
     <button role="tab" id="tab-btn-history" data-tab="history" aria-controls="tab-history">History <span class="count" id="history-count"></span></button>
   </nav>
+
+  <section id="tab-projects" role="tabpanel" aria-labelledby="tab-btn-projects" hidden>
+    <div class="filters"><input type="search" id="project-filter" aria-label="Filter projects" placeholder="Filter projects, branches or VMs…" autocomplete="off"><button id="project-refresh">Refresh projects</button></div>
+    <p class="note" id="project-directory"></p>
+    <div class="notice" id="project-warning" hidden></div>
+    <div class="error" id="project-error" role="status" hidden></div>
+    <div id="project-list"><div class="panel empty">Loading projects…</div></div>
+  </section>
 
   <section id="tab-previews" role="tabpanel" aria-labelledby="tab-btn-previews">
   <div class="notice" id="orphans" hidden></div>
@@ -662,6 +694,7 @@ async function loadSession() {
   try { session = await (await fetch("api/session")).json(); } catch {}
   renderAuth();
   renderVMs();
+  renderProjects();
   if (lastData) { renderPreviews(lastData.previews); renderRepos(lastData.repositories, lastData.previews); renderOrphans(lastData.repositories); renderHost(lastData.host); }
 }
 
@@ -935,6 +968,7 @@ function renderHost(h) {
 
 async function load() {
   loadHistory();
+  loadProjects();
   try {
     const res = await fetch("api/overview");
     if (!res.ok) throw new Error(await res.text());
@@ -1287,6 +1321,12 @@ let vmData = null, vmBusy = false;
 const vmIcon = display => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${display === "headless" ? '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3m6 0h5"/>' : display === "unknown" ? '<circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 4m0 3h.01"/>' : '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M12 17v4m-4 0h8"/>'}</svg>`;
 const vmSize = value => value == null || value === 0 ? "Unavailable" : bytes(value).replace("GB", "GiB").replace("MB", "MiB");
 const vmCommand = (text, label) => text ? `<div class="vm-command"><code>${esc(text)}</code><button data-copy="${esc(text)}" aria-label="${esc(label)}">Copy</button></div>` : "";
+function vmControls(v) {
+  if (!v.control_id || !(v.actions || []).length) return "";
+  return session.signed_in
+    ? `<div class="vm-actions" role="group" aria-label="${esc(v.name)} controls">${v.actions.map(a => act("vm-" + a, {start: "Start", stop: "Stop", restart: "Restart"}[a], {vm: v.control_id})).join("")}</div>`
+    : '<p class="vm-help">Sign in to start, stop or restart this VM.</p>';
+}
 function renderVMs() {
   if (!vmData) return;
   const open = new Set([...document.querySelectorAll("[data-vm-connect][open]")].map(el => el.dataset.vmConnect));
@@ -1311,9 +1351,7 @@ function renderVMs() {
       <p>Run these commands on your computer. Keep the tunnel terminal open, then connect from a second terminal.</p>
       ${connections.map(c => `<h3>${c.kind === "ssh" ? "Guest SSH" : c.kind === "console" ? "Serial console" : esc(c.kind.toUpperCase())}</h3>${c.tunnel ? "<div>1. Open the SSH tunnel</div>" + vmCommand(c.tunnel, "Copy SSH tunnel") + "<div>2. Connect to the VM</div>" : ""}${vmCommand(c.command, "Copy connection command")}${c.kind === "console" ? '<p class="vm-help">Requires a configured guest serial console and libvirt console permission. Press Ctrl+] to leave.</p>' : ""}`).join("")}
       <p class="vm-help">SSH access to the devkit host is required. Install virt-viewer on your computer for SPICE/VNC. If the local port is busy, change it in both commands. Use your existing guest key with SSH if required.</p></details>` : ""}
-      ${v.control_id && (v.actions || []).length ? (session.signed_in
-        ? `<div class="vm-actions" role="group" aria-label="${esc(v.name)} controls">${v.actions.map(a => act("vm-" + a, {start: "Start", stop: "Stop", restart: "Restart"}[a], {vm: v.control_id})).join("")}</div>`
-        : '<p class="vm-help">Sign in to start, stop or restart this VM.</p>') : ""}
+      ${vmControls(v)}
       ${v.control_note ? `<p class="vm-help">${esc(v.control_note)}</p>` : ""}
       ${v.project_note ? `<p class="vm-help">${esc(v.project_note)}</p>` : ""}
       ${v.connection_note ? `<p class="vm-help">${esc(v.connection_note)}</p>` : ""}</article>`;
@@ -1328,6 +1366,7 @@ async function loadVMs() {
     if (!res.ok) throw new Error("HTTP " + res.status);
     vmData = await res.json();
     renderVMs();
+    renderProjects();
     $("vm-warning").hidden = !vmData.warnings.length;
     $("vm-warning").textContent = vmData.warnings.join(" ");
     $("vm-error").hidden = true;
@@ -1337,27 +1376,92 @@ async function loadVMs() {
     $("vm-error").textContent = "Could not refresh virtual machines. " + e.message + ". Try Refresh VMs.";
     $("vm-updated").textContent = vmData ? "Showing previous results" : "";
     if (!vmData) $("vm-list").innerHTML = '<div class="vm-empty">VM inventory unavailable.</div>';
-  } finally { vmBusy = false; $("vm-refresh").disabled = false; }
+  } finally { vmBusy = false; $("vm-refresh").disabled = false; renderProjects(); }
 }
 $("vm-refresh").onclick = loadVMs;
 $("vm-filter").oninput = renderVMs;
-setInterval(() => { if (!document.hidden && !$("tab-vms").hidden && !document.activeElement?.closest("#vm-list")) loadVMs(); }, 10000);
+setInterval(() => { if (!document.hidden && (!$("tab-vms").hidden || !$("tab-projects").hidden) && !document.activeElement?.closest("#vm-list, #project-list") && !document.querySelector("dialog[open]")) loadVMs(); }, 10000);
+
+// Projects are discoverable before their first preview or VM starts.
+let projectsData = null, projectsBusy = false;
+const closedProjects = new Set();
+function projectCheckoutHTML(w, label) {
+  const live = w.previews.find(p => p.mode === "live");
+  const launch = session.signed_in && w.docker && !live ? act("up", "Launch containers", {worktree: w.path}) : "";
+  return `<div class="project-line"><div><strong>${esc(label)}</strong>${w.git && label !== w.branch ? ` <span class="mono muted">${esc(w.branch || "detached")}</span>` : ""}</div><div class="actions">${launch}</div></div>
+    <div class="mono path">${esc(home(w.path))}</div>
+    ${w.git ? gitLine(w) : ""}
+    ${w.note ? `<p class="note">${esc(w.note)}</p>` : ""}
+    ${w.docker && !live && !session.signed_in ? '<p class="note">Sign in to launch containers.</p>' : ""}
+    ${w.previews.map(p => `<div class="project-line services"><div><span class="tag">${esc(p.mode)}</span> ${esc(p.name)} · ${status(p.status)}</div>
+      <div class="actions">${UP.has(p.status) && p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">Open app</a>` : ""}
+      ${session.signed_in ? act(UP.has(p.status) ? "stop" : "start", UP.has(p.status) ? "Stop containers" : "Start containers", {preview:p.name}) : ""}</div></div>`).join("")}`;
+}
+function renderProjects() {
+  if (!projectsData) return;
+  const query = $("project-filter").value.trim().toLowerCase();
+  const rows = projectsData.projects.map(p => {
+    const slugs = new Set([p.main, ...p.worktrees].map(w => w.project).filter(Boolean));
+    return {...p, vms: (vmData?.vms || []).filter(v => v.project && slugs.has(v.project))};
+  }).filter(p => [p.name, p.path, ...[p.main,...p.worktrees].flatMap(w => [w.branch,w.path,w.project]), ...p.vms.map(v => v.name)].join(" ").toLowerCase().includes(query));
+  $("project-count").textContent = projectsData.projects.length;
+  $("project-directory").textContent = projectsData.directory
+    ? `Projects in ${projectsData.directory} · plus repositories discovered from previews and worktrees`
+    : 'Set projects_dir in the host configuration to discover your main project folders automatically.';
+  const warnings = [...new Set([...projectsData.warnings, ...(vmData?.warnings || [])])];
+  if (!$("vm-error").hidden) warnings.push("VM inventory could not refresh. Open Virtual machines to retry.");
+  $("project-warning").hidden = !warnings.length;
+  $("project-warning").textContent = warnings.join(" ");
+  $("project-list").innerHTML = rows.map(p => `<details class="panel project-tree" data-project="${esc(p.path)}"${closedProjects.has(p.path) ? "" : " open"}>
+    <summary><strong>${esc(p.name)}</strong><span class="muted">${plural(p.worktrees.length,"worktree")}${p.vms.length ? " · " + plural(p.vms.length,"VM") : ""}</span><span class="mono path">${esc(home(p.path))}</span></summary>
+    <div class="project-content"><ul><li>${projectCheckoutHTML(p.main, p.main.git ? "Main checkout" : "Project folder")}</li>
+      ${p.vms.length ? `<li><strong>Virtual machines</strong><ul>${p.vms.map(v => `<li><div class="project-line"><div><strong>${esc(v.name)}</strong> · ${esc(v.state)}</div><div class="actions">${vmControls(v)}<button data-project-vm="${esc(v.name)}">Details &amp; connect</button></div></div>${v.control_note ? `<p class="note">${esc(v.control_note)}</p>` : ""}</li>`).join("")}</ul></li>` : ""}
+      ${p.worktrees.length ? `<li><strong>Worktrees</strong><ul>${p.worktrees.map(w => `<li>${projectCheckoutHTML(w, w.branch || "Detached worktree")}</li>`).join("")}</ul></li>` : ""}
+    </ul></div></details>`).join("") || `<div class="panel empty">${query ? "No projects match this filter." : "No projects discovered. Set projects_dir in the host configuration to the folder containing your projects, then refresh."}</div>`;
+}
+async function loadProjects() {
+  if (projectsBusy || $("tab-projects").hidden) return;
+  projectsBusy = true;
+  $("project-refresh").disabled = true;
+  try {
+    const res = await fetch("api/projects");
+    if (!res.ok) throw new Error(await res.text());
+    projectsData = await res.json();
+    renderProjects();
+    $("project-error").hidden = true;
+  } catch (e) {
+    $("project-error").hidden = false;
+    $("project-error").textContent = "Could not refresh projects. " + e.message + (projectsData ? " Showing previous results." : " Try Refresh projects.");
+    if (!projectsData) $("project-list").innerHTML = '<div class="panel empty">Project discovery unavailable.</div>';
+  } finally { projectsBusy = false; $("project-refresh").disabled = false; }
+}
+$("project-filter").oninput = renderProjects;
+$("project-refresh").onclick = () => { loadProjects(); loadVMs(); };
+$("project-list").addEventListener("toggle", e => {
+  if (!e.target.matches("details[data-project]")) return;
+  if (e.target.open) closedProjects.delete(e.target.dataset.project); else closedProjects.add(e.target.dataset.project);
+}, true);
+$("project-list").addEventListener("click", e => {
+  const button = e.target.closest("[data-project-vm]");
+  if (button) { $("vm-filter").value = button.dataset.projectVm; showTab("vms"); renderVMs(); }
+});
 
 // Tabs: the choice is kept in the address (#worktrees) and in the browser.
-const TABS = ["previews", "vms", "worktrees", "history"];
+const TABS = ["projects", "previews", "vms", "worktrees", "history"];
 function showTab(name) {
-  if (!TABS.includes(name)) name = "previews";
+  if (!TABS.includes(name)) name = "projects";
   for (const t of TABS) {
     $("tab-" + t).hidden = t !== name;
     $("tab-btn-" + t).setAttribute("aria-selected", t === name);
   }
-  if (name === "vms") loadVMs();
+  if (name === "vms" || name === "projects") loadVMs();
+  if (name === "projects") loadProjects();
   store.set("tab", name);
-  history.replaceState(null, "", name === "previews" ? location.pathname : "#" + name);
+  history.replaceState(null, "", name === "projects" ? location.pathname : "#" + name);
 }
 document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
 window.addEventListener("hashchange", () => showTab(location.hash.slice(1)));
-showTab(location.hash.slice(1) || store.get("tab") || "previews");
+showTab(location.hash.slice(1) || store.get("tab") || "projects");
 
 loadResources();
 setInterval(loadResources, 5000);
@@ -1366,7 +1470,7 @@ $("system-close").onclick = () => $("system").close();
 load();
 loadSession();
 // Refreshing redraws the rows, so it waits while a dialog or an actions menu is open.
-setInterval(() => { if (!document.hidden && !tipFor && !document.querySelector("dialog[open], details.menu[open]")) load(); }, 10000);
+setInterval(() => { if (!document.hidden && !tipFor && !document.activeElement?.closest("#project-list") && !document.querySelector("dialog[open], details.menu[open]")) load(); }, 10000);
 </script>
 </body>
 </html>

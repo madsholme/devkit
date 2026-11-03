@@ -99,6 +99,9 @@ password with `devkit web password` to act from it. For a first project, copy
 [Project recipe](docs/projects.md) for your own apps and [Host setup](docs/setup.md) for details.
 
 For headless or graphical QEMU VMs, `./bootstrap.sh --qemu` adds the optional Fedora/Ubuntu prerequisites.
+Set `"projects_dir": "~/Work"` in the [host config](docs/setup.md#host-config) to discover
+project folders automatically. The dashboard's **Projects** tree groups main checkouts,
+worktrees, container previews and VMs, with launch controls after sign-in.
 The dashboard groups VMs by project using [VM mappings](docs/projects.md#virtual-machines),
 with unmatched guests under Other VMs. Opt-in launcher/libvirt controls add start, stop and restart,
 including stopped managed VMs. See [VM connections](docs/dashboard.md#virtual-machines).

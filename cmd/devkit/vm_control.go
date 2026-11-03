@@ -221,6 +221,9 @@ func vmControlCatalog(ctx context.Context) ([]vmTarget, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, warnings := projectDirectories(cfg); len(warnings) > 0 {
+		return nil, fail("Project directory discovery is incomplete; fix projects_dir before controlling VMs.")
+	}
 	processes, warnings := vmControlProcesses()
 	domains := []virtualMachine{}
 	if _, err := exec.LookPath("virsh"); err == nil {
