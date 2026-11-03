@@ -121,7 +121,13 @@ again at any time to change something or repair the host. It:
 5. Starts Traefik (`devbox proxy up`). Without a trusted certificate yet, it first gets one from
    Let's Encrypt's staging service, whose rate limits forgive mistakes, then switches to production.
 6. Installs and starts the dashboard as the user service `devbox-web`, running this binary.
-7. Runs `devbox doctor`.
+7. With the `t3` harness (the default), makes sure T3 Code answers on `127.0.0.1:3773`. If it is
+   missing, it offers T3's official installer (`curl -fsSL https://t3.codes/install.sh | sh`, a
+   self-contained `t3` in `~/.local/bin`) and `t3 service install` (the user service `t3code`),
+   or starts the service if it is only stopped. Pair a device with `t3 pair` on the host. Don't
+   run `t3 up`: Traefik already serves T3 at `t3.<domain>`, and Tailscale Serve would take
+   port 443. T3 Code wants about 1.5 GB of memory; give a T3 host at least 2 GB.
+8. Runs `devbox doctor`.
 
 `devbox setup --yes` takes every default without asking (`--domain`, `--email`, `--harness`
 set them) and fails where there is none, e.g. a credential that is not configured yet.

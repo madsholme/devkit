@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -81,6 +82,25 @@ func (p *prompter) choose(question string, options []string, def string) (string
 func step(format string, args ...any) { fmt.Fprintf(stdout, "\n== "+format+"\n", args...) }
 
 var t3Harness = harnessConfig{Name: "T3 Code", Host: "t3", URL: "http://127.0.0.1:3773", Worktrees: "~/.t3/worktrees/*/*"}
+
+// t3Installer is T3 Code's official installer: a self-contained t3 in ~/.local/bin, no Node needed.
+const t3Installer = "curl -fsSL https://t3.codes/install.sh | sh"
+
+// The T3 step's probes; tests replace them.
+var (
+	harnessUp = func(h harnessConfig) bool { return harnessStatus(h, "").Status == "up" }
+	findT3    = func() string {
+		if path, err := exec.LookPath("t3"); err == nil {
+			return path
+		}
+		if home, err := os.UserHomeDir(); err == nil && exists(filepath.Join(home, ".local", "bin", "t3")) {
+			return filepath.Join(home, ".local", "bin", "t3")
+		}
+		return ""
+	}
+	t3Wait = time.Minute
+	t3Poll = 2 * time.Second
+)
 
 // Setup's slow or outward steps; tests replace them.
 var (
@@ -196,6 +216,12 @@ func setup(opts setupOptions) error {
 	if err := installWebService(); err != nil {
 		return err
 	}
+	if harness != nil && *harness == t3Harness {
+		step("T3 Code")
+		if err := ensureT3(p, dom); err != nil {
+			return err
+		}
+	}
 	happened("setup", "", "*."+dom)
 
 	step("Doctor")
@@ -233,10 +259,7 @@ func askHarness(p *prompter, flag string, current *harnessConfig, raw map[string
 	case hasKey(raw, "harness"): // set to null: no harness
 		def = "none"
 	default:
-		def = "none"
-		if home, _ := os.UserHomeDir(); exists(filepath.Join(home, ".t3")) {
-			def = "t3"
-		}
+		def = "t3" // setup installs it when it is missing
 	}
 	choice, err := p.choose("Agent harness on this host", []string{"t3", "none", "custom"}, def)
 	if err != nil || choice == "none" {
@@ -265,6 +288,61 @@ func askHarness(p *prompter, flag string, current *harnessConfig, raw map[string
 		return nil, err
 	}
 	return &h, checkHarness(&h)
+}
+
+// ensureT3 installs T3 Code and its background service where they are missing, asking first,
+// and waits for it to answer where Traefik expects it.
+func ensureT3(p *prompter, dom string) error {
+	if harnessUp(t3Harness) {
+		fmt.Fprintf(stdout, "T3 Code answers at %s.\n", t3Harness.URL)
+		return nil
+	}
+	t3 := findT3()
+	if t3 == "" {
+		install, err := p.confirm("T3 Code is not installed. Install it with its official installer ("+t3Installer+")?", true)
+		if err != nil {
+			return err
+		}
+		if !install {
+			fmt.Fprintln(stdout, "Skipped. Install it from https://t3.codes, then run devbox setup again.")
+			return nil
+		}
+		if _, err := runCommand([]string{"sh", "-c", t3Installer}, runOpts{}); err != nil {
+			return err
+		}
+		if t3 = findT3(); t3 == "" {
+			return fail("The T3 Code installer finished, but there is no t3 in ~/.local/bin.")
+		}
+	}
+	if _, err := probe("systemctl", "--user", "cat", "t3code.service"); err != nil {
+		service, err := p.confirm("Run T3 Code as a background service (t3 service install)?", true)
+		if err != nil {
+			return err
+		}
+		if !service {
+			fmt.Fprintln(stdout, "Skipped. Start it later with t3 service install.")
+			return nil
+		}
+		if info, err := meminfo(); err == nil && info["MemTotal"] < 2<<30 {
+			fmt.Fprintln(stdout, "Note: this host has less than 2 GB of memory; T3 Code and previews will be tight.")
+		}
+		// T3 asks nothing here; </dev/null keeps it off setup's own answers.
+		if _, err := runCommand([]string{"sh", "-c", `exec "$0" service install </dev/null`, t3}, runOpts{}); err != nil {
+			return err
+		}
+	} else if _, err := runCommand([]string{"systemctl", "--user", "start", "t3code"}, runOpts{capture: true}); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Waiting for T3 Code at %s (up to %s)...\n", t3Harness.URL, t3Wait)
+	for deadline := time.Now().Add(t3Wait); !harnessUp(t3Harness); time.Sleep(t3Poll) {
+		if time.Now().After(deadline) {
+			fmt.Fprintln(stdout, "T3 Code does not answer yet; see ~/.t3/userdata/logs/boot-service.log and t3 service status.")
+			return nil
+		}
+	}
+	fmt.Fprintf(stdout, "T3 Code is up at https://t3.%s. To connect a device, run t3 pair on this host.\n", dom)
+	fmt.Fprintln(stdout, "Skip t3 up: Traefik already serves T3 on the tailnet, and t3 up's Tailscale Serve would take its port 443.")
+	return nil
 }
 
 func hasKey(m map[string]any, key string) bool {

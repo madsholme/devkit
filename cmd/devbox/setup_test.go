@@ -286,3 +286,59 @@ func TestPrompterTakesDefaultsAndRepeatsInvalidChoices(t *testing.T) {
 }
 
 func bufioReader(s string) *bufio.Reader { return bufio.NewReader(strings.NewReader(s)) }
+
+func TestSetupInstallsT3OnlyWhereMissingAndAsked(t *testing.T) {
+	swap[io.Writer](t, &stdout, &bytes.Buffer{})
+	swap(t, &t3Poll, time.Millisecond)
+	swap(t, &t3Wait, 50*time.Millisecond)
+	var up, installed, service bool
+	var ran []string
+	swap(t, &harnessUp, func(harnessConfig) bool { return up })
+	swap(t, &findT3, func() string {
+		if installed {
+			return "/home/u/.local/bin/t3"
+		}
+		return ""
+	})
+	swap(t, &runCommand, func(args []string, _ runOpts) (string, error) {
+		cmd := strings.Join(args, " ")
+		ran = append(ran, cmd)
+		switch {
+		case cmd == "sh -c "+t3Installer:
+			installed = true
+		case strings.HasSuffix(cmd, "/home/u/.local/bin/t3"): // service install
+			service, up = true, true
+		case cmd == "systemctl --user cat t3code.service" && !service:
+			return "", errors.New("no unit")
+		case cmd == "systemctl --user start t3code":
+			up = true
+		}
+		return "", nil
+	})
+
+	// Answering yes twice installs T3 and its service, then waits for it.
+	if err := ensureT3(&prompter{in: bufioReader("\ny\n")}, "dev.example.com"); err != nil || !up {
+		t.Fatalf("install: up=%v, %v (ran %q)", up, err, ran)
+	}
+	if len(ran) != 3 || ran[0] != "sh -c "+t3Installer || !strings.Contains(ran[2], "service install") {
+		t.Errorf("ran %q", ran)
+	}
+
+	// Already answering: nothing runs.
+	ran = nil
+	if err := ensureT3(&prompter{in: bufioReader("")}, "dev.example.com"); err != nil || len(ran) != 0 {
+		t.Errorf("up: ran %q, %v", ran, err)
+	}
+
+	// Installed but stopped: setup starts the existing service without asking.
+	up, ran = false, nil
+	if err := ensureT3(&prompter{in: bufioReader("")}, "dev.example.com"); err != nil || !up || ran[len(ran)-1] != "systemctl --user start t3code" {
+		t.Errorf("stopped: ran %q, %v", ran, err)
+	}
+
+	// Declining the installer leaves the host alone.
+	up, installed, service, ran = false, false, false, nil
+	if err := ensureT3(&prompter{in: bufioReader("n\n")}, "dev.example.com"); err != nil || len(ran) != 0 || installed {
+		t.Errorf("declined: ran %q, %v", ran, err)
+	}
+}
