@@ -112,7 +112,7 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devkit exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
 | `devkit logs [-s service] [-f]` | Show (or follow) this worktree's live web log (or another service's) |
-| `devkit web` | Serve the web overview (see below); `devkit web password` enables its actions |
+| `devkit web` | Serve the dashboard (see [Dashboard](docs/dashboard.md)); `devkit web password` enables its actions |
 | `devkit ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devkit stop [preview]` | Stop containers; retain data |
 | `devkit start [preview]` | Resume saved configuration; retain data |
@@ -120,7 +120,7 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit gc [--yes]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
 | `devkit prune [--yes]` | Trim Docker build cache and remove old unused images, host-wide (limits in the host config); dry run without `--yes` |
 | `devkit publish HEAD` | Run the project's `publish` hook with the reviewed image ID |
-| `devkit share [preview] [--host NAME] [--hours N]` | Make a running preview public until it expires (see below) |
+| `devkit share [preview] [--host NAME] [--hours N]` | Make a running preview public until it expires (see [Public shares](docs/shares.md)) |
 | `devkit unshare [preview]` | End a public share; `--expired` removes all expired ones and leftovers |
 | `devkit shares` | List public shares, their URLs and expiry |
 | `devkit pair [--json]` | A one-time link, code and QR code to connect a phone or computer to T3 Code, valid 10 minutes |
