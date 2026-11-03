@@ -21,7 +21,7 @@ func mediaConfig() projectConfig {
 
 func fakeMediaHost(t *testing.T) {
 	t.Setenv("DEVBOX_STATE_DIR", t.TempDir())
-	swap(t, &mediaHostIP, func() (string, error) { return "100.69.127.125", nil })
+	swap(t, &mediaHostIP, func() (string, error) { return "100.64.0.10", nil })
 	swap(t, &mediaPublishedPorts, func(string) (map[int]bool, error) { return map[int]bool{}, nil })
 	swap(t, &mediaPortAvailable, func(string, int) bool { return true })
 }
@@ -56,7 +56,7 @@ func TestRenderMediaOnlyAddsDeclaredTailnetBindings(t *testing.T) {
 	cfg := mediaConfig()
 	cfg.MediaPorts[1].Target = 4443
 	env := withEnv(composeEnv(), map[string]string{
-		"DEVBOX_MEDIA_IP": "100.69.127.125", "DEVBOX_MEDIA_SFU_UDP_PORT": "20010", "DEVBOX_MEDIA_ICE_TCP_PORT": "20011",
+		"DEVBOX_MEDIA_IP": "100.64.0.10", "DEVBOX_MEDIA_SFU_UDP_PORT": "20010", "DEVBOX_MEDIA_ICE_TCP_PORT": "20011",
 	})
 	resolved, err := render(kit, cfg, "live", env, nil)
 	if err != nil {
@@ -65,7 +65,7 @@ func TestRenderMediaOnlyAddsDeclaredTailnetBindings(t *testing.T) {
 	services := object(resolved, "services")
 	ports := object(services, "web")["ports"].([]any)
 	udp, tcp := asObject(ports[0]), asObject(ports[1])
-	if udp["host_ip"] != "100.69.127.125" || udp["published"] != "20010" || udp["target"] != 20010 || udp["protocol"] != "udp" {
+	if udp["host_ip"] != "100.64.0.10" || udp["published"] != "20010" || udp["target"] != 20010 || udp["protocol"] != "udp" {
 		t.Fatalf("wrong UDP mapping: %v", udp)
 	}
 	if tcp["published"] != "20011" || tcp["target"] != 4443 || tcp["protocol"] != "tcp" {
@@ -80,13 +80,13 @@ func TestRenderMediaOnlyAddsDeclaredTailnetBindings(t *testing.T) {
 	if _, err := render(kit, clash, "live", env, nil); err == nil {
 		t.Error("accepted a fixed target that collides with an allocated target")
 	}
-	for _, ip := range []string{"0.0.0.0", "127.0.0.1", "192.168.1.21", "::", "203.0.113.1", ""} {
+	for _, ip := range []string{"0.0.0.0", "127.0.0.1", "192.168.0.10", "::", "203.0.113.1", ""} {
 		if _, err := render(kit, cfg, "live", withEnv(env, map[string]string{"DEVBOX_MEDIA_IP": ip}), nil); err == nil {
 			t.Errorf("accepted non-tailnet IP %q", ip)
 		}
 	}
 	for _, source := range []string{
-		`{"services":{"web":{"ports":[{"published":"20000","target":20000,"host_ip":"100.69.127.125"}]}}}`,
+		`{"services":{"web":{"ports":[{"published":"20000","target":20000,"host_ip":"100.64.0.10"}]}}}`,
 		`{"services":{"web":{"network_mode":"host"}}}`,
 		`{"services":{"web":{"container_name":"fixed"}}}`,
 	} {
@@ -99,12 +99,12 @@ func TestRenderMediaOnlyAddsDeclaredTailnetBindings(t *testing.T) {
 
 func TestMediaAllocationSkipsReservedAndOccupiedPorts(t *testing.T) {
 	swap(t, &mediaPortAvailable, func(_ string, p int) bool { return p != 20001 })
-	ports, err := allocateMediaPorts("100.69.127.125", mediaConfig().MediaPorts, map[int]bool{20000: true, 20003: true})
+	ports, err := allocateMediaPorts("100.64.0.10", mediaConfig().MediaPorts, map[int]bool{20000: true, 20003: true})
 	if err != nil || ports["sfu_udp"] != 20002 || ports["ice_tcp"] != 20004 {
 		t.Fatalf("allocation %v, %v", ports, err)
 	}
 	swap(t, &mediaPortAvailable, func(string, int) bool { return false })
-	if _, err := allocateMediaPorts("100.69.127.125", mediaConfig().MediaPorts, map[int]bool{}); err == nil {
+	if _, err := allocateMediaPorts("100.64.0.10", mediaConfig().MediaPorts, map[int]bool{}); err == nil {
 		t.Error("accepted an exhausted port range")
 	}
 }
@@ -135,12 +135,12 @@ func TestMediaPortDockerBindingsIncludeUnmanagedAndStopped(t *testing.T) {
 			return "stopped-unmanaged", nil
 		}
 		if strings.Join(args, " ") == "docker inspect stopped-unmanaged" {
-			return `[{"HostConfig":{"PortBindings":{"5000/udp":[{"HostIp":"100.69.127.125","HostPort":"20000"}],"5001/tcp":[{"HostIp":"0.0.0.0","HostPort":"20001"}],"5002/tcp":[{"HostIp":"127.0.0.1","HostPort":"20002"}]}}}]`, nil
+			return `[{"HostConfig":{"PortBindings":{"5000/udp":[{"HostIp":"100.64.0.10","HostPort":"20000"}],"5001/tcp":[{"HostIp":"0.0.0.0","HostPort":"20001"}],"5002/tcp":[{"HostIp":"127.0.0.1","HostPort":"20002"}]}}}]`, nil
 		}
 		t.Fatalf("unexpected command %v", args)
 		return "", nil
 	})
-	used, err := mediaPublishedPorts("100.69.127.125")
+	used, err := mediaPublishedPorts("100.64.0.10")
 	if err != nil || !used[20000] || !used[20001] || used[20002] {
 		t.Fatalf("ports %v, error %v", used, err)
 	}
@@ -247,7 +247,7 @@ func TestRealComposeInterpolatesMediaEnvironment(t *testing.T) {
 	}
 	web := object(object(resolved, "services"), "web")
 	environment := object(web, "environment")
-	if environment["ICE_IP"] != "100.69.127.125" || environment["UDP_PORT"] != strconv.Itoa(mediaPortFirst) {
+	if environment["ICE_IP"] != "100.64.0.10" || environment["UDP_PORT"] != strconv.Itoa(mediaPortFirst) {
 		t.Fatalf("wrong runtime environment: %v", environment)
 	}
 	data, _ := os.ReadFile(path)

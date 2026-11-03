@@ -1,14 +1,8 @@
 # devbox
 
 A small, single-host kit for remote agent development and private previews.
-The Macs connect to one Linux host over Tailscale. Git owns workspace metadata;
-Docker labels identify previews. No central task database.
-
-Target supplied for the first installation: `rene@192.168.1.21`.
-Configured domain: `dev.steenfeldt.net`, Cloudflare DNS, Tailscale IP `100.69.127.125`.
-Wildcard HTTPS is commissioned. T3 is at https://t3.dev.steenfeldt.net.
-The Hetzner/Dokploy destination is pending.
-See [installation status](STATUS.md) for completed runtime checks.
+Your other machines connect to one Linux host over Tailscale. Git owns workspace
+metadata; Docker labels identify previews. No central task database.
 
 ## Workflow
 
@@ -78,8 +72,8 @@ The limits and the daily run are set in the host config's `prune` section.
   The web image is resolved to a Docker image ID; no review service may bind-mount
   host files. The temporary checkout is removed after the build. Test data remains
   mutable. Repeating review for the same commit resumes the existing artifact.
-- Team review: explicit deployment to Hetzner/Dokploy. The adapter needs destination
-  configuration; see [publishing](docs/publishing.md).
+- Team review: explicit deployment through the project's `publish` hook, e.g. to
+  Hetzner/Dokploy. The adapter needs destination configuration; see [publishing](docs/publishing.md).
 
 Commit the project recipe before using `review`; it reads configuration from the
 selected commit. Generated inputs should be deterministic and dependencies locked.
@@ -429,11 +423,11 @@ Give your agent the following project instruction:
 > preview data. Publish to the team only when requested.
 
 Use Git worktree commands to discover existing workspaces, regardless of which
-harness created them. T3 stays on localhost:3773 behind Traefik at
-https://t3.dev.steenfeldt.net. Remove the old Tailscale Serve 443 mapping only after
-the new HTTPS endpoint is ready. Clients then reconnect using the new address.
-Do not enable T3's Tailscale Serve 443 mapping again: it would conflict with
-Traefik. No unverified automatic worktree hook is required.
+harness created them. The harness stays on localhost behind Traefik at
+`<host>.<domain>` (T3: localhost:3773, https://t3.dev.example.com). If T3 used
+Tailscale Serve on 443 before, remove that mapping only after the new HTTPS endpoint
+is ready; clients then reconnect using the new address. Do not enable it again: it
+would conflict with Traefik. No unverified automatic worktree hook is required.
 
 ## Acceptance check
 
@@ -447,7 +441,7 @@ Traefik. No unverified automatic worktree hook is required.
 6. Increment the review counter, stop/start it, and verify the count persists.
 7. Open the same URLs from the other Mac. Disconnect the first client; agents and
    previews should continue on the Linux host.
-8. Configure the publishing adapter and complete one team review on Hetzner.
+8. Configure the publishing adapter and complete one team review on your destination.
 
 Local validation commands: `go test ./...` and `bin/devbox --help`. Full runtime acceptance requires a Docker daemon,
 the Linux host, real domain/DNS settings and a configured publishing destination.
@@ -466,3 +460,7 @@ ports and restart persistence through the tailnet IP, and cleans them up.
 - https://doc.traefik.io/traefik/reference/install-configuration/tls/certificate-resolvers/acme/
 - https://letsencrypt.org/docs/challenge-types/
 - https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md
+
+## License
+
+MIT; see [LICENSE](LICENSE).
