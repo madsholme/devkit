@@ -25,7 +25,9 @@ old names are dropped on purpose.
 - `bootstrap.sh`: installs the system prerequisites (Docker, Tailscale, docker group,
   firewall for tailscale0, lingering) on Ubuntu/Debian (and derivatives) and Fedora with sudo. POSIX sh, idempotent. devkit itself never uses sudo.
 - `bundle.sh`: builds `bin/devkit-linux-<arch>.tar.gz` (static binary, bootstrap.sh, template,
-  README, LICENSE) for hosts without Go.
+  README, LICENSE) for hosts without Go; `DEVKIT_VERSION` stamps a release tag into the binary.
+  `.github/workflows/release.yml` runs it for amd64 and arm64 on a `v*` tag and publishes a
+  GitHub release; a manual run only builds the bundles as an artifact.
 - `bin/devkit`: the built binary (gitignored). Build with
   `go build -o bin/devkit ./cmd/devkit`; the Go version is pinned in `mise.toml`.
 - `web/index.html`: the dashboard page. Vanilla JS, no build step, no dependencies.

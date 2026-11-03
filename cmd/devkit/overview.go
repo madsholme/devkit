@@ -560,12 +560,15 @@ func logsCommand(id string, follow bool) []string {
 	return append(args, id)
 }
 
-// buildVersion is the commit devkit was built from, as Go records it: short, with "+" for
-// uncommitted changes, and in full. Builds outside a Git checkout have none.
+// releaseTag is set for release builds: bundle.sh passes -ldflags "-X main.releaseTag=v0.1.0".
+var releaseTag string
+
+// buildVersion is the release tag, or else the commit devkit was built from as Go records it
+// (short, with "+" for uncommitted changes), and the full commit. Builds outside Git have none.
 func buildVersion() (string, string) {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return "", ""
+		return releaseTag, ""
 	}
 	var commit, modified string
 	for _, s := range info.Settings {
@@ -578,7 +581,10 @@ func buildVersion() (string, string) {
 			}
 		}
 	}
-	if len(commit) < 7 {
+	switch {
+	case releaseTag != "":
+		return releaseTag, commit
+	case len(commit) < 7:
 		return "", ""
 	}
 	return commit[:7] + modified, commit

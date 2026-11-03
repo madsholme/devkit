@@ -4,6 +4,33 @@ A small, single-host kit for remote agent development and private previews.
 Your other machines connect to one Linux host over Tailscale. Git owns workspace
 metadata; Docker labels identify previews. No central task database.
 
+Each Git worktree gets its own preview (its app, database and data in Docker) at a private
+HTTPS address such as `https://myapp-fix-login.dev.example.com`, reachable only on your
+tailnet. A dashboard shows every preview and worktree, and coding agents (T3 Code by default)
+run on the same host.
+
+## Quick start
+
+You need a Linux host with systemd (Ubuntu, Debian or Fedora for the bootstrap script; 2 GB of
+memory or more), a Tailscale account, and a domain whose DNS has an API for the wildcard
+certificate (Cloudflare gets the guided path). Signed in to the host as the user who will run
+devkit, not root:
+
+```sh
+# arm64 hosts: devkit-linux-arm64.tar.gz
+curl -fsSL https://github.com/steenfeldt/devkit/releases/latest/download/devkit-linux-amd64.tar.gz | tar -xz
+cd devkit
+./bootstrap.sh                      # Docker, Tailscale and lingering, with sudo; open the Tailscale link it prints
+# log out and back in, so Docker works without sudo
+install -D devkit ~/.local/bin/devkit
+devkit setup                        # domain, DNS token, certificate, dashboard and T3 Code
+```
+
+Then open `https://devkit.<your domain>` from a device on your tailnet, and set a dashboard
+password with `devkit web password` to act from it. For a first project, copy
+`project-template` into a Git repository, commit it and run `devkit live` there; see
+[Project recipe](#project-recipe) for your own apps and [Host setup](#host-setup) for details.
+
 ## Workflow
 
 Worktree → agent work → commit → local review → explicit team deployment → merge.
@@ -19,6 +46,7 @@ software; `devkit setup` configures the rest of the host from your answers.
 |---|---|
 | `devkit setup` | Configure this host step by step; safe to run again (see [Host setup](#host-setup)) |
 | `devkit doctor` | Check the host and say how to fix what is missing |
+| `devkit version` | Show which devkit release or commit this is (the dashboard's footer shows it too) |
 | `devkit proxy up` | Write Traefik's configuration from the host config and start or update it |
 | `devkit live` | Start/resume current workspace's live preview |
 | `devkit review HEAD` | Clean checkout, checks, image build, isolated review runtime |
@@ -111,7 +139,9 @@ install -d "$HOME/.local/bin" && ln -sf "$PWD/bin/devkit" "$HOME/.local/bin/devk
 devkit setup
 ```
 
-For a host without Go, `./bundle.sh` (or `./bundle.sh arm64`) builds
+Releases on GitHub carry these bundles for amd64 and arm64: pushing a version tag
+(`git tag v0.1.0 && git push origin v0.1.0`) runs `.github/workflows/release.yml`, which checks the
+code, builds both and publishes them with checksums. For a host without Go, `./bundle.sh` (or `./bundle.sh arm64`) builds
 `bin/devkit-linux-<arch>.tar.gz` here: the binary, `bootstrap.sh`, `project-template`, README and
 LICENSE. Copy it over, unpack it, run `./bootstrap.sh`, then `install -D devkit ~/.local/bin/devkit`
 and `devkit setup`.

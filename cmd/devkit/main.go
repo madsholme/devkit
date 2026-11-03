@@ -19,6 +19,7 @@ commands:
   setup [--yes] [--domain D] [--email E] [--harness t3|none|custom]
                        configure this host: settings, credentials, DNS, Traefik and the dashboard
   doctor               check this host and say how to fix what is missing
+  version              show which devkit release or commit this is
   proxy up             write Traefik's configuration from the host config and start or update it
   live                 start or resume a preview of working files
   review [commit]      fresh build from a committed version (default HEAD)
@@ -146,6 +147,10 @@ func dispatch(args []string) (int, error) {
 	switch command {
 	case "-h", "--help", "help":
 		return 0, helpRequested{}
+	case "version", "--version":
+		version, commit := buildVersion()
+		fmt.Fprintln(stdout, strings.TrimSpace("devkit "+firstOf(version, "(unknown version)")+" "+commit))
+		return 0, nil
 	case "setup":
 		set := flags(command)
 		var opts setupOptions

@@ -1,0 +1,55 @@
+# A version tag (git tag v0.1.0 && git push origin v0.1.0) checks the code, builds the Linux
+# bundles with bundle.sh and publishes them as a GitHub release. Run it by hand (Actions →
+# Release → Run workflow) to build the bundles as a workflow artifact without releasing.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read the Go version from mise.toml
+        id: go
+        run: echo "version=$(sed -n 's/^go = "\(.*\)"/\1/p' mise.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+
+      - name: Check
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet ./...
+          go test ./...
+
+      - name: Build the bundles
+        env:
+          DEVKIT_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          ./bundle.sh amd64
+          ./bundle.sh arm64
+          cd bin && sha256sum devkit-linux-*.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+      - name: Keep the bundles of a manual run
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v7
+        with:
+          name: devkit-bundles
+          path: |
+            bin/devkit-linux-*.tar.gz
+            bin/SHA256SUMS
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" bin/devkit-linux-*.tar.gz bin/SHA256SUMS --title "devkit $GITHUB_REF_NAME" --generate-notes
