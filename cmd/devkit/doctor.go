@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/user"
@@ -238,6 +239,18 @@ func proxyChecks(cfg hostConfig, dom, ip string) []check {
 		return []check{bad("traefik", "%v", err)}
 	}
 	var checks []check
+	if ip != "" {
+		addrs := listenAddresses(cfg.Proxy, ip)
+		if err := checkListen(addrs); err != nil {
+			checks = append(checks, bad("listen", "%v", err))
+		} else if note := listenNote(addrs, ip, dom); note == "" {
+			checks = append(checks, ok("listen", "tailnet only (%s)", ip))
+		} else if all, _ := netip.ParseAddr(addrs[0]); all.IsUnspecified() && publicAddresses() != nil {
+			checks = append(checks, warn("listen", "%s", note))
+		} else {
+			checks = append(checks, ok("listen", "%s. %s", strings.Join(addrs, ", "), note))
+		}
+	}
 	tokens := true
 	for _, key := range sortedKeys(cfg.Proxy.DNSEnv) {
 		source := cfg.Proxy.DNSEnv[key]
@@ -303,7 +316,7 @@ func proxyChecks(cfg hostConfig, dom, ip string) []check {
 
 // proxyCurrent reports whether the proxy files on disk are what the host config renders now.
 func proxyCurrent(cfg hostConfig, dom, ip string) bool {
-	compose, dynamic := proxyFiles(cfg, dom, ip)
+	compose, dynamic := proxyFiles(cfg, dom, listenAddresses(cfg.Proxy, ip))
 	for name, want := range map[string]map[string]any{"compose.yaml": compose, "dynamic.yaml": dynamic} {
 		data, err := os.ReadFile(filepath.Join(proxyDir(), name))
 		if err != nil {

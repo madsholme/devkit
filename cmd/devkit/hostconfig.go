@@ -49,6 +49,9 @@ type proxyConfig struct {
 	DNSEnv      map[string]secretSource `json:"dns_env"`         // the provider's API credentials, e.g. CF_DNS_API_TOKEN
 	Staging     bool                    `json:"staging"`         // use Let's Encrypt's staging CA (untrusted certificates)
 	Image       string                  `json:"image,omitempty"` // Traefik image; default defaultTraefik
+	// Listen adds addresses for Traefik besides the Tailscale IP: other addresses of this host, or
+	// 0.0.0.0 or :: for every interface.
+	Listen []string `json:"listen,omitempty"`
 }
 
 const (

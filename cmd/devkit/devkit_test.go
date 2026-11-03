@@ -272,6 +272,28 @@ func TestSavedPreviewGainsRestartPolicy(t *testing.T) {
 	}
 }
 
+func TestPreviewRoutersAnswerOnEveryEntrypoint(t *testing.T) {
+	service := map[string]any{"labels": map[string]any{}}
+	expose(service, "demo", "demo", "Host(`demo.dev.example.com`)", "8000")
+	for key := range object(service, "labels") {
+		if strings.HasSuffix(key, ".entrypoints") {
+			t.Errorf("new previews pin %s", key)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "compose.json")
+	os.WriteFile(path, []byte(`{"services": {"web": {"restart": "unless-stopped", "labels": {"devkit.mode": "live",
+		"traefik.http.routers.demo.entrypoints": "websecure", "traefik.http.routers.demo.rule": "Host(`+"`demo`"+`)"}}}}`), 0o600)
+	swap(t, &composeRun, func(string, ...string) error { return nil })
+	if err := up(path); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ := readCompose(path)
+	labels := object(object(object(saved, "services"), "web"), "labels")
+	if _, pinned := labels["traefik.http.routers.demo.entrypoints"]; pinned || labels["traefik.http.routers.demo.rule"] == nil {
+		t.Errorf("saved labels: %v", labels)
+	}
+}
+
 func TestRefuseSourceMountsInReviewAndSharedData(t *testing.T) {
 	for _, config := range []string{
 		`{"services": {"web": {"volumes": [{"type": "bind", "source": "/tmp"}]}}}`,
