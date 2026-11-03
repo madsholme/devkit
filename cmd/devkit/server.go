@@ -121,6 +121,7 @@ func newHandler() (http.Handler, error) {
 		return nil, err
 	}
 	res := newResources()
+	vms := newVMInventory()
 	go reapLoop()
 	actions := newActionHandler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +141,8 @@ func newHandler() (http.Handler, error) {
 		query := r.URL.Query()
 		var err error
 		switch r.URL.Path {
+		case "/api/vms":
+			sendJSON(w, vms.snapshot(r.Context()))
 		case "/api/overview":
 			var data overviewData
 			if data, err = overview(); err == nil {

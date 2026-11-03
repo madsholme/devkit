@@ -28,6 +28,7 @@ commands:
                        run a command in this worktree's live web container (or SERVICE's)
   logs [-s SERVICE] [-f]
                        show this worktree's live web log, or SERVICE's (-f, --follow to follow it)
+  vms [--json]          list running QEMU/libvirt VMs and private connection commands
   ls                   list managed previews, including stopped ones
   web [--host H] [--port P]
                        serve the web overview (default 127.0.0.1 and the configured port, 3780)
@@ -162,6 +163,13 @@ func dispatch(args []string) (int, error) {
 			return 2, err
 		}
 		return 0, noted("setup", "", setup(opts))
+	case "vms":
+		set := flags(command)
+		asJSON := set.Bool("json", false, "")
+		if err := parse(set, rest); err != nil {
+			return 2, err
+		}
+		return 0, listVMs(*asJSON)
 	case "doctor":
 		if err := parse(flags(command), rest); err != nil {
 			return 2, err

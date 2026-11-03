@@ -18,12 +18,15 @@ old names are dropped on purpose.
   `cloudflare.go` (API client) and `hostconfig.go` (`~/.config/devkit/config.json`: domain,
   harness, proxy, web, share, and secret sources). Host setup: `setup.go` (`devkit setup`),
   `proxy.go` (`devkit proxy up` renders and starts Traefik) and `doctor.go` (`devkit doctor`).
+  `vms.go` discovers active QEMU/libvirt VMs read-only (`devkit vms`, `/api/vms`):
+  allowlisted metadata only, bounded probes, UUID deduplication and private SSH connection commands.
   `pair.go` issues T3 Code pairing links (`devkit pair`, `/api/pair`) and `qr.go` draws them as QR
   codes (its own small encoder; tests pin output that was checked with a real decoder).
   `history.go` is the event log (`~/.local/state/devkit/history.jsonl`). Package variables such as `runCommand`, `dockerContainers` and
   `repository` are the seams tests replace.
 - `bootstrap.sh`: installs the system prerequisites (Docker, Tailscale, docker group,
-  firewall for tailscale0, lingering) on Ubuntu/Debian (and derivatives) and Fedora with sudo. POSIX sh, idempotent. devkit itself never uses sudo.
+  firewall for tailscale0, lingering) on Ubuntu/Debian (and derivatives) and Fedora with sudo. POSIX sh, idempotent.
+  Optional `--qemu` installs native QEMU/KVM, libvirt, UEFI and TPM prerequisites. devkit itself never uses sudo.
 - `bundle.sh`: builds `bin/devkit-linux-<arch>.tar.gz` (static binary, bootstrap.sh, template,
   README, docs, LICENSE) for hosts without Go; `DEVKIT_VERSION` stamps a release tag into the binary.
   `.github/workflows/release.yml` runs it for amd64 and arm64 on a `v*` tag and publishes a
@@ -58,6 +61,8 @@ old names are dropped on purpose.
 - The dashboard runs as the user service `devkit-web` from `bin/devkit`. After
   changing Go code or `web/`, rebuild and run `systemctl --user restart devkit-web`
   (the page is embedded, so page edits need a rebuild too).
+- VM checks: `python3 tests/bootstrap_acceptance.py` uses mocked system commands;
+  `DEVKIT_VM_RUNTIME_TEST=1 python3 tests/vm_runtime_acceptance.py` uses temporary paused QEMU guests (build first).
 - UI checks: jsdom in a scratch directory for behaviour, headless Firefox for
   screenshots. Firefox is a snap, so write screenshots to a non-hidden folder
   under `~`, not `/tmp` or a dot-directory.

@@ -52,12 +52,29 @@ h1 { font-size: 20px; line-height: 1.15; margin: 0; overflow-wrap: anywhere; }
 .foot { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
 h3 { font-size: 14px; margin: 0 0 8px; }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 24px 0 14px; }
+.tabs { display: flex; overflow-x: auto; overflow-y: hidden; gap: 4px; border-bottom: 1px solid var(--line); margin: 24px 0 14px; }
 .tabs button { border: 0; border-radius: 0; background: none; padding: 8px 12px; margin-bottom: -1px; border-bottom: 2px solid transparent;
   font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .tabs button:hover { color: var(--text); }
 .tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
 .tabs .count { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.vm-row { padding: 16px; border-bottom: 1px solid var(--line); }
+.vm-row:last-child { border-bottom: 0; }
+.vm-overview { display: grid; grid-template-columns: minmax(180px, 1.4fr) 1fr 1fr 1fr; gap: 16px; }
+.vm-name { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.vm-name svg { width: 20px; height: 20px; flex: none; color: var(--muted); }
+.vm-meta { margin: 4px 0 0 28px; font-size: 12px; color: var(--muted); }
+.vm-facts { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.vm-facts dt { color: var(--muted); font-size: 12px; }
+.vm-facts dd { margin: 2px 0 8px; font-variant-numeric: tabular-nums; }
+.vm-connect { margin-top: 10px; font-size: 13px; }
+.vm-connect summary { cursor: pointer; color: var(--accent); width: fit-content; padding: 4px 0; }
+.vm-command { display: flex; align-items: start; gap: 8px; margin: 8px 0 16px; }
+.vm-command code { flex: 1; min-width: 0; padding: 8px; background: var(--code); overflow-wrap: anywhere; white-space: pre-wrap; }
+.vm-command button { flex: none; min-height: 34px; }
+.vm-help { color: var(--muted); font-size: 12px; max-width: 75ch; }
+.vm-empty { padding: 24px 16px; }
+@media (max-width: 720px) { .vm-overview { grid-template-columns: 1fr 1fr; } .vm-identity { grid-column: 1 / -1; } .tabs button { white-space: nowrap; } }
 .notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; border: 1px solid var(--warn); border-radius: 10px;
   padding: 10px 14px; margin: 0 0 12px; font-size: 13px; }
 .notice b { color: var(--warn); }
@@ -315,6 +332,7 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
 
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-btn-previews" data-tab="previews" aria-controls="tab-previews">Previews <span class="count" id="preview-count"></span></button>
+    <button role="tab" id="tab-btn-vms" data-tab="vms" aria-controls="tab-vms">Virtual machines <span class="count" id="vm-count"></span></button>
     <button role="tab" id="tab-btn-worktrees" data-tab="worktrees" aria-controls="tab-worktrees">Worktrees <span class="count" id="worktree-count"></span></button>
     <button role="tab" id="tab-btn-history" data-tab="history" aria-controls="tab-history">History <span class="count" id="history-count"></span></button>
   </nav>
@@ -334,6 +352,14 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <thead><tr><th>Preview</th><th>Status</th><th class="hide-sm">Branch · commit</th><th class="hide-sm">Up</th><th></th></tr></thead>
     <tbody id="previews"></tbody>
   </table></div>
+  </section>
+
+  <section id="tab-vms" role="tabpanel" aria-labelledby="tab-btn-vms" hidden>
+    <div class="filters"><input type="search" id="vm-filter" aria-label="Filter virtual machines" placeholder="Filter virtual machines…" autocomplete="off"><button id="vm-refresh">Refresh VMs</button><span class="refresh" id="vm-updated" aria-live="polite"></span></div>
+    <div class="notice" id="vm-warning" role="status" hidden></div>
+    <div class="error" id="vm-error" role="alert" hidden></div>
+    <div class="panel" id="vm-list"><div class="vm-empty">Loading virtual machines…</div></div>
+    <p class="vm-help">Active VMs visible to this devkit user. CPU is host usage (100% = one core); resident memory includes QEMU overhead. GPU usage is unavailable.</p>
   </section>
 
   <section id="tab-worktrees" role="tabpanel" aria-labelledby="tab-btn-worktrees" hidden>
@@ -1251,14 +1277,66 @@ document.addEventListener("click", e => {
   showTab("history");
 });
 
+// VM probes run independently of Docker and only while their tab is visible.
+let vmData = null, vmBusy = false;
+const vmIcon = display => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${display === "headless" ? '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3m6 0h5"/>' : display === "unknown" ? '<circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 0 1 6 0c0 2-3 2-3 4m0 3h.01"/>' : '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M12 17v4m-4 0h8"/>'}</svg>`;
+const vmSize = value => value == null || value === 0 ? "Unavailable" : bytes(value).replace("GB", "GiB").replace("MB", "MiB");
+const vmCommand = (text, label) => text ? `<div class="vm-command"><code>${esc(text)}</code><button data-copy="${esc(text)}" aria-label="${esc(label)}">Copy</button></div>` : "";
+function renderVMs() {
+  if (!vmData) return;
+  const open = new Set([...document.querySelectorAll("[data-vm-connect][open]")].map(el => el.dataset.vmConnect));
+  const filter = $("vm-filter").value.toLowerCase();
+  const rows = vmData.vms.filter(v => [v.name, v.source, v.display].join(" ").toLowerCase().includes(filter));
+  $("vm-count").textContent = vmData.vms.length;
+  $("vm-list").innerHTML = rows.length ? rows.map(v => {
+    const label = v.display === "headless" ? "Headless" : v.display === "unknown" ? "Display unknown" : v.display === "local" ? "Local display" : v.display.toUpperCase() + " display";
+    const source = v.source === "qemu" ? "Standalone QEMU" : v.source === "qemu:///session" ? "libvirt · session" : "libvirt · system";
+    const connections = v.connections.filter(c => c.command);
+    return `<article class="vm-row"><div class="vm-overview">
+      <div class="vm-identity"><div class="vm-name">${vmIcon(v.display)}<strong>${esc(v.name)}</strong></div><div class="vm-meta">${esc(label)} · ${esc(v.state)}<br>${esc(source)}${v.pid ? " · PID " + esc(v.pid) : ""}</div></div>
+      <dl class="vm-facts"><dt>Allocated</dt><dd>${esc(v.vcpus || "Unknown")} vCPUs · ${esc(vmSize(v.memory_bytes))} RAM</dd><dt>Disk capacity</dt><dd>${esc(vmSize(v.disk_bytes))}</dd></dl>
+      <dl class="vm-facts"><dt>Graphics / GPU</dt><dd>${esc(v.graphics.length ? v.graphics.join(", ") : "Not reported")}</dd></dl>
+      <dl class="vm-facts"><dt>CPU usage</dt><dd>${v.cpu_percent == null ? (v.cpu_status === "unavailable" ? "Unavailable" : "Awaiting sample") : esc(v.cpu_percent.toFixed(1)) + "%"}</dd><dt>Resident memory</dt><dd>${esc(vmSize(v.rss_bytes))}</dd></dl>
+      </div>${connections.length ? `<details class="vm-connect" data-vm-connect="${esc(v.id)}"${open.has(v.id) ? " open" : ""}><summary>Connect privately</summary>
+      <p>Run these commands on your computer. Keep the tunnel terminal open, then connect from a second terminal.</p>
+      ${connections.map(c => `<h3>${c.kind === "ssh" ? "Guest SSH" : c.kind === "console" ? "Serial console" : esc(c.kind.toUpperCase())}</h3>${c.tunnel ? "<div>1. Open the SSH tunnel</div>" + vmCommand(c.tunnel, "Copy SSH tunnel") + "<div>2. Connect to the VM</div>" : ""}${vmCommand(c.command, "Copy connection command")}${c.kind === "console" ? '<p class="vm-help">Requires a configured guest serial console and libvirt console permission. Press Ctrl+] to leave.</p>' : ""}`).join("")}
+      <p class="vm-help">SSH access to the devkit host is required. Install virt-viewer on your computer for SPICE/VNC. If the local port is busy, change it in both commands. Use your existing guest key with SSH if required.</p></details>` : ""}
+      ${v.connection_note ? `<p class="vm-help">${esc(v.connection_note)}</p>` : ""}</article>`;
+  }).join("") : `<div class="vm-empty">${filter ? "No virtual machines match this filter." : "No running virtual machines discovered."}<p class="vm-help">${filter ? "Try a different name or display type." : "Start a QEMU or libvirt VM using your existing workflow, then refresh. Optional host prerequisites: ./bootstrap.sh --qemu."}</p></div>`;
+}
+async function loadVMs() {
+  if (vmBusy) return;
+  vmBusy = true;
+  $("vm-refresh").disabled = true;
+  try {
+    const res = await fetch("api/vms");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    vmData = await res.json();
+    renderVMs();
+    $("vm-warning").hidden = !vmData.warnings.length;
+    $("vm-warning").textContent = vmData.warnings.join(" ");
+    $("vm-error").hidden = true;
+    $("vm-updated").textContent = "Updated " + new Date().toLocaleTimeString();
+  } catch (e) {
+    $("vm-error").hidden = false;
+    $("vm-error").textContent = "Could not refresh virtual machines. " + e.message + ". Try Refresh VMs.";
+    $("vm-updated").textContent = vmData ? "Showing previous results" : "";
+    if (!vmData) $("vm-list").innerHTML = '<div class="vm-empty">VM inventory unavailable.</div>';
+  } finally { vmBusy = false; $("vm-refresh").disabled = false; }
+}
+$("vm-refresh").onclick = loadVMs;
+$("vm-filter").oninput = renderVMs;
+setInterval(() => { if (!document.hidden && !$("tab-vms").hidden && !document.activeElement?.closest("#vm-list")) loadVMs(); }, 10000);
+
 // Tabs: the choice is kept in the address (#worktrees) and in the browser.
-const TABS = ["previews", "worktrees", "history"];
+const TABS = ["previews", "vms", "worktrees", "history"];
 function showTab(name) {
   if (!TABS.includes(name)) name = "previews";
   for (const t of TABS) {
     $("tab-" + t).hidden = t !== name;
     $("tab-btn-" + t).setAttribute("aria-selected", t === name);
   }
+  if (name === "vms") loadVMs();
   store.set("tab", name);
   history.replaceState(null, "", name === "previews" ? location.pathname : "#" + name);
 }

@@ -8,7 +8,7 @@ also mentions reclaimable Docker data from 5 GB up) that opens a system monitor:
 per-container usage, top host processes and Docker disk use. Containers and processes
 are sampled only while it is open.
 
-Below it are three tabs, remembered per browser and linkable (`#worktrees`, `#history`):
+Below it are four tabs, remembered per browser and linkable (`#vms`, `#worktrees`, `#history`):
 
 - **Previews**: mode, health, branch/commit, uptime and URL. A live preview shows its
   worktree's current commit and uncommitted changes, a review how far its worktree has
@@ -17,12 +17,15 @@ Below it are three tabs, remembered per browser and linkable (`#worktrees`, `#hi
   networks, mounts, environment with secret-looking values masked, labels) and logs
   (recent lines, or followed live). Previews whose worktree is gone (what `devkit gc`
   would remove) are marked, with a notice above the list.
+- **Virtual machines**: active standalone QEMU and libvirt VMs, with display/headless icons,
+  allocated RAM/vCPUs, disk capacity, graphics and host CPU/resident-memory usage. Expand
+  **Connect privately** for SSH tunnels and remote-viewer or guest SSH commands. See below.
 - **Worktrees**: each repository's worktrees with their last commit, uncommitted
   changes, upstream distance and preview.
 - **History**: what devkit did, newest first and grouped by day (see below). The tab
   counts failures of the last 24 hours, and an expanded preview lists its last few events.
 
-Everything is read live from Docker labels and Git; there is no database. It is dark
+Everything is read live from Docker labels, Git, QEMU processes and libvirt; there is no database. It is dark
 by default; the settings menu (gear icon) picks light or auto (follows the system),
 remembered per browser.
 
@@ -56,3 +59,66 @@ or on the dashboard; deleting it loses nothing but the past.
 `devkit web` binds to 127.0.0.1 and `web.port` (3780). `devkit setup` installs it as the user
 service `devkit-web`, and Traefik publishes it at `devkit.<domain>` on the tailnet. Repositories
 appear once they have at least one preview or a worktree matching the harness's `worktrees` glob.
+
+## Virtual machines
+
+`devkit vms` lists the same inventory in a terminal; `devkit vms --json` returns the
+read-only `/api/vms` response. No registration or project recipe is required.
+The dashboard refreshes while the VM tab is visible (every ten seconds, pausing
+while a VM control has keyboard focus). It retains expanded connection sections.
+A failed libvirt provider is a warning; other VM sources and Docker stay usable.
+
+Discovery covers readable `qemu-system-*`/`qemu-kvm` processes and active domains
+from `qemu:///session` and `qemu:///system` when `virsh` is installed. Session VMs
+belong to the account running devkit. Guests with the same UUID deduplicate against
+QEMU processes. Stopped libvirt definitions are not listed. Standalone state means
+host process state; it cannot tell whether the guest CPUs were paused via QMP.
+Display type comes from configuration, not a check that a desktop has booted.
+
+- A terminal icon means headless (`-display none`, `-nographic`, or no libvirt graphics).
+  A monitor icon means a configured display. Unrecognized settings show **Display unknown**.
+- RAM and vCPUs are configured allocations. Disk capacity is virtual capacity, excluding
+  firmware and CD-ROMs, not host disk consumption. Simple local raw/qcow2 drives and
+  libvirt block statistics are supported. Advanced standalone `-blockdev` graphs,
+  network storage and unreadable disks may show **Unavailable**.
+- CPU is sampled host usage: 100% means one core, and four busy vCPUs can reach 400%.
+  The first sample is pending; the CLI's one-shot inventory has no CPU baseline.
+  Resident memory is QEMU's host RSS, including overhead, not guest memory usage.
+- Graphics lists configured virtual adapters. PCI passthrough is only called a GPU
+  when host PCI class information confirms it. GPU utilization is not collected.
+
+### Connecting from another device
+
+Use the generated commands on your client computer, connected to the tailnet or
+otherwise able to SSH to this host. They use the devkit user's account and configured
+Tailscale IP (or detected tailnet IP, falling back to the hostname). Substitute your
+SSH alias if you use a different destination/account. SSH authentication and host-key
+verification remain your existing configuration; no private keys are read by devkit.
+
+For SPICE on port 5931:
+
+```sh
+# Terminal 1 on your computer; keep this running:
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:5931:127.0.0.1:5931 mads@100.64.0.1
+# Terminal 2 on your computer:
+remote-viewer spice://127.0.0.1:5931
+```
+
+VNC uses `remote-viewer vnc://127.0.0.1:<port>`. Install the client with
+`sudo dnf install virt-viewer` on Fedora or `sudo apt install virt-viewer` on Ubuntu.
+If a local port is busy, change the first port in `-L` and the client command to the
+same free port. End the tunnel with Ctrl+C. Display passwords are entered in the
+viewer; devkit never reads or returns them.
+
+Headless QEMU `-netdev user`, `-nic user`, and `-net user` TCP `hostfwd` entries to
+guest port 22 get a private SSH tunnel and an SSH command that asks for the guest
+username. Add your existing `-i` identity option if required. devkit does not infer
+usernames, keys or bridged guest IPs. A headless libvirt guest also offers a serial
+console through `ssh -t ... virsh --connect ... console <uuid>`; this requires a
+configured guest serial console and libvirt permission. Ctrl+] leaves that console.
+
+Only loopback or wildcard display/SSH listeners get automatic tunnel instructions.
+Other addresses, Unix display sockets and TLS-enabled SPICE need the existing client
+configuration. No display port is opened, no VM is modified, and VM connections
+are not published through Cloudflare. Anyone who can read the dashboard can read
+this sanitized inventory; connecting still requires SSH and guest authentication.

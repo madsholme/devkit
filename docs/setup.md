@@ -67,6 +67,46 @@ Rebuild after pulling changes; replacing the binary is safe while `devkit web` r
 then needs `systemctl --user restart devkit-web`. If you move the binary, run setup again so
 the service follows it.
 
+## Optional QEMU/KVM prerequisites
+
+Run `./bootstrap.sh --qemu` as the devkit user to install the normal prerequisites
+plus QEMU/KVM and libvirt. It is safe to rerun on an existing devkit host. Supported
+native host architectures are x86_64 and aarch64; graphical and headless guests use
+the same installation. Hardware acceleration needs enabled CPU virtualization and
+access to `/dev/kvm`; nested virtualization must be available on a VM host.
+
+| Host | Additional packages |
+|---|---|
+| Ubuntu/Debian x86_64 | `qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients ovmf swtpm swtpm-tools` |
+| Fedora x86_64 | `qemu-kvm qemu-img qemu-ui-spice-core qemu-char-spice qemu-device-display-qxl libvirt-daemon-kvm libvirt-client edk2-ovmf swtpm swtpm-tools` |
+
+On aarch64, Ubuntu/Debian uses `qemu-system-arm` and `qemu-efi-aarch64`; Fedora
+uses `edk2-aarch64` firmware with the native `qemu-kvm` package. Firmware locations
+vary by distribution: use the installed package's paths in your launch scripts.
+
+Bootstrap adds the devkit user to the existing `kvm` and `libvirt` groups. Log out
+and back in after group changes; restart `devkit-web` in the new session if it is
+already running. An existing active `libvirtd` is preserved; otherwise bootstrap
+starts local `virtqemud` sockets where installed, or `libvirtd.service` on older
+layouts. It does not enable libvirt TCP/TLS listeners or change socket permissions.
+
+Verify access after login:
+
+```sh
+virsh --readonly --connect qemu:///session list
+virsh --readonly --connect qemu:///system list
+devkit vms
+```
+
+QEMU is optional: absence is not a `devkit doctor` failure. Keep using your existing
+VM launch scripts or libvirt workflow; devkit only discovers running VMs. The host
+needs no desktop or remote-viewer. Install `virt-viewer` on the client computer for
+SPICE/VNC; headless guests can use SSH. See [VM connections](dashboard.md#virtual-machines).
+
+Package guidance: [Fedora virtualization](https://developer.fedoraproject.org/tools/virtualization/about.html),
+[Ubuntu libvirt](https://ubuntu.com/server/docs/how-to/virtualisation/libvirt/), and
+[libvirt daemon sockets](https://libvirt.org/kbase/failed_connection_after_install.html).
+
 ## Host config
 
 Everything lives in `~/.config/devkit/config.json` (`DEVKIT_CONFIG_DIR` moves the directory),

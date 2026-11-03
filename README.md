@@ -97,6 +97,9 @@ password with `devkit web password` to act from it. For a first project, copy
 `project-template` into a Git repository, commit it and run `devkit live` there; see
 [Project recipe](docs/projects.md) for your own apps and [Host setup](docs/setup.md) for details.
 
+For headless or graphical QEMU VMs, `./bootstrap.sh --qemu` adds the optional Fedora/Ubuntu prerequisites.
+The dashboard lists existing VMs alongside Docker previews; see [VM connections](docs/dashboard.md#virtual-machines).
+
 ## Commands
 
 Worktree → agent work → commit → local review → explicit team deployment → merge.
@@ -119,6 +122,7 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
 | `devkit logs [-s service] [-f]` | Show (or follow) this worktree's live web log (or another service's) |
 | `devkit web` | Serve the dashboard (see [Dashboard](docs/dashboard.md)); `devkit web password` enables its actions |
+| `devkit vms [--json]` | Running QEMU/libvirt VMs, sizing and private display/SSH connection commands |
 | `devkit ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devkit stop [preview]` | Stop containers; retain data |
 | `devkit start [preview]` | Resume saved configuration; retain data |

@@ -21,3 +21,21 @@ does not issue certificates or alter DNS, and removes its test containers/volume
 The media check is `DEVKIT_RUNTIME_TEST=1 python3 tests/media_acceptance.py`; it
 requires local Tailscale, creates temporary UDP/TCP echo previews, checks distinct
 ports and restart persistence through the tailnet IP, and cleans them up.
+
+
+QEMU discovery regression tests run with `go test ./...`. Installer behavior is
+checked without sudo, package installation, or host changes by
+`python3 tests/bootstrap_acceptance.py` (mocked Ubuntu/Fedora commands, architecture
+profiles, existing daemon preservation, repeated group setup and failures).
+
+Build the binary, then run `DEVKIT_VM_RUNTIME_TEST=1 python3 tests/vm_runtime_acceptance.py`
+for the optional x86_64 QEMU smoke check. It needs `qemu-system-x86_64` with SPICE and
+`qemu-img`. It creates two paused, 64 MiB TCG guests with no OS, one with a temporary
+32 MiB qcow2 disk and SPICE, the other with a localhost SSH forwarding listener.
+It verifies real process discovery, sizes, connection commands, metadata privacy
+and `/api/vms` CPU sampling. Its temporary web server stubs Docker to isolate
+background cleanup from real containers. It terminates only its own processes and
+removes its temporary files. This does not test a booted guest login or graphical
+session; those need an existing test guest and client. Libvirt parsing, access
+failure and deduplication are covered by fixtures; live libvirt validation needs
+an active domain visible to the devkit account.
