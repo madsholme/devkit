@@ -32,6 +32,9 @@ type vmConnection struct {
 type vmDisk struct{ path, format string }
 
 type virtualMachine struct {
+	ControlID      string         `json:"control_id,omitempty"`
+	Actions        []string       `json:"actions,omitempty"`
+	ControlNote    string         `json:"control_note,omitempty"`
 	Project        string         `json:"project"`
 	ProjectNote    string         `json:"project_note,omitempty"`
 	ID             string         `json:"id"`
@@ -72,6 +75,8 @@ type vmInventory struct {
 	data     vmSnapshot
 	previous map[string]vmCPU
 }
+
+func (v *vmInventory) invalidate() { v.mu.Lock(); defer v.mu.Unlock(); v.at = time.Time{} }
 
 func newVMInventory() *vmInventory { return &vmInventory{previous: map[string]vmCPU{}} }
 
@@ -335,14 +340,22 @@ func processVMs() ([]virtualMachine, []string) {
 		vm := parseQEMU(pid, strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00"))
 		stat, err := os.ReadFile(filepath.Join(dir, "stat"))
 		if err != nil {
+			if !os.IsNotExist(err) {
+				warnings = append(warnings, "A QEMU process state is unreadable; inventory may be incomplete.")
+			}
 			continue
 		}
 		end := strings.LastIndex(string(stat), ")")
 		if end < 0 {
+			warnings = append(warnings, "A QEMU process state is unsupported; inventory may be incomplete.")
 			continue
 		}
 		f := strings.Fields(string(stat)[end+1:])
-		if len(f) < 22 || f[0] == "Z" {
+		if len(f) < 22 {
+			warnings = append(warnings, "A QEMU process state is unsupported; inventory may be incomplete.")
+			continue
+		}
+		if f[0] == "Z" {
 			continue
 		}
 		u, _ := strconv.ParseUint(f[11], 10, 64)
@@ -729,7 +742,8 @@ func (v *vmInventory) snapshot(ctx context.Context) vmSnapshot {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
-	processes, warnings := processVMs()
+	processes, warnings := vmControlProcesses()
+	processWarnings := append([]string{}, warnings...)
 	domains := []virtualMachine{}
 	if _, err := exec.LookPath("virsh"); err == nil {
 		var w []string
@@ -742,7 +756,19 @@ func (v *vmInventory) snapshot(ctx context.Context) vmSnapshot {
 		warnings = append(warnings, "Host configuration is invalid; check vm_projects and other host settings.")
 		cfg = hostConfig{}
 	}
-	warnings = append(warnings, discoverVMProjects(ctx, cfg, rows)...)
+	roots, rootWarnings := vmProjectRoots(ctx, cfg, rows)
+	projects, problems := readVMProjects(roots)
+	warnings = append(warnings, rootWarnings...)
+	warnings = append(warnings, problems...)
+	assignVMProjects(rows, projects)
+	targets := managedVMs(ctx, rows, projects, processWarnings)
+	if len(problems) > 0 || configErr != nil {
+		for i := range targets {
+			targets[i].vm.Actions = nil
+			targets[i].vm.ControlNote = "VM recipe discovery is incomplete; fix configuration before controlling VMs."
+		}
+	}
+	rows = appendManagedVMs(rows, targets)
 	host := cfg.TailscaleIP
 	if host == "" {
 		if ip, err := vmProbe(ctx, "tailscale", "ip", "-4"); err == nil && net.ParseIP(strings.TrimSpace(ip)) != nil {
@@ -760,7 +786,9 @@ func (v *vmInventory) snapshot(ctx context.Context) vmSnapshot {
 		if rows[i].DiskBytes == nil {
 			rows[i].DiskBytes = diskCapacity(ctx, rows[i].disks)
 		}
-		addVMCommands(&rows[i], username, host)
+		if rows[i].State != "stopped" && rows[i].State != "unavailable" {
+			addVMCommands(&rows[i], username, host)
+		}
 	}
 	v.sampleCPU(rows, time.Now())
 	v.at = time.Now()
@@ -777,13 +805,19 @@ func listVMs(asJSON bool) error {
 		fmt.Fprintln(stdout, "warning:", w)
 	}
 	if len(data.VMs) == 0 {
-		fmt.Fprintln(stdout, "No running QEMU or libvirt virtual machines found.")
+		fmt.Fprintln(stdout, "No QEMU or libvirt virtual machines found.")
 	}
 	lastProject := ""
 	for i, vm := range data.VMs {
 		if i == 0 || vm.Project != lastProject {
 			fmt.Fprintln(stdout, orDefault(vm.Project, "Other VMs"))
 			lastProject = vm.Project
+		}
+		if vm.ControlID != "" {
+			fmt.Fprintln(stdout, "  control:", vm.ControlID)
+		}
+		if vm.ControlNote != "" {
+			fmt.Fprintln(stdout, "  "+vm.ControlNote)
 		}
 		if vm.ProjectNote != "" {
 			fmt.Fprintln(stdout, "  "+vm.ProjectNote)

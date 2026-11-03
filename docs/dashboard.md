@@ -76,7 +76,9 @@ A failed libvirt provider is a warning; other VM sources and Docker stay usable.
 Discovery covers readable `qemu-system-*`/`qemu-kvm` processes and active domains
 from `qemu:///session` and `qemu:///system` when `virsh` is installed. Session VMs
 belong to the account running devkit. Guests with the same UUID deduplicate against
-QEMU processes. Stopped libvirt definitions are not listed. Standalone state means
+QEMU processes. Stopped guests with lifecycle settings remain listed; other stopped
+libvirt definitions are not listed. Stopped standalone guests have no process to
+inspect, so their allocation/display fields are unavailable until started. Standalone state means
 host process state; it cannot tell whether the guest CPUs were paused via QMP.
 Display type comes from configuration, not a check that a desktop has booted.
 
@@ -127,3 +129,19 @@ Other addresses, Unix display sockets and TLS-enabled SPICE need the existing cl
 configuration. No display port is opened, no VM is modified, and VM connections
 are not published through Cloudflare. Anyone who can read the dashboard can read
 this sanitized inventory; connecting still requires SSH and guest authentication.
+
+### VM lifecycle controls
+
+VMs with [project lifecycle settings](projects.md#start-stop-and-restart-vms) show
+Start when stopped, and Stop/Restart when running, after you sign in. Plain VM
+mappings remain read-only. The page lists stopped managed guests too; register
+VM-only projects in host `vm_projects` so their recipes remain discoverable.
+Unavailable providers or conflicting definitions show an explanation instead of
+action buttons. Paused guests offer Stop; resume with their existing manager
+before restarting.
+
+Buttons run the same CLI commands through the dashboard's authenticated job
+system. The job window shows progress/errors, then refreshes VM state. A failed
+stop prevents restart. There is no VM destroy action or public display tunnel.
+The API adds `control_id`, supported `actions`, and optional `control_note` to
+managed rows, without exposing recipe paths or launcher command text.

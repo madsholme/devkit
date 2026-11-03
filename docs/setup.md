@@ -100,7 +100,9 @@ devkit vms
 ```
 
 QEMU is optional: absence is not a `devkit doctor` failure. Keep using your existing
-VM launch scripts or libvirt workflow; devkit only discovers running VMs. The host
+VM launch scripts or libvirt workflow; discovery is read-only unless you add
+[project lifecycle controls](projects.md#start-stop-and-restart-vms). With controls,
+devkit can start/stop/restart those guests and lists them even when stopped. The host
 needs no desktop or remote-viewer. Install `virt-viewer` on the client computer for
 SPICE/VNC; headless guests can use SSH. See [VM connections](dashboard.md#virtual-machines).
 

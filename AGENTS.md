@@ -22,6 +22,8 @@ old names are dropped on purpose.
   allowlisted metadata only, bounded probes, UUID deduplication and private SSH connection commands.
   `vm_projects.go` matches explicit project `vms` selectors (UUID before name), discovers recipes
   from Docker/harness/cwd and host `vm_projects` roots, and leaves ambiguous claims unassigned.
+  `vm_control.go` provides opt-in launcher/libvirt lifecycle adapters, stopped managed inventory,
+  exact control resolution and a host-wide lifecycle lock. Plain mappings never authorize actions.
   `pair.go` issues T3 Code pairing links (`devkit pair`, `/api/pair`) and `qr.go` draws them as QR
   codes (its own small encoder; tests pin output that was checked with a real decoder).
   `history.go` is the event log (`~/.local/state/devkit/history.jsonl`). Package variables such as `runCommand`, `dockerContainers` and
@@ -66,6 +68,7 @@ old names are dropped on purpose.
   (the page is embedded, so page edits need a rebuild too).
 - VM checks: `python3 tests/bootstrap_acceptance.py` uses mocked system commands;
   `DEVKIT_VM_RUNTIME_TEST=1 python3 tests/vm_runtime_acceptance.py` uses temporary paused QEMU guests (build first).
+  `DEVKIT_VM_RUNTIME_TEST=1 python3 tests/vm_lifecycle_acceptance.py` exercises real launcher lifecycle and disk retention.
 - UI checks: jsdom in a scratch directory for behaviour, headless Firefox for
   screenshots. Firefox is a snap, so write screenshots to a non-hidden folder
   under `~`, not `/tmp` or a dot-directory.

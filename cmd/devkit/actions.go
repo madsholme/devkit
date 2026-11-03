@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 // devkit manages, or a worktree of a repository devkit knows.
 
 type actionRequest struct {
+	VM       string `json:"vm"`
 	Action   string `json:"action"`
 	Preview  string `json:"preview"`
 	Worktree string `json:"worktree"`
@@ -64,6 +66,10 @@ func repoDir(trees []worktree, preferred string) string {
 }
 
 func planAction(req actionRequest) (plannedAction, error) {
+	if strings.HasPrefix(req.Action, "vm-") {
+		return planVMAction(req)
+	}
+
 	containers, err := dockerContainers()
 	if err != nil {
 		return plannedAction{}, err
@@ -171,9 +177,10 @@ func (j *job) since(offset int) (string, int, bool, bool) {
 }
 
 type jobs struct {
-	mu   sync.Mutex
-	list map[string]*job
-	next int
+	after func(plannedAction)
+	mu    sync.Mutex
+	list  map[string]*job
+	next  int
 }
 
 // runAction is how a job executes; tests replace it.
@@ -209,6 +216,9 @@ func (s *jobs) start(p plannedAction) (*job, error) {
 	fmt.Fprintf(j, "$ devkit %s\n", strings.Join(p.args, " "))
 	go func() {
 		err := runAction(p, j)
+		if s.after != nil {
+			s.after(p)
+		}
 		j.mu.Lock()
 		j.Done, j.OK, j.finished = true, err == nil, time.Now()
 		j.mu.Unlock()
@@ -223,4 +233,32 @@ func (s *jobs) get(id string) *job {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.list[id]
+}
+
+// VM targets are opaque server-discovered IDs, never caller-provided scripts/paths.
+func planVMAction(req actionRequest) (plannedAction, error) {
+	action := strings.TrimPrefix(req.Action, "vm-")
+	if action != "start" && action != "stop" && action != "restart" {
+		return plannedAction{}, fail("Unsupported VM action.")
+	}
+	if !strings.HasPrefix(req.VM, "vm-") || len(req.VM) > 80 {
+		return plannedAction{}, fail("Use a configured VM control ID.")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	t, err := resolveVMControl(ctx, req.VM)
+	if err != nil {
+		return plannedAction{}, err
+	}
+	if t.vm.ControlID != req.VM {
+		return plannedAction{}, fail("Use a configured VM control ID.")
+	}
+	allowed := false
+	for _, a := range t.vm.Actions {
+		allowed = allowed || a == action
+	}
+	if !allowed {
+		return plannedAction{}, fail("VM state changed; refresh before acting.")
+	}
+	return plannedAction{args: []string{action, "--vm", req.VM}, dir: t.root, target: "vm lifecycle", title: action + " VM " + t.vm.Name}, nil
 }

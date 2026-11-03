@@ -124,6 +124,11 @@ func newHandler() (http.Handler, error) {
 	vms := newVMInventory()
 	go reapLoop()
 	actions := newActionHandler()
+	actions.jobs.after = func(p plannedAction) {
+		if p.target == "vm lifecycle" {
+			vms.invalidate()
+		}
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		plain := "text/plain; charset=utf-8"
 		if a, ok := assets[r.URL.Path]; ok && (r.Method == http.MethodGet || r.Method == http.MethodHead) {

@@ -13,8 +13,9 @@ import (
 
 // vmSelector is an explicit project claim; identifying a VM never grants access to it.
 type vmSelector struct {
-	Name string `json:"name,omitempty"`
-	UUID string `json:"uuid,omitempty"`
+	Name    string     `json:"name,omitempty"`
+	Control *vmControl `json:"control,omitempty"`
+	UUID    string     `json:"uuid,omitempty"`
 }
 
 func validateVMSelectors(selectors []vmSelector) error {
@@ -37,6 +38,9 @@ func validateVMSelectors(selectors []vmSelector) error {
 		}
 		if seen[key] {
 			return fail("devkit.json vms contains a duplicate selector.")
+		}
+		if err := s.Control.validate(s); err != nil {
+			return err
 		}
 		seen[key] = true
 	}

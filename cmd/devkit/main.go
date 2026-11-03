@@ -21,6 +21,7 @@ commands:
   doctor               check this host and say how to fix what is missing
   version              show which devkit release or commit this is
   proxy up             write Traefik's configuration from the host config and start or update it
+  up                   alias for live (Docker); use --vm TARGET for a configured VM
   live                 start or resume a preview of working files
   review [commit]      fresh build from a committed version (default HEAD)
   publish [commit]     publish an existing reviewed image through the project publish hook
@@ -28,7 +29,7 @@ commands:
                        run a command in this worktree's live web container (or SERVICE's)
   logs [-s SERVICE] [-f]
                        show this worktree's live web log, or SERVICE's (-f, --follow to follow it)
-  vms [--json]          list running QEMU/libvirt VMs and private connection commands
+  vms [--json]          list QEMU/libvirt VMs, including stopped managed guests
   ls                   list managed previews, including stopped ones
   web [--host H] [--port P]
                        serve the web overview (default 127.0.0.1 and the configured port, 3780)
@@ -42,6 +43,8 @@ commands:
   pair [--json]        pair a device with T3 Code: a one-time link and QR code, valid 10 minutes
   history [preview] [-n N]
                        show what devkit did on this host, newest last (default the last 30 events)
+  up|start|stop|restart --vm TARGET
+                       control a configured VM by name, UUID or control ID; retain disks
   start [preview]      resume a stopped preview; data is retained
   stop [preview]       stop a preview's containers; data is retained
   destroy [preview]    remove a preview's containers, networks and volumes
@@ -145,6 +148,28 @@ func dispatch(args []string) (int, error) {
 		return 2, usageError("missing command")
 	}
 	command, rest := args[0], args[1:]
+	if command == "up" || command == "start" || command == "stop" || command == "restart" {
+		positional, values, err := splitArgs(rest, map[string]bool{"--vm": true}, nil)
+		if err != nil {
+			return 2, err
+		}
+		if target, ok := values["--vm"]; ok {
+			if target == "" || len(positional) > 0 {
+				return 2, usageError("Use " + command + " --vm TARGET without a preview ID.")
+			}
+			action := command
+			if action == "up" {
+				action = "start"
+			}
+			return 0, noted("vm-"+action, target, controlVM(action, target))
+		}
+		if command == "restart" {
+			return 2, usageError("restart needs --vm TARGET")
+		}
+		if command == "up" {
+			command = "live"
+		}
+	}
 	switch command {
 	case "-h", "--help", "help":
 		return 0, helpRequested{}

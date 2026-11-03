@@ -100,7 +100,8 @@ password with `devkit web password` to act from it. For a first project, copy
 
 For headless or graphical QEMU VMs, `./bootstrap.sh --qemu` adds the optional Fedora/Ubuntu prerequisites.
 The dashboard groups VMs by project using [VM mappings](docs/projects.md#virtual-machines),
-with unmatched guests under Other VMs. See [VM connections](docs/dashboard.md#virtual-machines).
+with unmatched guests under Other VMs. Opt-in launcher/libvirt controls add start, stop and restart,
+including stopped managed VMs. See [VM connections](docs/dashboard.md#virtual-machines).
 
 ## Commands
 
@@ -119,12 +120,14 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit doctor` | Check the host and say how to fix what is missing |
 | `devkit version` | Show which devkit release or commit this is (the dashboard's footer shows it too) |
 | `devkit proxy up` | Write Traefik's configuration from the host config and start or update it |
+| `devkit up` | Alias for `devkit live` |
+| `devkit up/start/stop/restart --vm TARGET` | Control a configured VM through its launcher or libvirt; retain disks |
 | `devkit live` | Start/resume current workspace's live preview |
 | `devkit review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devkit exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
 | `devkit logs [-s service] [-f]` | Show (or follow) this worktree's live web log (or another service's) |
 | `devkit web` | Serve the dashboard (see [Dashboard](docs/dashboard.md)); `devkit web password` enables its actions |
-| `devkit vms [--json]` | Running QEMU/libvirt VMs, sizing and private display/SSH connection commands |
+| `devkit vms [--json]` | QEMU/libvirt VMs, including stopped managed guests, sizing and private connections |
 | `devkit ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devkit stop [preview]` | Stop containers; retain data |
 | `devkit start [preview]` | Resume saved configuration; retain data |

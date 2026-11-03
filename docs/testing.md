@@ -39,3 +39,14 @@ removes its temporary files. This does not test a booted guest login or graphica
 session; those need an existing test guest and client. Libvirt parsing, access
 failure and deduplication are covered by fixtures; live libvirt validation needs
 an active domain visible to the devkit account.
+
+### VM lifecycle acceptance
+
+Build the binary, then run `DEVKIT_VM_RUNTIME_TEST=1 python3 tests/vm_lifecycle_acceptance.py`.
+It creates a temporary paused 64 MiB TCG guest and project launcher, verifies
+start/idempotence/restart/stop, failed-stop protection, stopped inventory and
+unchanged disk contents, and cleans up its own QMP socket/guest. It never uses a
+real user's VM. `DEVKIT_VM_BINARY` can select a test binary outside the checkout.
+The no-OS fixture uses QMP quit; production adapters must use graceful guest shutdown.
+Go tests cover local libvirt command arguments/state handling, missing/denied
+providers, conflicts, lifecycle locking and authenticated dashboard target checks.

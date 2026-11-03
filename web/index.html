@@ -69,6 +69,7 @@ h3 { font-size: 14px; margin: 0 0 8px; }
 .vm-facts { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .vm-facts dt { color: var(--muted); font-size: 12px; }
 .vm-facts dd { margin: 2px 0 8px; font-variant-numeric: tabular-nums; }
+.vm-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .vm-connect { margin-top: 10px; font-size: 13px; }
 .vm-connect summary { cursor: pointer; color: var(--accent); width: fit-content; padding: 4px 0; }
 .vm-command { display: flex; align-items: start; gap: 8px; margin: 8px 0 16px; }
@@ -361,7 +362,7 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <div class="notice" id="vm-warning" role="status" hidden></div>
     <div class="error" id="vm-error" role="alert" hidden></div>
     <div class="panel" id="vm-list"><div class="vm-empty">Loading virtual machines…</div></div>
-    <p class="vm-help">Groups use each project’s devkit.json VM mappings; unmatched VMs appear under Other VMs. CPU is host usage (100% = one core); resident memory includes QEMU overhead. GPU usage is unavailable.</p>
+    <p class="vm-help">Groups use each project’s devkit.json VM mappings; unmatched VMs appear under Other VMs. Configured managed VMs remain listed when stopped. CPU is host usage (100% = one core); resident memory includes QEMU overhead. GPU usage is unavailable.</p>
   </section>
 
   <section id="tab-worktrees" role="tabpanel" aria-labelledby="tab-btn-worktrees" hidden>
@@ -660,6 +661,7 @@ function renderAuth() {
 async function loadSession() {
   try { session = await (await fetch("api/session")).json(); } catch {}
   renderAuth();
+  renderVMs();
   if (lastData) { renderPreviews(lastData.previews); renderRepos(lastData.repositories, lastData.previews); renderOrphans(lastData.repositories); renderHost(lastData.host); }
 }
 
@@ -783,13 +785,14 @@ async function followJob(id, title) {
       $("job-state").textContent = j.ok ? "done" : "failed";
       $("job-state").className = "job-state " + (j.ok ? "ok" : "bad");
       load();
+      loadVMs();
       break;
     }
     await new Promise(r => setTimeout(r, 700));
   }
   $("job-live").classList.remove("on");
 }
-$("job-close").onclick = () => { currentJob = null; $("job").close(); load(); };
+$("job-close").onclick = () => { currentJob = null; $("job").close(); load(); loadVMs(); };
 $("act-cancel").onclick = () => $("act").close();
 $("signin-cancel").onclick = () => $("signin").close();
 $("signin-form").onsubmit = async e => {
@@ -1288,7 +1291,7 @@ function renderVMs() {
   if (!vmData) return;
   const open = new Set([...document.querySelectorAll("[data-vm-connect][open]")].map(el => el.dataset.vmConnect));
   const filter = $("vm-filter").value.toLowerCase();
-  const rows = vmData.vms.filter(v => [v.name, v.project || "Other VMs", v.source, v.display].join(" ").toLowerCase().includes(filter))
+  const rows = vmData.vms.filter(v => [v.name, v.project || "Other VMs", v.source, v.display, v.state].join(" ").toLowerCase().includes(filter))
     .sort((a, b) => a.project !== b.project ? (!a.project ? 1 : !b.project ? -1 : a.project.localeCompare(b.project)) : a.name.localeCompare(b.name));
   const counts = new Map();
   for (const v of rows) counts.set(v.project || "", (counts.get(v.project || "") || 0) + 1);
@@ -1308,9 +1311,13 @@ function renderVMs() {
       <p>Run these commands on your computer. Keep the tunnel terminal open, then connect from a second terminal.</p>
       ${connections.map(c => `<h3>${c.kind === "ssh" ? "Guest SSH" : c.kind === "console" ? "Serial console" : esc(c.kind.toUpperCase())}</h3>${c.tunnel ? "<div>1. Open the SSH tunnel</div>" + vmCommand(c.tunnel, "Copy SSH tunnel") + "<div>2. Connect to the VM</div>" : ""}${vmCommand(c.command, "Copy connection command")}${c.kind === "console" ? '<p class="vm-help">Requires a configured guest serial console and libvirt console permission. Press Ctrl+] to leave.</p>' : ""}`).join("")}
       <p class="vm-help">SSH access to the devkit host is required. Install virt-viewer on your computer for SPICE/VNC. If the local port is busy, change it in both commands. Use your existing guest key with SSH if required.</p></details>` : ""}
+      ${v.control_id && (v.actions || []).length ? (session.signed_in
+        ? `<div class="vm-actions" role="group" aria-label="${esc(v.name)} controls">${v.actions.map(a => act("vm-" + a, {start: "Start", stop: "Stop", restart: "Restart"}[a], {vm: v.control_id})).join("")}</div>`
+        : '<p class="vm-help">Sign in to start, stop or restart this VM.</p>') : ""}
+      ${v.control_note ? `<p class="vm-help">${esc(v.control_note)}</p>` : ""}
       ${v.project_note ? `<p class="vm-help">${esc(v.project_note)}</p>` : ""}
       ${v.connection_note ? `<p class="vm-help">${esc(v.connection_note)}</p>` : ""}</article>`;
-  }).join("") : `<div class="vm-empty">${filter ? "No virtual machines match this filter." : "No running virtual machines discovered."}<p class="vm-help">${filter ? "Try a different name or display type." : "Start a QEMU or libvirt VM using your existing workflow, then refresh. Optional host prerequisites: ./bootstrap.sh --qemu."}</p></div>`;
+  }).join("") : `<div class="vm-empty">${filter ? "No virtual machines match this filter." : "No virtual machines discovered."}<p class="vm-help">${filter ? "Try a different name or display type." : "Configure VM lifecycle controls in your project recipe, or start a VM using your existing workflow, then refresh. Optional host prerequisites: ./bootstrap.sh --qemu."}</p></div>`;
 }
 async function loadVMs() {
   if (vmBusy) return;
