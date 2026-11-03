@@ -173,7 +173,11 @@ func doctorChecks() []check {
 	}
 
 	if _, err := probe("docker", "network", "inspect", "--format", "{{.Name}}", proxyNetwork); err != nil {
-		checks = append(checks, bad("network", "Docker network %s is missing: run devbox proxy up", proxyNetwork))
+		fix := "devbox proxy up"
+		if cfg.Proxy == nil {
+			fix = "devbox setup"
+		}
+		checks = append(checks, bad("network", "Docker network %s is missing: run %s", proxyNetwork, fix))
 	} else {
 		checks = append(checks, ok("network", "%s", proxyNetwork))
 	}
