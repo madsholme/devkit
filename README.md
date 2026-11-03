@@ -425,12 +425,12 @@ dashboard scripts and sets the CRT logo as the project icon.
 
 ## Agent integration
 
-Give your agent the following project instruction:
-
-> Work in a separate worktree. Run tests with devbox exec. Start devbox live only
-> when a live preview is useful or requested. After committing, use devbox review
-> with the exact commit for review and report its URL and SHA. Preserve stopped
-> preview data. Publish to the team only when requested.
+`project-template/AGENTS.md` is an example of the instructions an agent needs: run
+project commands with `devbox exec`, start `devbox live` when needed, commit and
+`devbox review HEAD` to hand work over (reporting the URL and SHA), never `logs -f`, and
+ask before anything that deletes data, goes public or deploys. Copy its "Previews with
+devbox" section into your project's AGENTS.md (the template's `CLAUDE.md` imports it for
+Claude Code) and fill in the project's own part.
 
 Use Git worktree commands to discover existing workspaces, regardless of which
 harness created them. The harness stays on localhost behind Traefik at
