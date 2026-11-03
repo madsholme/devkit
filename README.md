@@ -15,6 +15,11 @@ such as `https://shop-checkout.dev.example.com`, reachable only from your device
 agents ([T3 Code](https://t3.codes) by default) run on the same host, so they keep working when you
 close your laptop.
 
+> [!NOTE]
+> devkit is a personal tool: I built it for my own development boxes and share it as it is. Feel
+> free to use it, fork it or take ideas from it. There is no support, no roadmap and no promise
+> that the next version stays compatible, and I may not answer issues or pull requests.
+
 ## What it's for
 
 - **Agents in parallel.** Three agents on three branches each get an app and a database of their
