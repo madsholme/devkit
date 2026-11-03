@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -380,6 +381,9 @@ func proxyStatus() serviceStatus {
 }
 
 type hostInfo struct {
+	Name               string          `json:"name"`
+	Version            string          `json:"version"` // devkit's commit, e.g. "0b1bfd6" or "0b1bfd6+" with local changes
+	Commit             string          `json:"commit"`
 	Domain             string          `json:"domain"`
 	CertificateExpires string          `json:"certificate_expires"`
 	CertificateDays    *int            `json:"certificate_days"`
@@ -424,7 +428,12 @@ var hostFactsFn = func() (any, error) {
 	}
 	services = append(services, proxyStatus())
 	expires, days := certExpiry("devkit." + dom)
-	return hostInfo{Domain: dom, CertificateExpires: expires, CertificateDays: days,
+	name := cfg.Name
+	if name == "" {
+		name, _ = os.Hostname()
+	}
+	version, commit := buildVersion()
+	return hostInfo{Name: name, Version: version, Commit: commit, Domain: dom, CertificateExpires: expires, CertificateDays: days,
 		Services: services, RunningContainers: len(strings.Fields(running)), Disk: disk}, nil
 }
 
@@ -549,4 +558,28 @@ func logsCommand(id string, follow bool) []string {
 		args = append(args, "--follow")
 	}
 	return append(args, id)
+}
+
+// buildVersion is the commit devkit was built from, as Go records it: short, with "+" for
+// uncommitted changes, and in full. Builds outside a Git checkout have none.
+func buildVersion() (string, string) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", ""
+	}
+	var commit, modified string
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			commit = s.Value
+		case "vcs.modified":
+			if s.Value == "true" {
+				modified = "+"
+			}
+		}
+	}
+	if len(commit) < 7 {
+		return "", ""
+	}
+	return commit[:7] + modified, commit
 }

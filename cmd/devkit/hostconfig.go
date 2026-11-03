@@ -15,6 +15,7 @@ import (
 // hostConfig is ~/.config/devkit/config.json: what devkit knows about this host. devkit setup
 // writes it; devkit web password adds the dashboard password.
 type hostConfig struct {
+	Name        string         `json:"name"`         // optional; the dashboard's title, the hostname by default
 	Domain      string         `json:"domain"`       // preview domain, e.g. "dev.example.com"; DEV_DOMAIN overrides it
 	TailscaleIP string         `json:"tailscale_ip"` // optional; read from tailscale ip -4 when empty
 	Harness     *harnessConfig `json:"harness"`      // the agent tool on this host, if any

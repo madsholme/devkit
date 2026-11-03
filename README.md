@@ -167,6 +167,7 @@ which setup writes and which you may edit:
 }
 ```
 
+- `name`: optional; the dashboard's title, the hostname by default.
 - `domain`: previews are `<name>.<domain>`, the dashboard `devkit.<domain>`. `DEV_DOMAIN`
   overrides it, e.g. for tests.
 - `tailscale_ip`: optional; read from `tailscale ip -4` when empty.
@@ -269,9 +270,11 @@ Prefer review previews; a live preview may run with debug pages on.
 
 ## Web overview
 
-https://devkit.<domain> shows whether the harness (e.g. T3) and Traefik are up and days until the
-certificate expires, then a CPU/memory/disk summary bar (it also mentions reclaimable
-Docker data from 5 GB up) that opens a system monitor: 10-minute history, swap,
+https://devkit.<domain> is titled with the host's name (its hostname, or `name` in the host config)
+and preview domain, and shows whether the harness (e.g. T3) and Traefik are up; the certificate
+appears there only when it expires within three weeks. The gear menu holds sign-in and the theme;
+the footer shows which devkit commit runs. Below is a CPU/memory/disk/containers summary bar (it
+also mentions reclaimable Docker data from 5 GB up) that opens a system monitor: 10-minute history, swap,
 per-container usage, top host processes and Docker disk use. Containers and processes
 are sampled only while it is open.
 
@@ -303,7 +306,7 @@ accepts targets that exist on the host, requests from the dashboard's own page, 
 an explicit confirmation for destroy and clean-up; five wrong passwords lock an address out for five
 minutes. `exec` stays in the CLI.
 
-With the T3 harness, a signed-in browser also gets **Pair a device** next to T3's status: it
+With the T3 harness, a signed-in browser also gets **Pair device…** in T3 Code's menu: it
 shows a QR code, link and code from `devkit pair` that connect one phone or computer to T3 Code
 within 10 minutes. devkit asks the `t3` version the T3 service runs (`t3 auth pairing create`),
 returns the link to that page only, without keeping it, and records only that a pairing happened.

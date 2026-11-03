@@ -39,9 +39,17 @@ body {
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-bottom: 20px; }
-h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; }
-h1 img { width: 32px; height: 32px; }
+/* Three zones: the host on the left, its services in the middle and the controls on the right.
+   The right zone never wraps away; on narrow screens the services move under the host. */
+header { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "brand facts right";
+  align-items: center; gap: 10px 28px; margin-bottom: 20px; }
+@media (max-width: 720px) { header { grid-template-columns: 1fr auto; grid-template-areas: "brand right" "facts facts"; } }
+.brand { grid-area: brand; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand img { width: 32px; height: 32px; flex: none; }
+h1 { font-size: 20px; line-height: 1.15; margin: 0; overflow-wrap: anywhere; }
+.host-domain { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.head-right { grid-area: right; display: flex; align-items: center; gap: 12px; }
+.foot { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 28px 0 10px; }
 h3 { font-size: 14px; margin: 0 0 8px; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 24px 0 14px; }
@@ -65,14 +73,14 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .muted { color: var(--muted); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
-.facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); }
+.facts { grid-area: facts; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; color: var(--muted); }
 .facts b { color: var(--text); font-weight: 500; }
-.service-fact { display: inline-flex; align-items: center; gap: 6px; }
-.facts button.pair { font-size: 12px; padding: 0 7px; line-height: 18px; }
+.service-fact { display: inline-flex; align-items: center; gap: 8px; }
+
 .qr { display: block; width: 240px; height: 240px; margin: 4px auto 12px; border-radius: 6px; }
 .pair-link { display: flex; gap: 6px; align-items: center; }
 .pair-link input { flex: 1; min-width: 0; }
-.refresh { margin-left: auto; color: var(--muted); font-size: 12px; }
+.refresh { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
 /* The preview table grows with its rows and never scrolls; narrow screens hide columns instead. */
 .panel.grow { overflow: visible; }
@@ -201,7 +209,6 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .dlg-head .mono { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100vh - 130px); font-size: 12px; background: var(--code); white-space: pre-wrap; word-break: break-all; }
 .error { color: var(--bad); padding: 12px 0; }
-.auth { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .menu { position: relative; }
 .menu > summary { list-style: none; cursor: pointer; font-size: 12.5px; color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; }
 .menu > summary::-webkit-details-marker { display: none; }
@@ -221,7 +228,13 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
 .share-menu .menu-label { text-transform: none; letter-spacing: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 0; overflow-wrap: anywhere; }
 .menu-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 10px 2px; }
 .menu-items button[aria-pressed=true]::after { content: "✓"; float: right; margin-left: 12px; color: var(--accent); }
-.settings > summary { display: inline-flex; align-items: center; padding: 3px 6px; color: var(--muted); }
+/* T3 Code with its own menu: it looks like the other statuses, plus a caret; the box shows on hover. */
+.facts .svc-menu > summary { font-size: inherit; border-color: transparent; padding: 2px 6px; margin: -3px -7px; }
+.facts .svc-menu > summary:hover, .facts .svc-menu[open] > summary { border-color: var(--line); }
+.svc-menu > summary svg { width: 12px; height: 12px; color: var(--muted); }
+.settings > summary { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; color: var(--muted); }
+.signed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.menu-note { font-size: 12px; color: var(--muted); padding: 6px 10px; max-width: 220px; }
 .settings > summary svg { width: 16px; height: 16px; }
 .sys-reclaim { color: var(--warn); font-size: 12.5px; }
 button.danger { color: var(--bad); }
@@ -262,17 +275,19 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
 <body>
 <main>
   <header>
-    <h1><img src="/logo.svg" alt="">devkit</h1>
+    <div class="brand"><img src="/logo.svg" alt=""><div><h1 id="host-name">devkit</h1><div class="host-domain" id="host-domain"></div></div></div>
     <div class="facts" id="facts"></div>
+    <div class="head-right">
     <span class="refresh" id="refreshed">loading…</span>
-    <span class="auth" id="auth"></span>
     <details class="menu settings">
-      <summary title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></summary>
+      <summary title="Settings and sign-in" aria-label="Settings and sign-in"><span class="signed-dot" id="signed-dot" hidden title="Signed in"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></summary>
       <div class="menu-items">
+        <div id="auth"></div>
         <div class="menu-label">Theme</div>
         <button data-theme-pick="dark">Dark</button><button data-theme-pick="light">Light</button><button data-theme-pick="auto" title="Follow the system setting">Auto</button>
       </div>
     </details>
+    </div>
   </header>
   <div id="error" class="error" hidden></div>
 
@@ -280,6 +295,7 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <span class="sys-item"><span class="sys-k">CPU</span><span class="sys-v" id="sum-cpu">–</span><span class="mini" id="sum-cpu-m"></span></span>
     <span class="sys-item"><span class="sys-k">Memory</span><span class="sys-v" id="sum-mem">–</span><span class="mini" id="sum-mem-m"></span></span>
     <span class="sys-item"><span class="sys-k">Disk</span><span class="sys-v" id="sum-disk">–</span><span class="mini" id="sum-disk-m"></span></span>
+    <span class="sys-item"><span class="sys-k">Containers</span><span class="sys-v" id="sum-containers">–</span></span>
     <span class="sys-item sys-reclaim" id="sum-reclaim" hidden></span>
     <span class="sys-more">Details<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg></span>
   </button>
@@ -323,6 +339,8 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
       <tbody id="history-rows"></tbody>
     </table></div>
   </section>
+  <footer class="foot">devkit <a id="version" target="_blank" rel="noopener"></a> · <a href="https://github.com/steenfeldt/devkit" target="_blank" rel="noopener">GitHub</a>
+    · MIT license · © 2026 Rene Steenfeldt</footer>
 </main>
 
 <dialog id="system" class="wide">
@@ -590,9 +608,10 @@ function worktreeActions(w, byName) {
 }
 
 function renderAuth() {
-  $("auth").innerHTML = session.signed_in ? `<button id="signout">Sign out</button>`
-    : session.password_set ? `<button id="signin-open">Sign in</button>`
-    : `<span title="Run devkit web password on the host to enable actions">read-only</span>`;
+  $("auth").innerHTML = session.signed_in ? `<div class="menu-label">Signed in</div><button id="signout">Sign out</button>`
+    : session.password_set ? `<button id="signin-open">Sign in…</button>`
+    : `<div class="menu-note">Read-only. Run <span class="mono">devkit web password</span> on the host to enable actions.</div>`;
+  $("signed-dot").hidden = !session.signed_in;
 }
 
 async function loadSession() {
@@ -622,7 +641,7 @@ async function openPair() {
     ${p.code ? `<p class="note">Or enter the code <b class="mono">${esc(p.code)}</b> in the T3 app.</p>` : ""}`;
   $("pair-copy").onclick = () => copyText(p.url, $("pair-copy"));
 }
-document.addEventListener("click", e => { if (e.target.id === "pair-open") openPair(); });
+document.addEventListener("click", e => { if (e.target.id === "pair-open") { closeMenus(); openPair(); } });
 $("pair-close").onclick = () => $("pair").close();
 $("pair").addEventListener("close", () => { $("pair-body").innerHTML = ""; }); // Escape too: don't keep the link
 
@@ -784,15 +803,31 @@ function certFact(h) {
 }
 
 function renderHost(h) {
-  $("facts").innerHTML = `
-    ${h.services.map(s => `<span class="service-fact"><span class="status s-${s.status === "up" ? "healthy" : "dead"}" title="${esc(s.name)}: ${esc(s.status)} (${esc(s.detail)})"><span class="dot"></span>${
-      s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}</span>${
-      // Pairing belongs to T3 Code, so its button sits right next to T3's status.
-      session.signed_in && session.pair && s.name === "T3 Code" && s.status === "up"
-        ? `<button class="pair" id="pair-open" title="Connect a phone or another computer to T3 Code with a one-time QR code">Pair device</button>` : ""}</span>`).join("")}
-    <span>${esc(h.domain)}</span>
-    ${certFact(h)}
-    <span><b>${h.running_containers}</b> containers running</span>`;
+  $("host-name").textContent = h.name || "devkit";
+  $("host-domain").textContent = h.domain;
+  document.title = `${h.name || "devkit"} · devkit`;
+  if (h.version) {
+    $("version").textContent = h.version;
+    $("version").href = `https://github.com/steenfeldt/devkit/commit/${encodeURIComponent(h.commit)}`;
+  }
+  $("sum-containers").textContent = h.running_containers;
+  const caret = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>`;
+  $("facts").innerHTML = h.services.map(s => {
+    const up = s.status === "up", traefik = s.name === "Traefik";
+    const certOK = h.certificate_days !== null && h.certificate_days >= 21;
+    const title = `${s.name}: ${s.status} (${s.detail})` + (traefik ? ` · certificate ${h.certificate_expires}` : "");
+    const dot = `<span class="dot"></span>`;
+    // T3 Code gets a menu when there is more to do than open it: pairing a device.
+    if (s.url && up && session.signed_in && session.pair && s.name === "T3 Code") {
+      return `<details class="menu svc-menu"><summary class="status s-healthy" title="${esc(title)}">${dot}${esc(s.name)}${caret}</summary>
+        <div class="menu-items"><a href="${esc(s.url)}" target="_blank" rel="noopener">Open T3 Code</a>
+        <button id="pair-open" title="Connect a phone or another computer with a one-time QR code">Pair device…</button></div></details>`;
+    }
+    const name = s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name);
+    // The certificate renews by itself; it only shows when it needs attention.
+    return `<span class="service-fact"><span class="status s-${up ? "healthy" : "dead"}" title="${esc(title)}">${dot}${name}</span>${
+      traefik && !certOK ? certFact(h) : ""}</span>`;
+  }).join("");
   // Docker's sizes are strings like "7.157GB (75%)"; the summary bar mentions reclaimable space from 5 GB up.
   const size = text => { const m = /([\d.]+)\s*([kMGT]?)B/.exec(text || ""); return m ? m[1] * {"": 1, k: 1e3, M: 1e6, G: 1e9, T: 1e12}[m[2]] : 0; };
   const reclaimable = h.disk.reduce((n, d) => n + size(d.reclaimable), 0);
@@ -1043,8 +1078,8 @@ document.addEventListener("click", e => {
   for (const m of document.querySelectorAll("details.menu[open]")) if (!m.contains(e.target)) m.open = false;
   const a = e.target.closest("[data-act]");
   if (a) return handleAct(a);
-  if (e.target.closest("#signin-open")) { $("signin").showModal(); $("signin-password").focus(); return; }
-  if (e.target.closest("#signout")) return post("api/logout").then(loadSession);
+  if (e.target.closest("#signin-open")) { closeMenus(); $("signin").showModal(); $("signin-password").focus(); return; }
+  if (e.target.closest("#signout")) { closeMenus(); return post("api/logout").then(loadSession); }
   const det = e.target.closest("[data-details]");
   if (det) return showDetails(det.dataset.details, det.dataset.service);
   const c = e.target.closest("[data-copy]");
