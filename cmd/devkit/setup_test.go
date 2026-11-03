@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -222,6 +224,7 @@ func TestWebUnitRunsThisBinaryWithoutEnvironment(t *testing.T) {
 
 func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	hostWith(t, `{}`)
+	swap(t, &acmeReachable, func(string) error { return nil })
 	swap[io.Writer](t, &stdout, &bytes.Buffer{})
 	swap(t, &certificatePoll, time.Millisecond)
 	stage := "none" // what Traefik serves: none, staging, production
@@ -257,17 +260,83 @@ func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	}
 
 	// With a trusted certificate already served, setup goes straight to production.
+	swap(t, &acmeReachable, func(string) error { t.Error("a trusted certificate needs no ACME check"); return nil })
 	ups = nil
 	if err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9"); err != nil || !slices.Equal(ups, []bool{false}) {
 		t.Errorf("ups %v, %v", ups, err)
 	}
 
 	// A certificate that never comes fails with a pointer to the logs.
+	swap(t, &acmeReachable, func(string) error { return nil })
 	swap(t, &certificateTimeout, 5*time.Millisecond)
 	stage = "stuck"
-	swap(t, &setupProxy, func() error { return nil })
+	ups = nil
+	swap(t, &setupProxy, func() error { ups = append(ups, proxy.Staging); return nil })
 	if err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9"); err == nil || !strings.Contains(err.Error(), "docker logs") {
 		t.Errorf("timeout: %v", err)
+	}
+	if !slices.Equal(ups, []bool{true}) {
+		t.Errorf("issuance failure must not fall back to production: %v", ups)
+	}
+}
+
+func TestSetupAsksProductionDirectlyWhenStagingIsOutOfReach(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		production error // what reaching production gives
+		trusted    bool  // whether production's certificate is trusted
+		want       string
+	}{
+		{"production issues", nil, true, ""},
+		{"production must still be trusted", nil, false, "No trusted certificate"},
+		{"both out of reach", errors.New("connection refused"), false, "Check outbound HTTPS"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := hostWith(t, `{}`)
+			swap[io.Writer](t, &stdout, &bytes.Buffer{})
+			swap(t, &certificateTimeout, 5*time.Millisecond)
+			swap(t, &certificatePoll, time.Millisecond)
+			swap(t, &acmeReachable, func(directory string) error {
+				if directory == stagingCA {
+					return errors.New("connection reset by peer")
+				}
+				return c.production
+			})
+			proxy := proxyHost().Proxy
+			var ups []bool
+			swap(t, &setupProxy, func() error { ups = append(ups, proxy.Staging); return nil })
+			swap(t, &servedCertificate, func(ip, host string) (*x509.Certificate, error, error) {
+				cert := &x509.Certificate{Issuer: pkix.Name{CommonName: "YR1"}}
+				if len(ups) > 0 && c.trusted {
+					return cert, nil, nil
+				}
+				return cert, errors.New("untrusted"), nil
+			})
+			err := startProxyWithCertificate(map[string]any{}, proxy, "dev.example.com", "100.64.0.9")
+			if (c.want == "") != (err == nil) || err != nil && !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("got %v, want %q", err, c.want)
+			}
+			if c.production != nil {
+				if data, _ := os.ReadFile(filepath.Join(dir, "config.json")); len(ups) != 0 || string(data) != `{}` {
+					t.Errorf("out of reach, yet the proxy started (%v) or the config changed: %s", ups, data)
+				}
+			} else if !slices.Equal(ups, []bool{false}) {
+				t.Errorf("proxy started with staging=%v", ups)
+			}
+		})
+	}
+}
+
+func TestACMEReachableWantsTheDirectory(t *testing.T) {
+	status := http.StatusOK
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(status) }))
+	defer server.Close()
+	if err := acmeReachable(server.URL); err != nil {
+		t.Error(err)
+	}
+	status = http.StatusServiceUnavailable
+	if err := acmeReachable(server.URL); err == nil || !strings.Contains(err.Error(), "503") {
+		t.Errorf("503: %v", err)
 	}
 }
 

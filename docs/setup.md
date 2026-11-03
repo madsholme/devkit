@@ -48,6 +48,8 @@ again at any time to change something or repair the host. It:
    DNS-only record `*.<domain> A <tailscale ip>`; elsewhere create it yourself.
 5. Starts Traefik (`devkit proxy up`). Without a trusted certificate yet, it first gets one from
    Let's Encrypt's staging service, whose rate limits forgive mistakes, then switches to production.
+   If staging is out of reach (down, or blocked where production is not), it asks production
+   directly; if neither answers, it stops before touching Traefik.
 6. Installs and starts the dashboard as the user service `devkit-web`, running this binary.
 7. With the `t3` harness (the default), makes sure T3 Code answers on `127.0.0.1:3773`. If it is
    missing, it offers T3's official installer (`curl -fsSL https://t3.codes/install.sh | sh`, a
