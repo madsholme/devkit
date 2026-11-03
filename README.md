@@ -17,7 +17,7 @@ close your laptop.
 
 > [!NOTE]
 > devkit is a personal tool: I built it for my own development boxes and share it as it is. Feel
-> free to use it, fork it or take ideas from it. Issues and pull requests are welcome, though
+> free to use it, fork it or take ideas from it. Issues and [pull requests](CONTRIBUTING.md) are welcome, though
 > it's a side project, so replies may take a while. There is no roadmap and no promise that the
 > next version stays compatible.
 
