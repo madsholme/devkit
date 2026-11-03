@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -502,8 +503,23 @@ func ensureWildcard(p *prompter, dom, ip string, proxy *proxyConfig) error {
 	return nil
 }
 
+// probeACMEDirectory checks connectivity without creating an account or ordering a certificate.
+func probeACMEDirectory(endpoint string) error {
+	client := http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(endpoint)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fail("%s returned HTTP %d", endpoint, resp.StatusCode)
+	}
+	_, err = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	return err
+}
+
 // startProxyWithCertificate starts Traefik. Without a trusted certificate yet it proves issuance against
-// Let's Encrypt's staging service first, whose limits forgive mistakes, then switches to production.
+// staging first, unless that service is unavailable and production is reachable.
 func startProxyWithCertificate(raw map[string]any, proxy *proxyConfig, dom, ip string) error {
 	host := "devkit." + dom
 	run := func(staging bool, want string, accept func(*x509.Certificate, error) bool) error {
@@ -532,6 +548,15 @@ func startProxyWithCertificate(raw map[string]any, proxy *proxyConfig, dom, ip s
 	trusted := func(_ *x509.Certificate, verr error) bool { return verr == nil }
 	if cert, verr, err := servedCertificate(ip, host); err == nil && verr == nil {
 		fmt.Fprintf(stdout, "Traefik already serves a trusted certificate (until %s).\n", cert.NotAfter.Format("2 Jan 2006"))
+		return run(false, "trusted", trusted)
+	}
+	fmt.Fprintln(stdout, "Checking Let's Encrypt staging connectivity (up to 10s)...")
+	if stagingErr := probeACMEDirectory(stagingCA); stagingErr != nil {
+		fmt.Fprintf(stdout, "Let's Encrypt staging is unavailable: %v\nChecking production connectivity (up to 10s)...\n", stagingErr)
+		if productionErr := probeACMEDirectory(productionCA); productionErr != nil {
+			return fail("Cannot reach Let's Encrypt staging (%v) or production (%v). Check outbound HTTPS access and run devkit setup again.", stagingErr, productionErr)
+		}
+		fmt.Fprintln(stdout, "Production is reachable; skipping staging and requesting a trusted certificate. Production rate limits apply.")
 		return run(false, "trusted", trusted)
 	}
 	staging := func(cert *x509.Certificate, _ error) bool { return strings.Contains(cert.Issuer.CommonName, "STAGING") }

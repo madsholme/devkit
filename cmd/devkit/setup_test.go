@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -222,6 +223,9 @@ func TestWebUnitRunsThisBinaryWithoutEnvironment(t *testing.T) {
 
 func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	hostWith(t, `{}`)
+	swap[http.RoundTripper](t, &http.DefaultTransport, acmeTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	}))
 	swap[io.Writer](t, &stdout, &bytes.Buffer{})
 	swap(t, &certificatePoll, time.Millisecond)
 	stage := "none" // what Traefik serves: none, staging, production
@@ -257,17 +261,109 @@ func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	}
 
 	// With a trusted certificate already served, setup goes straight to production.
+	swap[http.RoundTripper](t, &http.DefaultTransport, acmeTransport(func(r *http.Request) (*http.Response, error) {
+		t.Error("already trusted certificate should not need an ACME connectivity check")
+		return nil, errors.New("offline")
+	}))
 	ups = nil
 	if err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9"); err != nil || !slices.Equal(ups, []bool{false}) {
 		t.Errorf("ups %v, %v", ups, err)
 	}
 
 	// A certificate that never comes fails with a pointer to the logs.
+	swap[http.RoundTripper](t, &http.DefaultTransport, acmeTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	}))
 	swap(t, &certificateTimeout, 5*time.Millisecond)
 	stage = "stuck"
-	swap(t, &setupProxy, func() error { return nil })
+	ups = nil
+	swap(t, &setupProxy, func() error { ups = append(ups, proxy.Staging); return nil })
 	if err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9"); err == nil || !strings.Contains(err.Error(), "docker logs") {
 		t.Errorf("timeout: %v", err)
+	}
+	if !slices.Equal(ups, []bool{true}) {
+		t.Errorf("issuance failure must not fall back to production: %v", ups)
+	}
+}
+
+type acmeTransport func(*http.Request) (*http.Response, error)
+
+func (f acmeTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestSetupFallsBackWhenStagingIsUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name                string
+		stagingStatus       int
+		productionOffline   bool
+		productionUntrusted bool
+	}{
+		{name: "connection reset"},
+		{name: "service unavailable", stagingStatus: http.StatusServiceUnavailable},
+		{name: "both offline", productionOffline: true},
+		{name: "production must be trusted", productionUntrusted: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := hostWith(t, `{}`)
+			var out bytes.Buffer
+			swap[io.Writer](t, &stdout, &out)
+			swap(t, &certificateTimeout, 5*time.Millisecond)
+			swap(t, &certificatePoll, time.Millisecond)
+			var checked []string
+			swap[http.RoundTripper](t, &http.DefaultTransport, acmeTransport(func(r *http.Request) (*http.Response, error) {
+				checked = append(checked, r.URL.String())
+				if deadline, ok := r.Context().Deadline(); !ok || time.Until(deadline) > 10*time.Second {
+					t.Error("ACME connectivity probe must have a short deadline")
+				}
+				if r.URL.String() == stagingCA && tc.stagingStatus != 0 {
+					return &http.Response{StatusCode: tc.stagingStatus, Body: io.NopCloser(strings.NewReader("unavailable"))}, nil
+				}
+				if r.URL.String() == stagingCA || tc.productionOffline {
+					return nil, errors.New("connection reset by peer")
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+			}))
+			proxy := proxyHost().Proxy
+			var ups []bool
+			swap(t, &setupProxy, func() error { ups = append(ups, proxy.Staging); return nil })
+			swap(t, &servedCertificate, func(ip, host string) (*x509.Certificate, error, error) {
+				cert := &x509.Certificate{Issuer: pkix.Name{CommonName: "TRAEFIK DEFAULT CERT"}}
+				if len(ups) > 0 && !proxy.Staging && !tc.productionUntrusted {
+					cert.Issuer.CommonName = "YR1"
+					return cert, nil, nil
+				}
+				return cert, errors.New("untrusted"), nil
+			})
+			err := startProxyWithCertificate(map[string]any{}, proxy, "dev.example.com", "100.64.0.9")
+			if !slices.Equal(checked, []string{stagingCA, productionCA}) {
+				t.Errorf("checked directories %v", checked)
+			}
+			if tc.productionOffline {
+				if err == nil || !strings.Contains(err.Error(), "staging") || !strings.Contains(err.Error(), "production") {
+					t.Errorf("expected actionable connection error, got %v", err)
+				}
+				data, _ := os.ReadFile(filepath.Join(dir, "config.json"))
+				if len(ups) != 0 || string(data) != `{}` {
+					t.Errorf("unreachable CAs should not change proxy or config: %v, %s", ups, data)
+				}
+				return
+			}
+			if tc.productionUntrusted {
+				if err == nil || !strings.Contains(err.Error(), "No trusted certificate") {
+					t.Errorf("accepted an untrusted production certificate: %v", err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(ups, []bool{false}) {
+				t.Errorf("expected one production start, got %v", ups)
+			}
+			if cfg, err := loadHostConfig(); err != nil || cfg.Proxy == nil || cfg.Proxy.Staging {
+				t.Errorf("production selection not persisted: %+v, %v", cfg.Proxy, err)
+			}
+			if !strings.Contains(out.String(), "staging") || !strings.Contains(out.String(), "production") {
+				t.Errorf("missing fallback explanation: %s", out.String())
+			}
+		})
 	}
 }
 
