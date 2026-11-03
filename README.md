@@ -62,18 +62,20 @@ The limits and the daily run are set in the host config's `prune` section.
 
 - Live: source bind mount, independent task data. The sample rereads `message.txt`
   on every request. Python code edits need a restart; adapt the recipe to your
-  real application's hot-reload server. Live services get `restart: unless-stopped`,
-  so running live previews come back after a host reboot (with Traefik, which uses the
-  same policy); stopped ones stay stopped. Creating a live preview builds its Compose images from
+  real application's hot-reload server. Creating a live preview builds its Compose images from
   the current files; resuming one does not, so after changing a Dockerfile or dependencies,
-  destroy and recreate it. Previews saved before this policy existed
-  gain it the next time `devbox live` or `devbox start` brings them up.
+  destroy and recreate it.
 - Local review: a detached checkout of an exact commit supplies build inputs.
   The web image is resolved to a Docker image ID; no review service may bind-mount
   host files. The temporary checkout is removed after the build. Test data remains
   mutable. Repeating review for the same commit resumes the existing artifact.
 - Team review: explicit deployment through the project's `publish` hook, e.g. to
   Hetzner/Dokploy. The adapter needs destination configuration; see [publishing](docs/publishing.md).
+
+Live and review services get `restart: unless-stopped`, so running previews come back after a
+host reboot (with Traefik, which uses the same policy); stopped ones stay stopped. Previews saved
+without this policy gain it the next time `devbox live`, `devbox review` or `devbox start` brings
+them up.
 
 Commit the project recipe before using `review`; it reads configuration from the
 selected commit. Generated inputs should be deterministic and dependencies locked.
@@ -106,6 +108,11 @@ go build -o bin/devbox ./cmd/devbox
 install -d "$HOME/.local/bin" && ln -sf "$PWD/bin/devbox" "$HOME/.local/bin/devbox"
 devbox setup
 ```
+
+For a host without Go, `./bundle.sh` (or `./bundle.sh arm64`) builds
+`bin/devbox-linux-<arch>.tar.gz` here: the binary, `bootstrap.sh`, `project-template`, README and
+LICENSE. Copy it over, unpack it, run `./bootstrap.sh`, then `install -D devbox ~/.local/bin/devbox`
+and `devbox setup`.
 
 `devbox setup` asks for each setting, offering the current one as default, and can be run
 again at any time to change something or repair the host. It:
@@ -414,7 +421,7 @@ preview's own host only.
 
 Seed data must be idempotent and wait for database readiness. A one-shot service
 (such as a separate seed job) must set `restart: "no"` in the live Compose file, or
-the live restart policy would rerun it whenever it exits. The sample does this
+the restart policy would rerun it whenever it exits. The sample does this
 on startup without resetting existing data. For a separate seed service, gate app
 startup on its successful completion and make it safe to rerun.
 

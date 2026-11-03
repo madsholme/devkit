@@ -245,22 +245,22 @@ func TestLiveTemplateResolvesAbsoluteSourceMount(t *testing.T) {
 	}
 }
 
-func TestReviewHasNoRestartPolicy(t *testing.T) {
+func TestReviewRestartsAfterAReboot(t *testing.T) {
 	fakeImage(t, `{"services": {"web": {}}}`)
 	output, err := render(filepath.Join(kit, "project-template"), projectConfig{Project: "demo"}, "review", composeEnv(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, has := object(object(output, "services"), "web")["restart"]; has {
-		t.Error("review web service has a restart policy")
+	if got := object(object(output, "services"), "web")["restart"]; got != "unless-stopped" {
+		t.Errorf("review web service restart %v", got)
 	}
 }
 
-func TestSavedLivePreviewGainsRestartPolicy(t *testing.T) {
+func TestSavedPreviewGainsRestartPolicy(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "compose.json")
 	os.WriteFile(path, []byte(`{"services": {
-		"web": {"labels": {"devbox.mode": "live"}},
-		"seed": {"labels": {"devbox.mode": "live"}, "restart": "no"}}}`), 0o600)
+		"web": {"labels": {"devbox.mode": "review"}},
+		"seed": {"labels": {"devbox.mode": "review"}, "restart": "no"}}}`), 0o600)
 	swap(t, &composeRun, func(string, ...string) error { return nil })
 	if err := up(path); err != nil {
 		t.Fatal(err)

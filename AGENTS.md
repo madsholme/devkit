@@ -17,6 +17,8 @@ This file covers what you need to change the kit itself.
   `repository` are the seams tests replace.
 - `bootstrap.sh`: installs the system prerequisites (Docker, Tailscale, docker group,
   firewall for tailscale0, lingering) on Ubuntu/Debian (and derivatives) and Fedora with sudo. POSIX sh, idempotent. devbox itself never uses sudo.
+- `bundle.sh`: builds `bin/devbox-linux-<arch>.tar.gz` (static binary, bootstrap.sh, template,
+  README, LICENSE) for hosts without Go.
 - `bin/devbox`: the built binary (gitignored). Build with
   `go build -o bin/devbox ./cmd/devbox`; the Go version is pinned in `mise.toml`.
 - `web/index.html`: the dashboard page. Vanilla JS, no build step, no dependencies.

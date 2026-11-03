@@ -123,6 +123,10 @@ say "Done"
 if [ -n "$relogin" ]; then
 	echo "Log out and back in (or run 'newgrp docker') so Docker works without sudo."
 fi
+if [ -z "$(git config --global user.email 2>/dev/null)" ]; then
+	echo "Git has no identity yet; commits need one:"
+	echo "  git config --global user.name 'Your Name' && git config --global user.email you@example.com"
+fi
 here=$(cd "$(dirname "$0")" && pwd)
 if [ -x "$here/devbox" ]; then
 	# A release bundle: the binary sits next to this script.

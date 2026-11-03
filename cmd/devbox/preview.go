@@ -12,15 +12,15 @@ import (
 	"strings"
 )
 
-// restartLive makes live previews come back after a reboot; devbox stop still keeps them stopped.
-// Services may override this, e.g. a one-shot seed service with restart: "no".
-func restartLive(service map[string]any) {
+// restartPolicy makes running previews, live and review, come back after a reboot; devbox stop
+// still keeps them stopped. Services may override it, e.g. a one-shot seed service with restart: "no".
+func restartPolicy(service map[string]any) {
 	if _, ok := service["restart"]; !ok {
 		service["restart"] = "unless-stopped"
 	}
 }
 
-// up starts a saved preview, adding the restart policy to live previews saved without it.
+// up starts a saved preview, adding the restart policy to previews saved without it.
 func up(path string) error {
 	saved, err := readCompose(path)
 	if err != nil {
@@ -30,13 +30,13 @@ func up(path string) error {
 	missing := false
 	for _, s := range services {
 		service := asObject(s)
-		if _, has := service["restart"]; !has && str(object(service, "labels"), "devbox.mode") == "live" {
+		if _, has := service["restart"]; !has && str(object(service, "labels"), "devbox.mode") != "" {
 			missing = true
 		}
 	}
 	if missing {
 		for _, s := range services {
-			restartLive(asObject(s))
+			restartPolicy(asObject(s))
 		}
 		if err := writeCompose(path, saved); err != nil {
 			return err
@@ -135,9 +135,7 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 				return nil, fail("Review services must use built images and must not bind-mount host files.")
 			}
 		}
-		if mode == "live" {
-			restartLive(service)
-		}
+		restartPolicy(service)
 		labels := ensureObject(service, "labels")
 		for k, v := range metadata {
 			labels[k] = v
