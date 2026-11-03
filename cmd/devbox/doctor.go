@@ -127,7 +127,7 @@ func lingering() bool {
 	if u, err := user.Current(); err == nil {
 		name = u.Username
 	}
-	out, err := capture("loginctl", "show-user", name, "--property=Linger", "--value")
+	out, err := probe("loginctl", "show-user", name, "--property=Linger", "--value")
 	return err == nil && strings.TrimSpace(out) == "yes"
 }
 
@@ -144,9 +144,9 @@ func doctorChecks() []check {
 		checks = append(checks, ok("config", "%s, previews at *.%s", configPath(), dom))
 	}
 
-	if version, err := capture("docker", "version", "--format", "{{.Server.Version}}"); err != nil {
+	if version, err := probe("docker", "version", "--format", "{{.Server.Version}}"); err != nil {
 		checks = append(checks, bad("docker", "Docker does not answer for this user: install Docker Engine and add yourself to the docker group (bootstrap.sh in the devbox checkout does it on Ubuntu, Debian and Fedora)"))
-	} else if compose, err := capture("docker", "compose", "version", "--short"); err != nil {
+	} else if compose, err := probe("docker", "compose", "version", "--short"); err != nil {
 		checks = append(checks, bad("docker", "Docker %s has no Compose v2 plugin: install docker-compose-plugin", version))
 	} else {
 		checks = append(checks, ok("docker", "Docker %s with Compose %s", version, compose))
@@ -172,7 +172,7 @@ func doctorChecks() []check {
 		}
 	}
 
-	if _, err := capture("docker", "network", "inspect", "--format", "{{.Name}}", proxyNetwork); err != nil {
+	if _, err := probe("docker", "network", "inspect", "--format", "{{.Name}}", proxyNetwork); err != nil {
 		checks = append(checks, bad("network", "Docker network %s is missing: run devbox proxy up", proxyNetwork))
 	} else {
 		checks = append(checks, ok("network", "%s", proxyNetwork))
@@ -183,7 +183,7 @@ func doctorChecks() []check {
 	if self, err := webExecutable(); err == nil {
 		want := webUnit(self)
 		have, _ := os.ReadFile(unitPath())
-		active, _ := capture("systemctl", "--user", "is-active", "devbox-web")
+		active, _ := probe("systemctl", "--user", "is-active", "devbox-web")
 		switch {
 		case have == nil:
 			checks = append(checks, bad("dashboard", "devbox-web is not installed: run devbox setup"))

@@ -40,6 +40,7 @@ type runOpts struct {
 	dir     string
 	env     []string // nil inherits the environment
 	capture bool     // return stdout instead of passing it through
+	quiet   bool     // discard stderr: for probes whose failure the caller reports
 }
 
 // runCommand runs a command with stderr passed through; tests replace it.
@@ -47,6 +48,9 @@ var runCommand = func(args []string, o runOpts) (string, error) {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir, cmd.Env = o.dir, o.env
 	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
+	if o.quiet {
+		cmd.Stderr = nil
+	}
 	var out bytes.Buffer
 	if o.capture {
 		cmd.Stdout = &out
@@ -60,6 +64,11 @@ var runCommand = func(args []string, o runOpts) (string, error) {
 }
 
 func capture(args ...string) (string, error) { return runCommand(args, runOpts{capture: true}) }
+
+// probe is capture without stderr, for checks that report a failure themselves.
+func probe(args ...string) (string, error) {
+	return runCommand(args, runOpts{capture: true, quiet: true})
+}
 
 func git(root string, args ...string) (string, error) {
 	return capture(append([]string{"git", "-C", root}, args...)...)

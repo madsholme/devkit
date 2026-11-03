@@ -123,11 +123,25 @@ say "Done"
 if [ -n "$relogin" ]; then
 	echo "Log out and back in (or run 'newgrp docker') so Docker works without sudo."
 fi
-cat <<'EOF'
-Next, in this checkout, build devbox and configure the host (see README.md, Host setup):
+here=$(cd "$(dirname "$0")" && pwd)
+if [ -x "$here/devbox" ]; then
+	# A release bundle: the binary sits next to this script.
+	cat <<EOF
+Next, install devbox and configure the host:
 
+  install -D "$here/devbox" ~/.local/bin/devbox
+  devbox setup
+
+If devbox is not found, log in again: Ubuntu adds ~/.local/bin to PATH at login.
+EOF
+else
+	cat <<EOF
+Next, build devbox in this checkout and configure the host (see README.md, Host setup):
+
+  cd "$here"
   curl https://mise.run | sh                # if you have no Go yet; mise.toml pins it
-  mise install && mise exec -- go build -o bin/devbox ./cmd/devbox
-  install -d ~/.local/bin && ln -sf "$PWD/bin/devbox" ~/.local/bin/devbox
+  mise trust && mise install && mise exec -- go build -o bin/devbox ./cmd/devbox
+  install -d ~/.local/bin && ln -sf "\$PWD/bin/devbox" ~/.local/bin/devbox
   devbox setup
 EOF
+fi
