@@ -136,7 +136,7 @@ Next, install devbox and configure the host:
   install -D "$here/devbox" ~/.local/bin/devbox
   devbox setup
 
-If devbox is not found, log in again: Ubuntu adds ~/.local/bin to PATH at login.
+If devbox is not found, log in again: most distributions add ~/.local/bin to PATH at login.
 EOF
 else
 	cat <<EOF

@@ -93,7 +93,8 @@ adds you to the docker group (log in again after), runs `tailscale up` if the ho
 a tailnet yet and enables lingering. If firewalld (Fedora's default) or ufw is active, it lets
 traffic on `tailscale0` in, so the tailnet reaches Traefik and media ports; your tailnet's
 access controls decide who can. Elsewhere, install them with their official instructions;
-devbox checks for them.
+devbox checks for them. On Fedora, SELinux may stay enforcing: Docker's own packages run
+containers without SELinux labels, so live previews can read the mounted worktree.
 
 Building devbox needs Go (the version is pinned in `mise.toml`; `mise install` gets it).
 Python 3 is only used by the Docker acceptance checks. You need a domain whose DNS provider
