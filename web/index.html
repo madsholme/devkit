@@ -67,6 +67,10 @@ a:hover { text-decoration: underline; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); }
 .facts b { color: var(--text); font-weight: 500; }
+.facts button.pair { font-size: 12px; padding: 1px 8px; }
+.qr { display: block; width: 240px; height: 240px; margin: 4px auto 12px; border-radius: 6px; }
+.pair-link { display: flex; gap: 6px; align-items: center; }
+.pair-link input { flex: 1; min-width: 0; }
 .refresh { margin-left: auto; color: var(--muted); font-size: 12px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
 /* The preview table grows with its rows and never scrolls; narrow screens hide columns instead. */
@@ -378,6 +382,15 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
   </form>
 </dialog>
 
+<dialog id="pair">
+  <div class="dlg-head"><b>Pair a device with T3 Code</b></div>
+  <div class="form">
+    <div id="pair-body"></div>
+    <p class="err" id="pair-error"></p>
+    <div class="row"><button type="button" id="pair-close">Close</button></div>
+  </div>
+</dialog>
+
 <dialog id="job">
   <div class="dlg-head">
     <span class="live-dot" id="job-live"></span>
@@ -584,8 +597,33 @@ function renderAuth() {
 async function loadSession() {
   try { session = await (await fetch("api/session")).json(); } catch {}
   renderAuth();
-  if (lastData) { renderPreviews(lastData.previews); renderRepos(lastData.repositories, lastData.previews); renderOrphans(lastData.repositories); }
+  if (lastData) { renderPreviews(lastData.previews); renderRepos(lastData.repositories, lastData.previews); renderOrphans(lastData.repositories); renderHost(lastData.host); }
 }
+
+// Pairing: T3 Code issues a one-time link; the page shows it as a QR code and never stores it.
+function qrSVG(rows) {
+  const n = rows.length + 8, cells = [];
+  rows.forEach((row, y) => [...row].forEach((c, x) => { if (c === "1") cells.push(`M${x + 4} ${y + 4}h1v1h-1z`); }));
+  return `<svg class="qr" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" role="img" aria-label="QR code with the pairing link">
+    <rect width="${n}" height="${n}" fill="#fff"/><path d="${cells.join("")}" fill="#000"/></svg>`;
+}
+async function openPair() {
+  $("pair-body").innerHTML = `<p class="note">Asking T3 Code for a pairing link…</p>`;
+  $("pair-error").textContent = "";
+  $("pair").showModal();
+  const res = await post("api/pair");
+  if (res.status === 401) { $("pair").close(); await loadSession(); $("signin").showModal(); return; }
+  if (!res.ok) { $("pair-body").innerHTML = ""; $("pair-error").textContent = await res.text(); return; }
+  const p = await res.json(), until = new Date(p.expires).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  $("pair-body").innerHTML = `${qrSVG(p.qr)}
+    <p class="note">Scan it with the phone or computer to connect, or open the link there. It works once, until ${esc(until)}.</p>
+    <div class="pair-link"><input readonly class="mono" id="pair-url" value="${esc(p.url)}"><button type="button" id="pair-copy">Copy</button></div>
+    ${p.code ? `<p class="note">Or enter the code <b class="mono">${esc(p.code)}</b> in the T3 app.</p>` : ""}`;
+  $("pair-copy").onclick = () => copyText(p.url, $("pair-copy"));
+}
+document.addEventListener("click", e => { if (e.target.id === "pair-open") openPair(); });
+$("pair-close").onclick = () => $("pair").close();
+$("pair").addEventListener("close", () => { $("pair-body").innerHTML = ""; }); // Escape too: don't keep the link
 
 // placeMenu puts an open actions menu under its button, or above it when the window has no room below.
 function placeMenu(menu) {
@@ -748,6 +786,7 @@ function renderHost(h) {
   $("facts").innerHTML = `
     ${h.services.map(s => `<span class="status s-${s.status === "up" ? "healthy" : "dead"}" title="${esc(s.name)}: ${esc(s.status)} (${esc(s.detail)})"><span class="dot"></span>${
       s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}</span>`).join("")}
+    ${session.signed_in && session.pair ? `<button class="pair" id="pair-open" title="Show a one-time link and QR code to connect a phone or another computer">Pair a device</button>` : ""}
     <span>${esc(h.domain)}</span>
     ${certFact(h)}
     <span><b>${h.running_containers}</b> containers running</span>`;

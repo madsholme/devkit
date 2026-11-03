@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/steenfeldt/devkit/web"
@@ -193,7 +195,7 @@ func newActionHandler() *actionHandler {
 
 func (h *actionHandler) handles(path string) bool {
 	switch path {
-	case "/api/session", "/api/login", "/api/logout", "/api/action", "/api/job":
+	case "/api/session", "/api/login", "/api/logout", "/api/action", "/api/job", "/api/pair":
 		return true
 	}
 	return false
@@ -206,7 +208,10 @@ func sendError(w http.ResponseWriter, code int, message string) {
 // session describes what the page may offer: whether a password is set, whether this browser is
 // signed in, and the share options of this host.
 func session(r *http.Request) map[string]any {
-	result := map[string]any{"password_set": passwordHash() != "", "signed_in": signedIn(r), "share": nil}
+	result := map[string]any{"password_set": passwordHash() != "", "signed_in": signedIn(r), "share": nil, "pair": false}
+	if cfg, err := loadHostConfig(); err == nil && cfg.Harness != nil && cfg.Harness.Name == t3Harness.Name && cfg.Harness.Host != "" {
+		result["pair"] = true
+	}
 	if cfg, ok, err := loadShareConfig(); err == nil && ok {
 		result["share"] = map[string]any{"domain": cfg.Domain, "prefix": *cfg.Prefix, "hosts": append([]string{}, cfg.Hosts...),
 			"default_hours": cfg.DefaultHours, "max_hours": cfg.MaxHours}
@@ -297,7 +302,40 @@ func (h *actionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Printf("devkit web: %s started %q\n", clientIP(r), j.Title)
 		sendJSON(w, map[string]any{"id": j.ID, "title": j.Title})
+	case "/api/pair":
+		// Not a job: the pairing link is a secret, so it goes to this page only and is not kept.
+		if !signedIn(r) {
+			sendError(w, http.StatusUnauthorized, "Sign in first.")
+			return
+		}
+		out, err := runPair()
+		if err != nil {
+			sendError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		fmt.Printf("devkit web: %s paired a device with T3 Code\n", clientIP(r))
+		send(w, http.StatusOK, out, "application/json", "no-store")
 	}
+}
+
+// runPair runs devkit pair --json as the dashboard; tests replace it.
+var runPair = func() ([]byte, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(self, "pair", "--json")
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	cmd.Env = withEnv(os.Environ(), map[string]string{"DEVKIT_BY": "dashboard"})
+	if err := cmd.Run(); err != nil {
+		message := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(stderr.String()), "devkit: "))
+		if message == "" {
+			message = err.Error()
+		}
+		return nil, fail("%s", message)
+	}
+	return stdout.Bytes(), nil
 }
 
 // reapLoop removes expired shares every minute, sweeps leftover Cloudflare resources every ten

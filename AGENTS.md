@@ -18,6 +18,8 @@ old names are dropped on purpose.
   `cloudflare.go` (API client) and `hostconfig.go` (`~/.config/devkit/config.json`: domain,
   harness, proxy, web, share, and secret sources). Host setup: `setup.go` (`devkit setup`),
   `proxy.go` (`devkit proxy up` renders and starts Traefik) and `doctor.go` (`devkit doctor`).
+  `pair.go` issues T3 Code pairing links (`devkit pair`, `/api/pair`) and `qr.go` draws them as QR
+  codes (its own small encoder; tests pin output that was checked with a real decoder).
   `history.go` is the event log (`~/.local/state/devkit/history.jsonl`). Package variables such as `runCommand`, `dockerContainers` and
   `repository` are the seams tests replace.
 - `bootstrap.sh`: installs the system prerequisites (Docker, Tailscale, docker group,

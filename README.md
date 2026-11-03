@@ -35,6 +35,7 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit share [preview] [--host NAME] [--hours N]` | Make a running preview public until it expires (see below) |
 | `devkit unshare [preview]` | End a public share; `--expired` removes all expired ones and leftovers |
 | `devkit shares` | List public shares, their URLs and expiry |
+| `devkit pair [--json]` | A one-time link, code and QR code to connect a phone or computer to T3 Code, valid 10 minutes |
 | `devkit history [preview] [-n N]` | What devkit did on this host and who did it, newest last (default 30 events) |
 
 Run lifecycle commands inside the owning Git repository. `ls` works anywhere.
@@ -132,7 +133,7 @@ again at any time to change something or repair the host. It:
 7. With the `t3` harness (the default), makes sure T3 Code answers on `127.0.0.1:3773`. If it is
    missing, it offers T3's official installer (`curl -fsSL https://t3.codes/install.sh | sh`, a
    self-contained `t3` in `~/.local/bin`) and `t3 service install` (the user service `t3code`),
-   or starts the service if it is only stopped. Pair a device with `t3 pair` on the host. Don't
+   or starts the service if it is only stopped. Pair a device with `devkit pair` or the dashboard. Don't
    run `t3 up`: Traefik already serves T3 at `t3.<domain>`, and Tailscale Serve would take
    port 443. T3 Code wants about 1.5 GB of memory; give a T3 host at least 2 GB.
 8. Runs `devkit doctor`.
@@ -301,6 +302,11 @@ binary itself, as the CLI would, and the page shows its output live. The server 
 accepts targets that exist on the host, requests from the dashboard's own page, and
 an explicit confirmation for destroy and clean-up; five wrong passwords lock an address out for five
 minutes. `exec` stays in the CLI.
+
+With the T3 harness, a signed-in browser also gets **Pair a device** next to T3's status: it
+shows a QR code, link and code from `devkit pair` that connect one phone or computer to T3 Code
+within 10 minutes. devkit asks the `t3` version the T3 service runs (`t3 auth pairing create`),
+returns the link to that page only, without keeping it, and records only that a pairing happened.
 
 ### History
 

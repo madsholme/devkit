@@ -37,6 +37,7 @@ commands:
                        make a running preview public through a Cloudflare tunnel until it expires
   unshare [preview]    end a preview's public share (--expired: every expired share, plus leftovers)
   shares               list public shares
+  pair [--json]        pair a device with T3 Code: a one-time link and QR code, valid 10 minutes
   history [preview] [-n N]
                        show what devkit did on this host, newest last (default the last 30 events)
   start [preview]      resume a stopped preview; data is retained
@@ -301,6 +302,13 @@ func dispatch(args []string) (int, error) {
 			return 2, err
 		}
 		return 0, listShares()
+	case "pair":
+		set := flags(command)
+		asJSON := set.Bool("json", false, "")
+		if err := parse(set, rest); err != nil {
+			return 2, err
+		}
+		return 0, noted("pair", "", pair(*asJSON))
 	case "history":
 		positional, values, err := splitArgs(rest, map[string]bool{"-n": true}, nil)
 		if err != nil {

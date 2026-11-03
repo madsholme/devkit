@@ -249,3 +249,49 @@ func fmtNumber(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
+
+func TestPairingIsForSignedInPagesAndNotKept(t *testing.T) {
+	server, _, release := webHost(t)
+	defer close(release)
+	origin := server.URL
+	calls := 0
+	swap(t, &runPair, func() ([]byte, error) {
+		calls++
+		return []byte(`{"url":"https://t3.dev.example.com/pair#token=SECRET","code":"SECRET","qr":["1"]}`), nil
+	})
+	if resp, _ := post(t, server, "/api/pair", "https://evil.example", "", nil); resp.StatusCode != 403 {
+		t.Errorf("foreign Origin: %d", resp.StatusCode)
+	}
+	if resp, _ := post(t, server, "/api/pair", origin, "", nil); resp.StatusCode != 401 || calls != 0 {
+		t.Errorf("not signed in: %d, %d calls", resp.StatusCode, calls)
+	}
+	resp, _ := post(t, server, "/api/login", origin, "", map[string]string{"password": "dashboard-password"})
+	var cookie string
+	for _, c := range resp.Cookies() {
+		if c.Name == sessionCookie {
+			cookie = c.Value
+		}
+	}
+	resp, text := post(t, server, "/api/pair", origin, cookie, nil)
+	if resp.StatusCode != 200 || !strings.Contains(text, "token=SECRET") || resp.Header.Get("Cache-Control") != "no-store" {
+		t.Errorf("pair: %d %q %q", resp.StatusCode, text, resp.Header.Get("Cache-Control"))
+	}
+
+	// The page offers pairing only with the T3 harness.
+	session := func() map[string]any {
+		resp, _ := http.Get(server.URL + "/api/session")
+		var state map[string]any
+		json.NewDecoder(resp.Body).Decode(&state)
+		resp.Body.Close()
+		return state
+	}
+	if session()["pair"] != false {
+		t.Error("pair offered without a harness")
+	}
+	cfg, _ := readConfigFile()
+	cfg["harness"] = t3Harness
+	writeConfigFile(cfg)
+	if session()["pair"] != true {
+		t.Error("pair not offered with T3")
+	}
+}
