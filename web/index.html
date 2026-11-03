@@ -67,7 +67,8 @@ a:hover { text-decoration: underline; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
 .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); }
 .facts b { color: var(--text); font-weight: 500; }
-.facts button.pair { font-size: 12px; padding: 1px 8px; }
+.service-fact { display: inline-flex; align-items: center; gap: 6px; }
+.facts button.pair { font-size: 12px; padding: 0 7px; line-height: 18px; }
 .qr { display: block; width: 240px; height: 240px; margin: 4px auto 12px; border-radius: 6px; }
 .pair-link { display: flex; gap: 6px; align-items: center; }
 .pair-link input { flex: 1; min-width: 0; }
@@ -784,9 +785,11 @@ function certFact(h) {
 
 function renderHost(h) {
   $("facts").innerHTML = `
-    ${h.services.map(s => `<span class="status s-${s.status === "up" ? "healthy" : "dead"}" title="${esc(s.name)}: ${esc(s.status)} (${esc(s.detail)})"><span class="dot"></span>${
-      s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}</span>`).join("")}
-    ${session.signed_in && session.pair ? `<button class="pair" id="pair-open" title="Show a one-time link and QR code to connect a phone or another computer">Pair a device</button>` : ""}
+    ${h.services.map(s => `<span class="service-fact"><span class="status s-${s.status === "up" ? "healthy" : "dead"}" title="${esc(s.name)}: ${esc(s.status)} (${esc(s.detail)})"><span class="dot"></span>${
+      s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}</span>${
+      // Pairing belongs to T3 Code, so its button sits right next to T3's status.
+      session.signed_in && session.pair && s.name === "T3 Code" && s.status === "up"
+        ? `<button class="pair" id="pair-open" title="Connect a phone or another computer to T3 Code with a one-time QR code">Pair device</button>` : ""}</span>`).join("")}
     <span>${esc(h.domain)}</span>
     ${certFact(h)}
     <span><b>${h.running_containers}</b> containers running</span>`;
