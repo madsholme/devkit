@@ -15,11 +15,12 @@ import (
 // hostConfig is ~/.config/devkit/config.json: what devkit knows about this host. devkit setup
 // writes it; devkit web password adds the dashboard password.
 type hostConfig struct {
-	Name        string         `json:"name"`         // optional; the dashboard's title, the hostname by default
-	Domain      string         `json:"domain"`       // preview domain, e.g. "dev.example.com"; DEV_DOMAIN overrides it
-	TailscaleIP string         `json:"tailscale_ip"` // optional; read from tailscale ip -4 when empty
-	Harness     *harnessConfig `json:"harness"`      // the agent tool on this host, if any
-	Proxy       *proxyConfig   `json:"proxy"`        // the Traefik proxy started by devkit proxy up
+	VMProjects  []string       `json:"vm_projects,omitempty"` // explicit recipe roots for VM-only projects
+	Name        string         `json:"name"`                  // optional; the dashboard's title, the hostname by default
+	Domain      string         `json:"domain"`                // preview domain, e.g. "dev.example.com"; DEV_DOMAIN overrides it
+	TailscaleIP string         `json:"tailscale_ip"`          // optional; read from tailscale ip -4 when empty
+	Harness     *harnessConfig `json:"harness"`               // the agent tool on this host, if any
+	Proxy       *proxyConfig   `json:"proxy"`                 // the Traefik proxy started by devkit proxy up
 	Web         struct {
 		Port int `json:"port"`
 	} `json:"web"`
@@ -81,6 +82,14 @@ func loadHostConfig() (hostConfig, error) {
 	if err == nil {
 		if err := json.Unmarshal(data, &cfg); err != nil {
 			return cfg, fail("%s: %v", configPath(), err)
+		}
+	}
+	if len(cfg.VMProjects) > 128 {
+		return cfg, fail("vm_projects accepts at most 128 project directories.")
+	}
+	for _, root := range cfg.VMProjects {
+		if !filepath.IsAbs(expandHome(root)) {
+			return cfg, fail("vm_projects directories must be absolute or start with ~/.")
 		}
 	}
 	cfg.Domain = strings.TrimRight(strings.ToLower(cfg.Domain), ".")

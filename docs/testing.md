@@ -33,7 +33,7 @@ for the optional x86_64 QEMU smoke check. It needs `qemu-system-x86_64` with SPI
 `qemu-img`. It creates two paused, 64 MiB TCG guests with no OS, one with a temporary
 32 MiB qcow2 disk and SPICE, the other with a localhost SSH forwarding listener.
 It verifies real process discovery, sizes, connection commands, metadata privacy
-and `/api/vms` CPU sampling. Its temporary web server stubs Docker to isolate
+project mapping (including an unmatched guest), and `/api/vms` CPU sampling. Its temporary web server stubs Docker to isolate
 background cleanup from real containers. It terminates only its own processes and
 removes its temporary files. This does not test a booted guest login or graphical
 session; those need an existing test guest and client. Libvirt parsing, access

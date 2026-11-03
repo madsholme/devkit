@@ -20,6 +20,8 @@ old names are dropped on purpose.
   `proxy.go` (`devkit proxy up` renders and starts Traefik) and `doctor.go` (`devkit doctor`).
   `vms.go` discovers active QEMU/libvirt VMs read-only (`devkit vms`, `/api/vms`):
   allowlisted metadata only, bounded probes, UUID deduplication and private SSH connection commands.
+  `vm_projects.go` matches explicit project `vms` selectors (UUID before name), discovers recipes
+  from Docker/harness/cwd and host `vm_projects` roots, and leaves ambiguous claims unassigned.
   `pair.go` issues T3 Code pairing links (`devkit pair`, `/api/pair`) and `qr.go` draws them as QR
   codes (its own small encoder; tests pin output that was checked with a real decoder).
   `history.go` is the event log (`~/.local/state/devkit/history.jsonl`). Package variables such as `runCommand`, `dockerContainers` and

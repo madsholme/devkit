@@ -58,6 +58,8 @@ h3 { font-size: 14px; margin: 0 0 8px; }
 .tabs button:hover { color: var(--text); }
 .tabs button[aria-selected=true] { color: var(--text); border-bottom-color: var(--accent); }
 .tabs .count { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.vm-group { margin: 0; padding: 10px 16px; background: var(--code); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.vm-group .count { margin-left: 8px; }
 .vm-row { padding: 16px; border-bottom: 1px solid var(--line); }
 .vm-row:last-child { border-bottom: 0; }
 .vm-overview { display: grid; grid-template-columns: minmax(180px, 1.4fr) 1fr 1fr 1fr; gap: 16px; }
@@ -355,11 +357,11 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
   </section>
 
   <section id="tab-vms" role="tabpanel" aria-labelledby="tab-btn-vms" hidden>
-    <div class="filters"><input type="search" id="vm-filter" aria-label="Filter virtual machines" placeholder="Filter virtual machines…" autocomplete="off"><button id="vm-refresh">Refresh VMs</button><span class="refresh" id="vm-updated" aria-live="polite"></span></div>
+    <div class="filters"><input type="search" id="vm-filter" aria-label="Filter virtual machines" placeholder="Filter by VM or project…" autocomplete="off"><button id="vm-refresh">Refresh VMs</button><span class="refresh" id="vm-updated" aria-live="polite"></span></div>
     <div class="notice" id="vm-warning" role="status" hidden></div>
     <div class="error" id="vm-error" role="alert" hidden></div>
     <div class="panel" id="vm-list"><div class="vm-empty">Loading virtual machines…</div></div>
-    <p class="vm-help">Active VMs visible to this devkit user. CPU is host usage (100% = one core); resident memory includes QEMU overhead. GPU usage is unavailable.</p>
+    <p class="vm-help">Groups use each project’s devkit.json VM mappings; unmatched VMs appear under Other VMs. CPU is host usage (100% = one core); resident memory includes QEMU overhead. GPU usage is unavailable.</p>
   </section>
 
   <section id="tab-worktrees" role="tabpanel" aria-labelledby="tab-btn-worktrees" hidden>
@@ -1286,13 +1288,18 @@ function renderVMs() {
   if (!vmData) return;
   const open = new Set([...document.querySelectorAll("[data-vm-connect][open]")].map(el => el.dataset.vmConnect));
   const filter = $("vm-filter").value.toLowerCase();
-  const rows = vmData.vms.filter(v => [v.name, v.source, v.display].join(" ").toLowerCase().includes(filter));
+  const rows = vmData.vms.filter(v => [v.name, v.project || "Other VMs", v.source, v.display].join(" ").toLowerCase().includes(filter))
+    .sort((a, b) => a.project !== b.project ? (!a.project ? 1 : !b.project ? -1 : a.project.localeCompare(b.project)) : a.name.localeCompare(b.name));
+  const counts = new Map();
+  for (const v of rows) counts.set(v.project || "", (counts.get(v.project || "") || 0) + 1);
   $("vm-count").textContent = vmData.vms.length;
-  $("vm-list").innerHTML = rows.length ? rows.map(v => {
+  $("vm-list").innerHTML = rows.length ? rows.map((v, i) => {
     const label = v.display === "headless" ? "Headless" : v.display === "unknown" ? "Display unknown" : v.display === "local" ? "Local display" : v.display.toUpperCase() + " display";
     const source = v.source === "qemu" ? "Standalone QEMU" : v.source === "qemu:///session" ? "libvirt · session" : "libvirt · system";
     const connections = v.connections.filter(c => c.command);
-    return `<article class="vm-row"><div class="vm-overview">
+    const heading = i === 0 || (rows[i - 1].project || "") !== (v.project || "")
+      ? `<h3 class="vm-group">${esc(v.project || "Other VMs")} <span class="count">${plural(counts.get(v.project || ""), "VM")}</span></h3>` : "";
+    return `${heading}<article class="vm-row"><div class="vm-overview">
       <div class="vm-identity"><div class="vm-name">${vmIcon(v.display)}<strong>${esc(v.name)}</strong></div><div class="vm-meta">${esc(label)} · ${esc(v.state)}<br>${esc(source)}${v.pid ? " · PID " + esc(v.pid) : ""}</div></div>
       <dl class="vm-facts"><dt>Allocated</dt><dd>${esc(v.vcpus || "Unknown")} vCPUs · ${esc(vmSize(v.memory_bytes))} RAM</dd><dt>Disk capacity</dt><dd>${esc(vmSize(v.disk_bytes))}</dd></dl>
       <dl class="vm-facts"><dt>Graphics / GPU</dt><dd>${esc(v.graphics.length ? v.graphics.join(", ") : "Not reported")}</dd></dl>
@@ -1301,6 +1308,7 @@ function renderVMs() {
       <p>Run these commands on your computer. Keep the tunnel terminal open, then connect from a second terminal.</p>
       ${connections.map(c => `<h3>${c.kind === "ssh" ? "Guest SSH" : c.kind === "console" ? "Serial console" : esc(c.kind.toUpperCase())}</h3>${c.tunnel ? "<div>1. Open the SSH tunnel</div>" + vmCommand(c.tunnel, "Copy SSH tunnel") + "<div>2. Connect to the VM</div>" : ""}${vmCommand(c.command, "Copy connection command")}${c.kind === "console" ? '<p class="vm-help">Requires a configured guest serial console and libvirt console permission. Press Ctrl+] to leave.</p>' : ""}`).join("")}
       <p class="vm-help">SSH access to the devkit host is required. Install virt-viewer on your computer for SPICE/VNC. If the local port is busy, change it in both commands. Use your existing guest key with SSH if required.</p></details>` : ""}
+      ${v.project_note ? `<p class="vm-help">${esc(v.project_note)}</p>` : ""}
       ${v.connection_note ? `<p class="vm-help">${esc(v.connection_note)}</p>` : ""}</article>`;
   }).join("") : `<div class="vm-empty">${filter ? "No virtual machines match this filter." : "No running virtual machines discovered."}<p class="vm-help">${filter ? "Try a different name or display type." : "Start a QEMU or libvirt VM using your existing workflow, then refresh. Optional host prerequisites: ./bootstrap.sh --qemu."}</p></div>`;
 }

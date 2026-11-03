@@ -32,6 +32,8 @@ type vmConnection struct {
 type vmDisk struct{ path, format string }
 
 type virtualMachine struct {
+	Project        string         `json:"project"`
+	ProjectNote    string         `json:"project_note,omitempty"`
 	ID             string         `json:"id"`
 	Name           string         `json:"name"`
 	UUID           string         `json:"uuid,omitempty"`
@@ -48,6 +50,7 @@ type virtualMachine struct {
 	RSSBytes       uint64         `json:"rss_bytes,omitempty"`
 	Connections    []vmConnection `json:"connections"`
 	ConnectionNote string         `json:"connection_note,omitempty"`
+	cwd            string
 	diskTargets    []string
 	disks          []vmDisk
 	ticks, start   uint64
@@ -351,6 +354,7 @@ func processVMs() ([]virtualMachine, []string) {
 		if f[0] == "T" || f[0] == "t" {
 			vm.State = "paused"
 		}
+		vm.cwd, _ = os.Readlink(filepath.Join(dir, "cwd"))
 		for j := range vm.disks {
 			if p := vm.disks[j].path; p != "" && !filepath.IsAbs(p) {
 				cwd, err := os.Readlink(filepath.Join(dir, "cwd"))
@@ -610,6 +614,7 @@ func mergeVMs(processes, domains []virtualMachine) []virtualMachine {
 		for j, p := range processes {
 			if p.UUID != "" && p.UUID == domains[i].UUID && !used[j] {
 				domains[i].PID = p.PID
+				domains[i].cwd = p.cwd
 				domains[i].RSSBytes = p.RSSBytes
 				domains[i].ticks = p.ticks
 				domains[i].start = p.start
@@ -732,7 +737,12 @@ func (v *vmInventory) snapshot(ctx context.Context) vmSnapshot {
 		warnings = append(warnings, w...)
 	}
 	rows := mergeVMs(processes, domains)
-	cfg, _ := loadHostConfig()
+	cfg, configErr := loadHostConfig()
+	if configErr != nil {
+		warnings = append(warnings, "Host configuration is invalid; check vm_projects and other host settings.")
+		cfg = hostConfig{}
+	}
+	warnings = append(warnings, discoverVMProjects(ctx, cfg, rows)...)
 	host := cfg.TailscaleIP
 	if host == "" {
 		if ip, err := vmProbe(ctx, "tailscale", "ip", "-4"); err == nil && net.ParseIP(strings.TrimSpace(ip)) != nil {
@@ -769,7 +779,15 @@ func listVMs(asJSON bool) error {
 	if len(data.VMs) == 0 {
 		fmt.Fprintln(stdout, "No running QEMU or libvirt virtual machines found.")
 	}
-	for _, vm := range data.VMs {
+	lastProject := ""
+	for i, vm := range data.VMs {
+		if i == 0 || vm.Project != lastProject {
+			fmt.Fprintln(stdout, orDefault(vm.Project, "Other VMs"))
+			lastProject = vm.Project
+		}
+		if vm.ProjectNote != "" {
+			fmt.Fprintln(stdout, "  "+vm.ProjectNote)
+		}
 		fmt.Fprintf(stdout, "%s  %s  %s  %s\n", vm.Name, vm.State, vm.Source, vm.Display)
 		value := func(n uint64) string {
 			if n == 0 {

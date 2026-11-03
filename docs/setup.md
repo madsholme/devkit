@@ -125,6 +125,8 @@ which setup writes and which you may edit:
 }
 ```
 
+- `vm_projects`: optional list of absolute or `~/` project directories whose VM mappings
+  the dashboard should read, including VM-only and libvirt projects. See [VM mappings](projects.md#virtual-machines).
 - `name`: optional; the dashboard's title, the hostname by default.
 - `domain`: previews are `<name>.<domain>`, the dashboard `devkit.<domain>`. `DEV_DOMAIN`
   overrides it, e.g. for tests.

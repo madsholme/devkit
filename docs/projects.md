@@ -27,6 +27,56 @@ an allowlist for the sample. Rendered Compose config may contain environment sec
 it is stored privately at `<git-common-dir>/devkit/runs/<preview>/compose.json`.
 These are per-preview execution artifacts for restart/cleanup, not a task registry.
 
+## Virtual machines
+
+Use the same `project` slug as your Docker previews, and list the VMs that belong
+to it in `devkit.json`:
+
+```json
+{
+  "project": "swiftconfig",
+  "vms": [
+    {"name": "native-ubuntu22-task30"},
+    {"uuid": "f845843c-ec18-4c42-8298-d8aec5c22286"}
+  ]
+}
+```
+
+Merge `vms` into your existing recipe; keep its Compose settings and hooks. A
+VM-only project can use just `project` and `vms`. Each mapping has exactly one
+`name` or `uuid`, with at most 128 mappings per recipe. Names are exact and
+case-sensitive (no prefix/glob matching); UUIDs are case-insensitive. QEMU gets
+its identity from `-name` / `-uuid`; libvirt provides its domain name and UUID.
+Find these with `devkit vms --json`. Existing launch scripts need no changes
+when they already give their guests stable names. UUIDs are preferable when
+names may repeat or change.
+
+UUID mappings take precedence over name mappings. If several active VMs share
+a mapped identifier, or different projects claim the same VM at the same priority,
+those VMs stay in **Other VMs** with an explanation. The same project can repeat
+its mapping across worktrees without causing a conflict. Grouping is informational;
+it does not grant access or change VM ownership, lifecycle or SSH authentication.
+
+Recipe discovery uses Docker preview worktree labels, the harness's worktree glob,
+the current CLI directory, and readable QEMU working directories. For nested
+working directories it reads the nearest recipe. A working directory only helps
+find a recipe: the VM still needs an explicit mapping. No disk-path inference or
+recursive home-directory scan is performed.
+
+For a VM-only project (particularly libvirt), add its directory to the host's
+`~/.config/devkit/config.json` so the dashboard can find it independently of Docker:
+
+```json
+"vm_projects": ["/home/mads/Work/SwiftConfig", "/home/mads/Work/PlayWarden"]
+```
+
+These must be absolute paths or start with `~/`, with at most 128 directories.
+Docker discovery is bounded and optional; errors leave other sources usable.
+At most 128 unique recipes are read per inventory refresh. Recipes can use the
+legacy `devbox.json` name. Configuration edits take effect on the next refresh
+(the inventory cache lasts five seconds); there is no VM or dashboard restart.
+Neither project discovery paths nor disk paths are returned in VM API metadata.
+
 ## Media ports
 
 WebRTC and other media protocols cannot travel through an HTTP preview route.

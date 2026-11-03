@@ -30,6 +30,10 @@ def main():
         disk = root/'test.qcow2'
         subprocess.run(['qemu-img','create','-f','qcow2',str(disk),'32M'], check=True, capture_output=True)
         token = 'devkit-test-'+uuid.uuid4().hex[:8]
+        project = root/'project'
+        project.mkdir()
+        (project/'devkit.json').write_text(json.dumps({'project':'vm-smoke','vms':[{'name':token+'-display'}]}))
+        (root/'config.json').write_text(json.dumps({'tailscale_ip':'100.64.0.1','prune':{'daily':False},'vm_projects':[str(project)]}))
         spice, ssh = port(), port()
         common = ['qemu-system-x86_64','-accel','tcg','-S','-nodefaults','-display','none','-m','64','-smp','2']
         try:
@@ -53,12 +57,15 @@ def main():
                 assert vm['vcpus']==2 and vm['memory_bytes']==64*1024*1024 and vm['rss_bytes']>0, vm
                 assert len(vm['connections'])==1, vm
                 assert 'ExitOnForwardFailure=yes' in vm['connections'][0]['tunnel'], vm
+            assert rows['display']['project']=='vm-smoke' and rows['headless']['project']==''
             assert rows['headless']['display']=='headless'
             assert rows['headless']['connections'][0]['kind']=='ssh'
             assert rows['display']['display']=='spice' and rows['display']['graphics']==['qxl-vga']
             assert rows['display']['disk_bytes']==32*1024*1024
             assert rows['display']['connections'][0]['command']==f'remote-viewer spice://127.0.0.1:{spice}'
             assert str(root) not in json.dumps(rows)
+            text = subprocess.check_output([binary,'vms'], env=env, text=True, timeout=12)
+            assert text.index('vm-smoke\n') < text.index('Other VMs\n')
             # Stub Docker in this test server so background share cleanup cannot see real containers.
             fakebin = root/'bin'
             fakebin.mkdir()
@@ -77,18 +84,22 @@ def main():
                 except urllib.error.URLError: time.sleep(.05)
             else: raise AssertionError('test web server did not start')
             firstrows = [v for v in first['vms'] if v['name'].startswith(token+'-')]
+            assert [v['project'] for v in firstrows]==['vm-smoke','']
             assert len(firstrows)==2 and all(v['cpu_percent'] is None for v in firstrows)
+            # A recipe edit reassigns ownership without restarting the VM or server.
+            (project/'devkit.json').write_text(json.dumps({'project':'vm-smoke','vms':[{'name':token+'-headless'}]}))
             time.sleep(5.1)
             with urllib.request.urlopen(url, timeout=8) as response:
                 second = json.load(response)
             secondrows = [v for v in second['vms'] if v['name'].startswith(token+'-')]
             assert len(secondrows)==2 and all(v['cpu_percent'] is not None for v in secondrows)
+            assert {v['name']:v['project'] for v in secondrows} == {token+'-display':'',token+'-headless':'vm-smoke'}
             try:
                 urllib.request.urlopen(urllib.request.Request(url, data=b'{}'), timeout=2)
                 raise AssertionError('VM endpoint accepted POST')
             except urllib.error.HTTPError as exc:
                 assert exc.code==404
-            print('PASS: live headless/SSH and SPICE discovery, sizing, RSS, private commands, metadata privacy and read-only API CPU sampling')
+            print('PASS: live headless/SSH and SPICE discovery, sizing, RSS, private commands, metadata privacy, project grouping and read-only API CPU sampling')
         finally:
             for p in processes:
                 if p.poll() is None: p.terminate()

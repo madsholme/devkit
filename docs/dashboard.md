@@ -17,7 +17,7 @@ Below it are four tabs, remembered per browser and linkable (`#vms`, `#worktrees
   networks, mounts, environment with secret-looking values masked, labels) and logs
   (recent lines, or followed live). Previews whose worktree is gone (what `devkit gc`
   would remove) are marked, with a notice above the list.
-- **Virtual machines**: active standalone QEMU and libvirt VMs, with display/headless icons,
+- **Virtual machines**: active standalone QEMU and libvirt VMs grouped by project, with display/headless icons,
   allocated RAM/vCPUs, disk capacity, graphics and host CPU/resident-memory usage. Expand
   **Connect privately** for SSH tunnels and remote-viewer or guest SSH commands. See below.
 - **Worktrees**: each repository's worktrees with their last commit, uncommitted
@@ -63,7 +63,12 @@ appear once they have at least one preview or a worktree matching the harness's 
 ## Virtual machines
 
 `devkit vms` lists the same inventory in a terminal; `devkit vms --json` returns the
-read-only `/api/vms` response. No registration or project recipe is required.
+read-only `/api/vms` response. Discovery needs no recipe, but project grouping uses
+explicit `vms` name/UUID mappings in each project recipe (see [VM project mappings](projects.md#virtual-machines)).
+Unmatched or ambiguous VMs appear under **Other VMs**, after the project groups.
+Each VM includes a `project` slug (empty if unassigned) and, for conflicts, a
+`project_note`; JSON remains a flat list. Filters match project names as well as VM
+names. Group counts reflect the filtered rows.
 The dashboard refreshes while the VM tab is visible (every ten seconds, pausing
 while a VM control has keyboard focus). It retains expanded connection sections.
 A failed libvirt provider is a warning; other VM sources and Docker stay usable.

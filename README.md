@@ -98,7 +98,8 @@ password with `devkit web password` to act from it. For a first project, copy
 [Project recipe](docs/projects.md) for your own apps and [Host setup](docs/setup.md) for details.
 
 For headless or graphical QEMU VMs, `./bootstrap.sh --qemu` adds the optional Fedora/Ubuntu prerequisites.
-The dashboard lists existing VMs alongside Docker previews; see [VM connections](docs/dashboard.md#virtual-machines).
+The dashboard groups VMs by project using [VM mappings](docs/projects.md#virtual-machines),
+with unmatched guests under Other VMs. See [VM connections](docs/dashboard.md#virtual-machines).
 
 ## Commands
 
