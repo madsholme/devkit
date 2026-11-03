@@ -145,7 +145,7 @@ func doctorChecks() []check {
 	}
 
 	if version, err := capture("docker", "version", "--format", "{{.Server.Version}}"); err != nil {
-		checks = append(checks, bad("docker", "Docker does not answer for this user: install Docker Engine and add yourself to the docker group"))
+		checks = append(checks, bad("docker", "Docker does not answer for this user: install Docker Engine and add yourself to the docker group (bootstrap.sh in the devbox checkout does it on Ubuntu/Debian)"))
 	} else if compose, err := capture("docker", "compose", "version", "--short"); err != nil {
 		checks = append(checks, bad("docker", "Docker %s has no Compose v2 plugin: install docker-compose-plugin", version))
 	} else {
@@ -198,7 +198,7 @@ func doctorChecks() []check {
 	if lingering() {
 		checks = append(checks, ok("linger", "user services run without a login"))
 	} else {
-		checks = append(checks, warn("linger", "user services stop when you log out: sudo loginctl enable-linger $USER"))
+		checks = append(checks, warn("linger", "user services stop when you log out: sudo loginctl enable-linger $USER (or bootstrap.sh in the devbox checkout)"))
 	}
 
 	if h := cfg.Harness; h == nil {

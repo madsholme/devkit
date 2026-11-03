@@ -81,17 +81,24 @@ This v1 sample does not initialize submodules or Git LFS automatically.
 
 ## Host setup
 
-Linux, Git, Docker Engine with Compose v2 (usable without sudo), Tailscale and a
-systemd user session; the agent tool is your choice. Install these with their official
-instructions; devbox checks for them but installs no system software. Building devbox
-needs Go (the version is pinned in `mise.toml`). Python 3 is only used by the Docker
-acceptance checks. You need a domain whose DNS provider Traefik supports (Cloudflare gets
-the guided path) for the wildcard certificate.
+Linux, Git, Docker Engine with Compose v2 (usable without sudo), Tailscale, systemd
+with lingering on (so user services run without a login); the agent tool is your choice.
+devbox itself installs no system software. On Ubuntu or Debian, `./bootstrap.sh` installs
+and sets up all of these: run it from a checkout as the user who will run devbox (not root;
+it uses sudo), and again at any time, since it skips what is done. It uses Docker's apt
+repository and Tailscale's installer, adds you to the docker group (log in again after),
+runs `tailscale up` if the host is not on a tailnet yet and enables lingering. Elsewhere,
+install them with their official instructions; devbox checks for them.
+
+Building devbox needs Go (the version is pinned in `mise.toml`; `mise install` gets it).
+Python 3 is only used by the Docker acceptance checks. You need a domain whose DNS provider
+Traefik supports (Cloudflare gets the guided path) for the wildcard certificate.
 
 devbox is a single Go binary with the dashboard and the Traefik configuration built in.
 Build it, put it on PATH and run setup:
 
 ```sh
+./bootstrap.sh    # Ubuntu/Debian, once per host
 go build -o bin/devbox ./cmd/devbox
 install -d "$HOME/.local/bin" && ln -sf "$PWD/bin/devbox" "$HOME/.local/bin/devbox"
 devbox setup
@@ -101,7 +108,7 @@ devbox setup
 again at any time to change something or repair the host. It:
 
 1. Checks Docker, Compose, Tailscale and systemd, and notes if lingering is off (`sudo loginctl
-   enable-linger $USER` keeps user services running after you log out).
+   enable-linger $USER`, or `./bootstrap.sh`, keeps user services running after you log out).
 2. Asks for the preview domain (`dev.example.com`), the agent harness (`t3`, `none` or
    `custom`), the email for the Let's Encrypt account and the DNS provider.
 3. Asks where each DNS credential comes from (see [Secrets](#secrets)) and checks it; a

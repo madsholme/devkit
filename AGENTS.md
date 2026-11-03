@@ -15,6 +15,8 @@ This file covers what you need to change the kit itself.
   `proxy.go` (`devbox proxy up` renders and starts Traefik) and `doctor.go` (`devbox doctor`).
   `history.go` is the event log (`~/.local/state/devbox/history.jsonl`). Package variables such as `runCommand`, `dockerContainers` and
   `repository` are the seams tests replace.
+- `bootstrap.sh`: installs the system prerequisites (Docker, Tailscale, docker group,
+  lingering) on Ubuntu/Debian with sudo. POSIX sh, idempotent. devbox itself never uses sudo.
 - `bin/devbox`: the built binary (gitignored). Build with
   `go build -o bin/devbox ./cmd/devbox`; the Go version is pinned in `mise.toml`.
 - `web/index.html`: the dashboard page. Vanilla JS, no build step, no dependencies.
