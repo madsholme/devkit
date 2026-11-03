@@ -145,7 +145,7 @@ func doctorChecks() []check {
 	}
 
 	if version, err := capture("docker", "version", "--format", "{{.Server.Version}}"); err != nil {
-		checks = append(checks, bad("docker", "Docker does not answer for this user: install Docker Engine and add yourself to the docker group (bootstrap.sh in the devbox checkout does it on Ubuntu/Debian)"))
+		checks = append(checks, bad("docker", "Docker does not answer for this user: install Docker Engine and add yourself to the docker group (bootstrap.sh in the devbox checkout does it on Ubuntu, Debian and Fedora)"))
 	} else if compose, err := capture("docker", "compose", "version", "--short"); err != nil {
 		checks = append(checks, bad("docker", "Docker %s has no Compose v2 plugin: install docker-compose-plugin", version))
 	} else {

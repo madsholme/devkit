@@ -1,6 +1,7 @@
 #!/bin/sh
-# Install what devbox needs from the system on a fresh Ubuntu or Debian host:
-# Git, Docker Engine with Compose v2, Tailscale, the docker group and lingering.
+# Install what devbox needs from the system on a fresh Ubuntu, Debian or Fedora host
+# (Ubuntu and Debian derivatives such as Mint or Pop!_OS too): Git, Docker Engine with
+# Compose v2, Tailscale, the docker group, the firewall for the tailnet and lingering.
 # Run it as the user who will run devbox (not root); it uses sudo where needed.
 # Safe to run again: each step is skipped when it is already done.
 set -eu
@@ -13,37 +14,55 @@ command -v sudo >/dev/null || die "sudo is missing"
 [ -r /etc/os-release ] || die "cannot read /etc/os-release"
 # shellcheck source=/dev/null
 . /etc/os-release
-case "$ID" in
-ubuntu | debian) ;;
-*) die "only Ubuntu and Debian are supported, not $ID; install Docker, Tailscale and lingering by hand (see README.md)" ;;
+# family is the package manager; docker_os the distro Docker's repository is named after.
+case "$ID ${ID_LIKE:-}" in
+fedora*) family=dnf docker_os=fedora ;;
+ubuntu* | *" ubuntu"*) family=apt docker_os=ubuntu ;;
+debian* | *" debian"*) family=apt docker_os=debian ;;
+*) die "only Ubuntu, Debian (and their derivatives) and Fedora are supported, not $ID; install Docker, Tailscale and lingering by hand (see README.md)" ;;
 esac
 [ -d /run/systemd/system ] || die "systemd is not running; devbox needs systemd user services"
 user=$(id -un)
-codename=${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}
-[ -n "$codename" ] || die "/etc/os-release names no release codename"
+if [ "$family" = apt ]; then
+	# Derivatives name their own release; Docker's repository knows the base one.
+	codename=${UBUNTU_CODENAME:-${DEBIAN_CODENAME:-${VERSION_CODENAME:-}}}
+	[ -n "$codename" ] || die "/etc/os-release names no release codename"
+fi
 
 say "Base packages"
-sudo apt-get update -qq
-sudo apt-get install -y -qq ca-certificates curl git
+if [ "$family" = apt ]; then
+	sudo apt-get update -qq
+	sudo apt-get install -y -qq ca-certificates curl git
+else
+	sudo dnf install -y -q ca-certificates curl git
+fi
 
 say "Docker Engine and Compose v2"
 if docker compose version >/dev/null 2>&1 || sudo docker compose version >/dev/null 2>&1; then
 	echo "already installed: $(sudo docker --version)"
 else
-	# Docker's own apt repository (https://docs.docker.com/engine/install/).
-	sudo install -m 0755 -d /etc/apt/keyrings
-	sudo curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
-	sudo chmod a+r /etc/apt/keyrings/docker.asc
-	sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+	# Docker's own repository (https://docs.docker.com/engine/install/).
+	packages="docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+	if [ "$family" = apt ]; then
+		sudo install -m 0755 -d /etc/apt/keyrings
+		sudo curl -fsSL "https://download.docker.com/linux/$docker_os/gpg" -o /etc/apt/keyrings/docker.asc
+		sudo chmod a+r /etc/apt/keyrings/docker.asc
+		sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
 Types: deb
-URIs: https://download.docker.com/linux/$ID
+URIs: https://download.docker.com/linux/$docker_os
 Suites: $codename
 Components: stable
 Architectures: $(dpkg --print-architecture)
 Signed-By: /etc/apt/keyrings/docker.asc
 EOF
-	sudo apt-get update -qq
-	sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+		sudo apt-get update -qq
+		# shellcheck disable=SC2086
+		sudo apt-get install -y -qq $packages
+	else
+		sudo curl -fsSL "https://download.docker.com/linux/$docker_os/docker-ce.repo" -o /etc/yum.repos.d/docker-ce.repo
+		# shellcheck disable=SC2086
+		sudo dnf install -y -q $packages
+	fi
 	sudo systemctl enable --now docker
 fi
 
@@ -68,6 +87,28 @@ if tailscale ip -4 >/dev/null 2>&1; then
 else
 	echo "Log this machine in to your tailnet (open the link it prints):"
 	sudo tailscale up
+fi
+
+say "Firewall"
+# Traefik (443) and media ports listen on the Tailscale IP; let tailnet traffic in.
+# Who may connect is up to your tailnet's access controls.
+if command -v firewall-cmd >/dev/null && sudo firewall-cmd --state >/dev/null 2>&1; then
+	if sudo firewall-cmd --permanent --zone=trusted --query-interface=tailscale0 >/dev/null 2>&1; then
+		echo "firewalld already trusts tailscale0"
+	else
+		sudo firewall-cmd --permanent --zone=trusted --change-interface=tailscale0 >/dev/null
+		sudo firewall-cmd --reload >/dev/null
+		echo "firewalld now trusts tailscale0"
+	fi
+elif command -v ufw >/dev/null && sudo ufw status | grep -q '^Status: active'; then
+	if sudo ufw status | grep -q 'on tailscale0'; then
+		echo "ufw already allows tailscale0"
+	else
+		sudo ufw allow in on tailscale0 >/dev/null
+		echo "ufw now allows tailscale0"
+	fi
+else
+	echo "no active firewalld or ufw"
 fi
 
 say "Lingering"
