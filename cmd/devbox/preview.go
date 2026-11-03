@@ -47,6 +47,16 @@ func up(path string) error {
 
 // composeUp starts a rendered preview and waits for its health checks, as long as its web service's
 // devbox.wait-timeout label allows (default 120 seconds).
+// hasBuild reports whether any service of a rendered Compose project builds its image.
+func hasBuild(project map[string]any) bool {
+	for _, s := range object(project, "services") {
+		if truthy(asObject(s)["build"]) {
+			return true
+		}
+	}
+	return false
+}
+
 func composeUp(path string, project map[string]any) error {
 	timeout := "120"
 	for _, s := range object(project, "services") {
@@ -386,8 +396,10 @@ func preparePreview(mode, ref string) (err error) {
 	}
 	// A new preview builds its images from the current files: a destroyed preview of the same name
 	// leaves its images behind, and up alone would reuse them. Resuming never rebuilds.
-	if err := composeRun(path, "build"); err != nil {
-		return err
+	if hasBuild(resolved) {
+		if err := composeRun(path, "build"); err != nil {
+			return err
+		}
 	}
 	if err := composeUp(path, resolved); err != nil {
 		return err

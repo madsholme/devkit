@@ -846,7 +846,7 @@ func TestNewPreviewsBuildAndResumedOnesDoNot(t *testing.T) {
 		for k, v := range metadata {
 			labels[k] = v
 		}
-		return map[string]any{"services": map[string]any{"web": map[string]any{"labels": labels}}}, nil
+		return map[string]any{"services": map[string]any{"web": map[string]any{"labels": labels, "build": "."}}}, nil
 	})
 	var calls []string
 	swap(t, &composeRun, func(_ string, args ...string) error { calls = append(calls, args[0]); return nil })
@@ -865,6 +865,15 @@ func TestNewPreviewsBuildAndResumedOnesDoNot(t *testing.T) {
 	}
 	if got := strings.Join(calls, " "); got != "up" {
 		t.Errorf("resumed preview ran compose %q", got)
+	}
+}
+
+func TestPreviewsWithoutBuildsSkipComposeBuild(t *testing.T) {
+	if hasBuild(map[string]any{"services": map[string]any{"web": map[string]any{"image": "python:3.13-slim"}}}) {
+		t.Error("a project of prebuilt images needs no compose build")
+	}
+	if !hasBuild(map[string]any{"services": map[string]any{"db": map[string]any{}, "web": map[string]any{"build": map[string]any{"context": "."}}}}) {
+		t.Error("a service with build needs compose build")
 	}
 }
 
