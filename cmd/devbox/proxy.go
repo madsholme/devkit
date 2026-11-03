@@ -153,7 +153,7 @@ func writeProxyFiles(compose, dynamic map[string]any) error {
 
 // ensureProxyNetwork creates the shared network previews and Traefik meet on.
 func ensureProxyNetwork() error {
-	if _, err := capture("docker", "network", "inspect", "--format", "{{.Name}}", proxyNetwork); err == nil {
+	if _, err := probe("docker", "network", "inspect", "--format", "{{.Name}}", proxyNetwork); err == nil {
 		return nil
 	}
 	_, err := runCommand([]string{"docker", "network", "create", proxyNetwork}, runOpts{capture: true})

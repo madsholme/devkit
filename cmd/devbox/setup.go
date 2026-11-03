@@ -94,9 +94,9 @@ func setup(opts setupOptions) error {
 
 	step("Prerequisites")
 	var missing []string
-	if version, err := capture("docker", "version", "--format", "{{.Server.Version}}"); err != nil {
+	if version, err := probe("docker", "version", "--format", "{{.Server.Version}}"); err != nil {
 		missing = append(missing, "Docker Engine, usable without sudo (add yourself to the docker group, then log in again)")
-	} else if compose, err := capture("docker", "compose", "version", "--short"); err != nil {
+	} else if compose, err := probe("docker", "compose", "version", "--short"); err != nil {
 		missing = append(missing, "the Docker Compose v2 plugin (docker-compose-plugin)")
 	} else {
 		fmt.Fprintf(stdout, "Docker %s with Compose %s\n", version, compose)
@@ -107,7 +107,7 @@ func setup(opts setupOptions) error {
 	} else {
 		fmt.Fprintf(stdout, "Tailscale IP %s\n", ip)
 	}
-	if _, err := capture("systemctl", "--user", "show-environment"); err != nil {
+	if _, err := probe("systemctl", "--user", "show-environment"); err != nil {
 		missing = append(missing, "a systemd user session (systemctl --user)")
 	}
 	if len(missing) > 0 {
