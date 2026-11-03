@@ -207,7 +207,9 @@ other addresses of the host. `proxy.listen` (or setup's question) lists them:
 The Tailscale IP is always included; the public DNS record keeps pointing at it. Devices off the
 tailnet need DNS that answers `*.<domain>` with the other address, typically a local DNS
 override (split DNS) in your router, Pi-hole or AdGuard Home. The certificate is the same
-wildcard on every address. `bootstrap.sh` only opens the firewall on `tailscale0`, so open
+wildcard on every address. `devkit doctor` accepts the Tailscale IP or a configured listener
+from the host's DNS resolver; a local DNS answer does not verify public DNS for remote clients.
+`bootstrap.sh` only opens the firewall on `tailscale0`, so open
 port 443 for the network yourself, e.g. `sudo firewall-cmd --permanent --add-service=https` and
 `sudo firewall-cmd --reload`, or `sudo ufw allow from 192.168.1.0/24 to any port 443 proto tcp`.
 

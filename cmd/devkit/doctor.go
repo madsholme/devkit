@@ -38,7 +38,7 @@ func bad(name, format string, args ...any) check {
 	return check{"fail", name, fmt.Sprintf(format, args...)}
 }
 
-// lookupHost resolves a name as browsers on the tailnet would; tests replace it.
+// lookupHost uses this host's resolver, including local split DNS; tests replace it.
 var lookupHost = net.LookupHost
 
 // servedCertificate fetches the certificate Traefik serves for host on ip:443 and verifies it.
@@ -163,13 +163,26 @@ func doctorChecks() []check {
 	if dom != "" && ip != "" {
 		probe := randomLabel() + "." + dom
 		addresses, err := lookupHost(probe)
+		listening := []string{ip}
+		if cfg.Proxy != nil {
+			listening = listenAddresses(cfg.Proxy, ip)
+			if all, _ := netip.ParseAddr(listening[0]); all.IsUnspecified() {
+				listening = nil
+				for _, local := range hostAddresses() {
+					addr, _ := netip.ParseAddr(local)
+					if all.Is6() || addr.Is4() {
+						listening = append(listening, local)
+					}
+				}
+			}
+		}
 		switch {
 		case err != nil:
 			checks = append(checks, bad("dns", "%s does not resolve: create the DNS-only record *.%s A %s", probe, dom, ip))
-		case !slices.Contains(addresses, ip):
-			checks = append(checks, bad("dns", "*.%s resolves to %s, not %s: point the wildcard record at the Tailscale IP", dom, strings.Join(addresses, ", "), ip))
+		case !slices.ContainsFunc(addresses, func(address string) bool { return slices.Contains(listening, address) }):
+			checks = append(checks, bad("dns", "*.%s resolves to %s, not a listener (%s): use the Tailscale IP in public DNS or a configured listen address in local DNS", dom, strings.Join(addresses, ", "), strings.Join(listening, ", ")))
 		default:
-			checks = append(checks, ok("dns", "*.%s resolves to %s", dom, ip))
+			checks = append(checks, ok("dns", "*.%s resolves to %s", dom, strings.Join(addresses, ", ")))
 		}
 	}
 
