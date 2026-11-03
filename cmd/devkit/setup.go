@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// devbox setup configures this host step by step and can be run again at any time: it offers the
+// devkit setup configures this host step by step and can be run again at any time: it offers the
 // current settings as defaults, keeps what still works and only changes what you choose. It checks
 // for Docker, Tailscale and systemd but never installs system software.
 
@@ -32,7 +32,7 @@ type prompter struct {
 func (p *prompter) ask(question, def string) (string, error) {
 	if p.yes {
 		if def == "" {
-			return "", fail("%s: no default; run devbox setup without --yes.", question)
+			return "", fail("%s: no default; run devkit setup without --yes.", question)
 		}
 		return def, nil
 	}
@@ -131,7 +131,7 @@ func setup(opts setupOptions) error {
 		missing = append(missing, "a systemd user session (systemctl --user)")
 	}
 	if len(missing) > 0 {
-		return fail("Install these first, then run devbox setup again:\n  - %s", strings.Join(missing, "\n  - "))
+		return fail("Install these first, then run devkit setup again:\n  - %s", strings.Join(missing, "\n  - "))
 	}
 	if !lingering() {
 		fmt.Fprintln(stdout, "Note: user services stop when you log out. To keep them running: sudo loginctl enable-linger $USER")
@@ -228,9 +228,9 @@ func setup(opts setupOptions) error {
 	if _, err := doctor(); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "\nDone. The dashboard is at https://devbox.%s\n", dom)
+	fmt.Fprintf(stdout, "\nDone. The dashboard is at https://devkit.%s\n", dom)
 	if passwordHash() == "" {
-		fmt.Fprintln(stdout, "Set a password with devbox web password to act from it.")
+		fmt.Fprintln(stdout, "Set a password with devkit web password to act from it.")
 	}
 	if _, configured, _ := loadShareConfig(); !configured {
 		fmt.Fprintln(stdout, "Public shares are optional; README.md (Public shares) explains the share section.")
@@ -304,7 +304,7 @@ func ensureT3(p *prompter, dom string) error {
 			return err
 		}
 		if !install {
-			fmt.Fprintln(stdout, "Skipped. Install it from https://t3.codes, then run devbox setup again.")
+			fmt.Fprintln(stdout, "Skipped. Install it from https://t3.codes, then run devkit setup again.")
 			return nil
 		}
 		if _, err := runCommand([]string{"sh", "-c", t3Installer}, runOpts{}); err != nil {
@@ -415,9 +415,9 @@ func askDNSCredentials(p *prompter, provider string, current map[string]secretSo
 // askSecret asks where one secret comes from; a typed one is stored in file with chmod 600.
 func askSecret(p *prompter, key, file string) (secretSource, error) {
 	if p.yes {
-		return secretSource{}, fail("%s is not configured; run devbox setup without --yes.", key)
+		return secretSource{}, fail("%s is not configured; run devkit setup without --yes.", key)
 	}
-	fmt.Fprintf(os.Stderr, "Where should devbox get %s?\n"+
+	fmt.Fprintf(os.Stderr, "Where should devkit get %s?\n"+
 		"  file     type it now; it is saved to %s (chmod 600)\n"+
 		"  env      an environment variable, e.g. under op run, bws run or doppler run\n"+
 		"  command  a command that prints it, e.g. op read op://vault/item/field\n", key, file)
@@ -443,7 +443,7 @@ func askSecret(p *prompter, key, file string) (secretSource, error) {
 		if source.Env, err = p.ask("Variable name", key); err != nil {
 			return source, err
 		}
-		fmt.Fprintf(stdout, "devbox proxy up and devbox doctor then need %s set, e.g. op run --env-file=... -- devbox proxy up\n", source.Env)
+		fmt.Fprintf(stdout, "devkit proxy up and devkit doctor then need %s set, e.g. op run --env-file=... -- devkit proxy up\n", source.Env)
 	case "command":
 		if source.Command, err = p.ask("Command", ""); err != nil {
 			return source, err
@@ -464,7 +464,7 @@ func ensureWildcard(p *prompter, dom, ip string, proxy *proxyConfig) error {
 	fmt.Fprintf(stdout, "Previews need a DNS-only record: *.%s A %s\n", dom, ip)
 	source, ok := proxy.DNSEnv["CF_DNS_API_TOKEN"]
 	if proxy.DNSProvider != "cloudflare" || !ok {
-		fmt.Fprintln(stdout, "Create it with your DNS provider; devbox doctor checks it. The certificate does not depend on it.")
+		fmt.Fprintln(stdout, "Create it with your DNS provider; devkit doctor checks it. The certificate does not depend on it.")
 		return nil
 	}
 	token, err := source.read()
@@ -493,7 +493,7 @@ func ensureWildcard(p *prompter, dom, ip string, proxy *proxyConfig) error {
 		return err
 	}
 	body := map[string]any{"type": "A", "name": name, "content": ip, "proxied": false, "ttl": 1,
-		"comment": "devbox previews on " + machine()}
+		"comment": "devkit previews on " + machine()}
 	if err := c.call("POST", "/zones/"+url.PathEscape(c.zone)+"/dns_records", nil, body, nil); err != nil {
 		return err
 	}
@@ -505,7 +505,7 @@ func ensureWildcard(p *prompter, dom, ip string, proxy *proxyConfig) error {
 // startProxyWithCertificate starts Traefik. Without a trusted certificate yet it proves issuance against
 // Let's Encrypt's staging service first, whose limits forgive mistakes, then switches to production.
 func startProxyWithCertificate(raw map[string]any, proxy *proxyConfig, dom, ip string) error {
-	host := "devbox." + dom
+	host := "devkit." + dom
 	run := func(staging bool, want string, accept func(*x509.Certificate, error) bool) error {
 		proxy.Staging = staging
 		raw["proxy"] = proxy
@@ -523,7 +523,7 @@ func startProxyWithCertificate(raw map[string]any, proxy *proxyConfig, dom, ip s
 				return nil
 			}
 			if time.Now().After(deadline) {
-				return fail("No %s certificate after %s. See docker logs %s-traefik-1, fix the cause and run devbox setup again.",
+				return fail("No %s certificate after %s. See docker logs %s-traefik-1, fix the cause and run devkit setup again.",
 					want, certificateTimeout, proxyProject)
 			}
 			time.Sleep(certificatePoll)
@@ -548,7 +548,7 @@ func installWebService() error {
 		return err
 	}
 	if strings.HasPrefix(self, os.TempDir()) {
-		return fail("This devbox binary is temporary (%s); build it with go build -o bin/devbox ./cmd/devbox and run that.", self)
+		return fail("This devkit binary is temporary (%s); build it with go build -o bin/devkit ./cmd/devkit and run that.", self)
 	}
 	unit := webUnit(self)
 	current, _ := os.ReadFile(unitPath())
@@ -561,11 +561,11 @@ func installWebService() error {
 		}
 		fmt.Fprintf(stdout, "Wrote %s for %s\n", unitPath(), self)
 	}
-	for _, args := range [][]string{{"daemon-reload"}, {"enable", "devbox-web"}, {"restart", "devbox-web"}} {
+	for _, args := range [][]string{{"daemon-reload"}, {"enable", "devkit-web"}, {"restart", "devkit-web"}} {
 		if _, err := runCommand(append([]string{"systemctl", "--user"}, args...), runOpts{capture: true}); err != nil {
 			return err
 		}
 	}
-	fmt.Fprintln(stdout, "devbox-web is running.")
+	fmt.Fprintln(stdout, "devkit-web is running.")
 	return nil
 }

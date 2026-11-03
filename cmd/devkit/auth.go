@@ -25,13 +25,13 @@ import (
 )
 
 // The dashboard can be read by anyone on the tailnet; acting needs the password set with
-// devbox web password. Only a salted PBKDF2 hash is stored, in the host config. A signed-in
+// devkit web password. Only a salted PBKDF2 hash is stored, in the host config. A signed-in
 // browser holds a cookie signed with a host secret and the current password hash, so changing
 // the password signs every browser out.
 
 const (
 	passwordRounds = 600_000
-	sessionCookie  = "devbox_session"
+	sessionCookie  = "devkit_session"
 	sessionLife    = 7 * 24 * time.Hour
 )
 
@@ -66,7 +66,7 @@ func checkPassword(password, stored string) bool {
 
 func configPath() string { return filepath.Join(configDir(), "config.json") }
 
-// readConfigFile returns the host config as generic JSON, keeping sections devbox web password doesn't know.
+// readConfigFile returns the host config as generic JSON, keeping sections devkit web password doesn't know.
 func readConfigFile() (map[string]any, error) {
 	data, err := os.ReadFile(configPath())
 	if errors.Is(err, fs.ErrNotExist) {
@@ -247,7 +247,7 @@ func readSecret(prompt string, in *bufio.Reader) (string, error) {
 	return strings.TrimRight(line, "\r\n"), nil
 }
 
-// setWebPassword is devbox web password: it stores a new password hash, signing every browser out.
+// setWebPassword is devkit web password: it stores a new password hash, signing every browser out.
 func setWebPassword() error {
 	in := bufio.NewReader(os.Stdin)
 	password, err := readSecret("New dashboard password: ", in)

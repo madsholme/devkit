@@ -10,6 +10,6 @@ acme*.json
 # Local scratch space (e.g. bootstrap downloads); not used by any script.
 work/
 
-# Built by: go build -o bin/devbox ./cmd/devbox
+# Built by: go build -o bin/devkit ./cmd/devkit
 /bin/
-/cmd/devbox/devbox
+/cmd/devkit/devkit

@@ -260,7 +260,7 @@ func (h *actionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		hash := passwordHash()
 		if hash == "" {
-			sendError(w, http.StatusConflict, "No password is set; run devbox web password on the host.")
+			sendError(w, http.StatusConflict, "No password is set; run devkit web password on the host.")
 			return
 		}
 		if !checkPassword(body.Password, hash) {
@@ -295,7 +295,7 @@ func (h *actionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			sendError(w, http.StatusConflict, err.Error())
 			return
 		}
-		fmt.Printf("devbox web: %s started %q\n", clientIP(r), j.Title)
+		fmt.Printf("devkit web: %s started %q\n", clientIP(r), j.Title)
 		sendJSON(w, map[string]any{"id": j.ID, "title": j.Title})
 	}
 }
@@ -306,26 +306,26 @@ func reapLoop() {
 	for tick := 0; ; tick++ {
 		removed, err := reapExpired(time.Now())
 		for _, r := range removed {
-			fmt.Printf("devbox web: unshared expired %s\n", r)
+			fmt.Printf("devkit web: unshared expired %s\n", r)
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "devbox web: expiring shares: %v\n", err)
+			fmt.Fprintf(os.Stderr, "devkit web: expiring shares: %v\n", err)
 		}
 		if tick%10 == 0 {
 			if cfg, ok, err := loadShareConfig(); err == nil && ok {
 				swept, err := sweepOrphans(cfg, 10*time.Minute)
 				for _, r := range swept {
-					fmt.Printf("devbox web: removed leftover %s\n", r)
+					fmt.Printf("devkit web: removed leftover %s\n", r)
 				}
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "devbox web: sweeping shares: %v\n", err)
+					fmt.Fprintf(os.Stderr, "devkit web: sweeping shares: %v\n", err)
 				}
 			}
 		}
 		if tick%(24*60) == 60 && dailyPrune() {
 			if err := prune(true); err != nil {
 				failed("prune", "", err)
-				fmt.Fprintf(os.Stderr, "devbox web: pruning Docker: %v\n", err)
+				fmt.Fprintf(os.Stderr, "devkit web: pruning Docker: %v\n", err)
 			}
 		}
 		time.Sleep(time.Minute)
@@ -352,7 +352,7 @@ func serve(host string, port int) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("devbox web on http://%s\n", address)
+	fmt.Printf("devkit web on http://%s\n", address)
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	return server.Serve(listener)
 }

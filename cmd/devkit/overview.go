@@ -188,15 +188,15 @@ func overview() (overviewData, error) {
 	previews := map[string]*preview{}
 	for _, c := range containers {
 		labels := c.Config.Labels
-		name := labels["devbox.preview"]
+		name := labels["devkit.preview"]
 		if name == "" {
 			continue
 		}
 		p := previews[name]
 		if p == nil {
-			p = &preview{Name: name, Mode: orDefault(labels["devbox.mode"], "?"), Project: orDefault(labels["devbox.project"], "?"),
-				Branch: labels["devbox.branch"], Commit: labels["devbox.commit"], Worktree: labels["devbox.worktree"],
-				URL: labels["devbox.url"], Repository: labels["devbox.repository"], Services: []service{}}
+			p = &preview{Name: name, Mode: orDefault(labels["devkit.mode"], "?"), Project: orDefault(labels["devkit.project"], "?"),
+				Branch: labels["devkit.branch"], Commit: labels["devkit.commit"], Worktree: labels["devkit.worktree"],
+				URL: labels["devkit.url"], Repository: labels["devkit.repository"], Services: []service{}}
 			previews[name] = p
 		}
 		status := containerStatus(c.State)
@@ -204,14 +204,14 @@ func overview() (overviewData, error) {
 		if s, ok := shareOf(c); ok {
 			p.Share = &shareView{s.URL, s.Host, s.Expires.Format(time.RFC3339), s.Fixed}
 		}
-		serviceLabel := orDefault(labels["com.docker.compose.service"], labels["devbox.service"])
+		serviceLabel := orDefault(labels["com.docker.compose.service"], labels["devkit.service"])
 		p.Services = append(p.Services, service{Name: orDefault(serviceLabel, "?"), Status: status,
 			Web: web, ID: c.ID[:min(12, len(c.ID))], Image: c.Config.Image, Ports: containerPorts(c), URLs: routeURLs(c.Config.Labels),
 			Started: startedAt(c.State)})
 		if web {
 			// The web container speaks for the preview, whichever container Docker listed first.
 			p.Status, p.Started, p.statusFromWeb = status, startedAt(c.State), true
-			p.Branch, p.Commit, p.Worktree, p.URL = labels["devbox.branch"], labels["devbox.commit"], labels["devbox.worktree"], labels["devbox.url"]
+			p.Branch, p.Commit, p.Worktree, p.URL = labels["devkit.branch"], labels["devkit.commit"], labels["devkit.worktree"], labels["devkit.url"]
 		}
 	}
 	commons := map[string]bool{}
@@ -235,7 +235,7 @@ func overview() (overviewData, error) {
 		for _, name := range sortedKeys(saved) {
 			labels := saved[name]
 			if path, exists, ok := sourceWorktree(labels, trees); ok && !exists {
-				orphans = append(orphans, orphan{name, orDefault(labels["devbox.mode"], "?"), path})
+				orphans = append(orphans, orphan{name, orDefault(labels["devkit.mode"], "?"), path})
 			}
 		}
 		byTree := map[string][]string{}
@@ -245,7 +245,7 @@ func overview() (overviewData, error) {
 				continue
 			}
 			path, exists, ok := sourceWorktree(map[string]string{
-				"devbox.worktree": p.Worktree, "devbox.mode": p.Mode, "devbox.branch": p.Branch}, trees)
+				"devkit.worktree": p.Worktree, "devkit.mode": p.Mode, "devkit.branch": p.Branch}, trees)
 			if !ok || !exists {
 				continue
 			}
@@ -361,7 +361,7 @@ func harnessStatus(h harnessConfig, dom string) serviceStatus {
 	return status
 }
 
-// proxyStatus reports the Traefik container of the devbox-proxy Compose project.
+// proxyStatus reports the Traefik container of the devkit-proxy Compose project.
 func proxyStatus() serviceStatus {
 	ids, err := capture("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project="+proxyProject)
 	fields := strings.Fields(ids)
@@ -423,7 +423,7 @@ var hostFactsFn = func() (any, error) {
 		services = append(services, harnessStatus(*cfg.Harness, dom))
 	}
 	services = append(services, proxyStatus())
-	expires, days := certExpiry("devbox." + dom)
+	expires, days := certExpiry("devkit." + dom)
 	return hostInfo{Domain: dom, CertificateExpires: expires, CertificateDays: days,
 		Services: services, RunningContainers: len(strings.Fields(running)), Disk: disk}, nil
 }

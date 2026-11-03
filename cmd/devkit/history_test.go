@@ -12,13 +12,13 @@ import (
 
 // TestMain keeps every test's history out of the real one.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "devbox-state-")
+	dir, err := os.MkdirTemp("", "devkit-state-")
 	if err != nil {
 		panic(err)
 	}
-	os.Setenv("DEVBOX_STATE_DIR", dir)
+	os.Setenv("DEVKIT_STATE_DIR", dir)
 	// Nor read the real host config.
-	os.Setenv("DEVBOX_CONFIG_DIR", filepath.Join(dir, "config"))
+	os.Setenv("DEVKIT_CONFIG_DIR", filepath.Join(dir, "config"))
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 
 func freshHistory(t *testing.T) string {
 	dir := t.TempDir()
-	t.Setenv("DEVBOX_STATE_DIR", dir)
+	t.Setenv("DEVKIT_STATE_DIR", dir)
 	return filepath.Join(dir, "history.jsonl")
 }
 
@@ -87,7 +87,7 @@ func TestStopExpiryAndFailuresAreRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 	common := t.TempDir()
-	path := filepath.Join(common, "devbox/runs/demo-live-123/compose.json")
+	path := filepath.Join(common, "devkit/runs/demo-live-123/compose.json")
 	os.MkdirAll(filepath.Dir(path), 0o700)
 	os.WriteFile(path, []byte("{}"), 0o600)
 	swap(t, &repository, func() (string, string, error) { return common, common, nil })

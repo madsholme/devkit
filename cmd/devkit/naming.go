@@ -54,11 +54,11 @@ func clashName(name, common, identity, mode string) string {
 	return name + "-" + digest(common, identity, mode)[:clash-1]
 }
 
-// findSaved returns the saved preview for this identity: labelled by devbox.identity, or named the legacy way.
+// findSaved returns the saved preview for this identity: labelled by devkit.identity, or named the legacy way.
 func findSaved(saved map[string]map[string]string, project, mode, identity string) string {
 	for _, name := range sortedKeys(saved) {
 		labels := saved[name]
-		if labels["devbox.identity"] == identity && labels["devbox.mode"] == mode && labels["devbox.project"] == project {
+		if labels["devkit.identity"] == identity && labels["devkit.mode"] == mode && labels["devkit.project"] == project {
 			return name
 		}
 	}
@@ -83,7 +83,7 @@ func newPreviewName(common, project, mode, branch, commit, identity string) (str
 		taken[name] = true
 	}
 	for _, c := range containers {
-		taken[c.Config.Labels["devbox.preview"]] = true
+		taken[c.Config.Labels["devkit.preview"]] = true
 	}
 	name := previewName(project, mode, branch, commit, identity)
 	if taken[name] {

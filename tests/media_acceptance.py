@@ -11,8 +11,8 @@ import tempfile
 import uuid
 
 KIT = Path(__file__).resolve().parents[1]
-CLI = str(KIT / "bin/devbox")
-ENV = dict(os.environ, DEV_DOMAIN="devbox.test")
+CLI = str(KIT / "bin/devkit")
+ENV = dict(os.environ, DEV_DOMAIN="devkit.test")
 
 APP = '''import http.server
 import os
@@ -62,7 +62,7 @@ def run(*args, cwd=None):
 
 def saved(root):
     return {path.parent.name: (path, json.loads(path.read_text()))
-            for path in (root / ".git/devbox/runs").glob("*/compose.json")}
+            for path in (root / ".git/devkit/runs").glob("*/compose.json")}
 
 
 def probe(config, expected, ip):
@@ -89,31 +89,31 @@ def probe(config, expected, ip):
 
 
 def main():
-    if os.environ.get("DEVBOX_RUNTIME_TEST") != "1":
-        raise SystemExit("Set DEVBOX_RUNTIME_TEST=1 to create temporary test containers.")
+    if os.environ.get("DEVKIT_RUNTIME_TEST") != "1":
+        raise SystemExit("Set DEVKIT_RUNTIME_TEST=1 to create temporary test containers.")
     ip = run("tailscale", "ip", "-4")
-    run("docker", "network", "inspect", "devbox-proxy")
+    run("docker", "network", "inspect", "devkit-proxy")
     project = "media-smoke-" + uuid.uuid4().hex[:8]
-    with tempfile.TemporaryDirectory(prefix="devbox-media-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="devkit-media-") as tmp:
         root = Path(tmp) / "repo"
         shutil.copytree(KIT / "project-template", root)
-        cfg = json.loads((root / "devbox.json").read_text())
+        cfg = json.loads((root / "devkit.json").read_text())
         cfg["project"] = project
         cfg["media_ports"] = [
             {"name": "sfu_udp", "service": "web", "protocol": "udp"},
             {"name": "ice_tcp", "service": "web", "protocol": "tcp"},
         ]
-        (root / "devbox.json").write_text(json.dumps(cfg))
+        (root / "devkit.json").write_text(json.dumps(cfg))
         (root / "app.py").write_text(APP)
         for name in ("compose.live.yaml", "compose.review.yaml"):
             path = root / name
             path.write_text(path.read_text().replace("      DATA_DIR: /data", """      DATA_DIR: /data
-      UDP_PORT: ${DEVBOX_MEDIA_SFU_UDP_PORT:?}
-      TCP_PORT: ${DEVBOX_MEDIA_ICE_TCP_PORT:?}
-      ICE_IP: ${DEVBOX_MEDIA_IP:?}"""))
+      UDP_PORT: ${DEVKIT_MEDIA_SFU_UDP_PORT:?}
+      TCP_PORT: ${DEVKIT_MEDIA_ICE_TCP_PORT:?}
+      ICE_IP: ${DEVKIT_MEDIA_IP:?}"""))
         run("git", "init", "-b", "main", cwd=root)
-        for key, value in (("user.name", "Devbox acceptance"),
-                           ("user.email", "devbox@example.invalid"),
+        for key, value in (("user.name", "Devkit acceptance"),
+                           ("user.email", "devkit@example.invalid"),
                            ("commit.gpgsign", "false"), ("core.hooksPath", "/dev/null")):
             run("git", "config", key, value, cwd=root)
         run("git", "add", ".", cwd=root)
@@ -129,7 +129,7 @@ def main():
                 list(pool.map(lambda task: run(CLI, "live", cwd=task), tasks))
             allocations = {}
             for name, (_, config) in saved(root).items():
-                branch = config["services"]["web"]["labels"]["devbox.branch"]
+                branch = config["services"]["web"]["labels"]["devkit.branch"]
                 allocations[name] = probe(config, branch, ip)
             ports = [port for allocation in allocations.values() for port in allocation.values()]
             assert len(ports) == 4 and len(set(ports)) == 4
@@ -142,7 +142,7 @@ def main():
             run("git", "commit", "-m", "Review media", cwd=tasks[1])
             run(CLI, "review", "HEAD", cwd=tasks[1])
             review_name, (_, review) = next((n, v) for n, v in saved(root).items()
-                                           if v[1]["services"]["web"]["labels"]["devbox.mode"] == "review")
+                                           if v[1]["services"]["web"]["labels"]["devkit.mode"] == "review")
             review_ports = probe(review, "two", ip)
             assert not set(review_ports.values()).intersection(ports)
             run(CLI, "start", name, cwd=root)

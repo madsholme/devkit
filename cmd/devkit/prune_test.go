@@ -47,7 +47,7 @@ func TestPruneDryRunOnlyReportsAndApplyNeverTouchesVolumes(t *testing.T) {
 }
 
 func TestPruneUsesHostConfig(t *testing.T) {
-	t.Setenv("DEVBOX_CONFIG_DIR", t.TempDir())
+	t.Setenv("DEVKIT_CONFIG_DIR", t.TempDir())
 	if err := os.WriteFile(configPath(), []byte(`{"prune": {"build_cache_gb": 50, "image_age_days": 3, "daily": false}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}

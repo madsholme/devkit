@@ -72,13 +72,13 @@ func TestRepeatedWrongPasswordsLockAnAddressOut(t *testing.T) {
 // webHost prepares a host config with a dashboard password, one preview and one known worktree.
 func webHost(t *testing.T) (*httptest.Server, chan plannedAction, chan struct{}) {
 	dir := t.TempDir()
-	t.Setenv("DEVBOX_CONFIG_DIR", filepath.Join(dir, "config"))
+	t.Setenv("DEVKIT_CONFIG_DIR", filepath.Join(dir, "config"))
 	t.Setenv("HOME", dir)
 	os.MkdirAll(filepath.Join(dir, "config"), 0o700)
 	hash, _ := hashPassword("dashboard-password")
 	os.WriteFile(filepath.Join(dir, "config", "config.json"), []byte(`{"web": {"password_hash": "`+hash+`"}}`), 0o600)
 	web := runningWeb("demo-main")
-	web.Config.Labels["devbox.repository"], web.Config.Labels["devbox.worktree"] = "/repo/.git", "/repo"
+	web.Config.Labels["devkit.repository"], web.Config.Labels["devkit.worktree"] = "/repo/.git", "/repo"
 	swap(t, &dockerContainers, withContainers(web))
 	swap(t, &worktreesOf, func(string) ([]worktree, error) {
 		return []worktree{{"/repo", "main"}, {"/wt/feature", "feature"}}, nil
@@ -169,7 +169,7 @@ func TestActionsNeedTheDashboardsOwnPageAndASignIn(t *testing.T) {
 	}
 	json.NewDecoder(jr.Body).Decode(&state)
 	jr.Body.Close()
-	if !strings.Contains(state.Output, "$ devbox stop demo-main") || !strings.Contains(state.Output, "working") || state.Done {
+	if !strings.Contains(state.Output, "$ devkit stop demo-main") || !strings.Contains(state.Output, "working") || state.Done {
 		t.Errorf("job state %+v", state)
 	}
 }
@@ -223,7 +223,7 @@ func TestSessionReportsSignInAndShareOptions(t *testing.T) {
 
 func TestWebPasswordKeepsTheRestOfTheConfig(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("DEVBOX_CONFIG_DIR", dir)
+	t.Setenv("DEVKIT_CONFIG_DIR", dir)
 	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"share": {"domain": "share.test", "max_hours": 72}}`), 0o600)
 	in, w, _ := os.Pipe()
 	w.WriteString("a long enough password\na long enough password\n")

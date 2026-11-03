@@ -1,15 +1,15 @@
 #!/bin/sh
-# Install what devbox needs from the system on a fresh Ubuntu, Debian or Fedora host
+# Install what devkit needs from the system on a fresh Ubuntu, Debian or Fedora host
 # (Ubuntu and Debian derivatives such as Mint or Pop!_OS too): Git, Docker Engine with
 # Compose v2, Tailscale, the docker group, the firewall for the tailnet and lingering.
-# Run it as the user who will run devbox (not root); it uses sudo where needed.
+# Run it as the user who will run devkit (not root); it uses sudo where needed.
 # Safe to run again: each step is skipped when it is already done.
 set -eu
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'bootstrap: %s\n' "$*" >&2; exit 1; }
 
-[ "$(id -u)" -ne 0 ] || die "run this as the user who will run devbox, not as root; it uses sudo itself"
+[ "$(id -u)" -ne 0 ] || die "run this as the user who will run devkit, not as root; it uses sudo itself"
 command -v sudo >/dev/null || die "sudo is missing"
 [ -r /etc/os-release ] || die "cannot read /etc/os-release"
 # shellcheck source=/dev/null
@@ -21,7 +21,7 @@ ubuntu* | *" ubuntu"*) family=apt docker_os=ubuntu ;;
 debian* | *" debian"*) family=apt docker_os=debian ;;
 *) die "only Ubuntu, Debian (and their derivatives) and Fedora are supported, not $ID; install Docker, Tailscale and lingering by hand (see README.md)" ;;
 esac
-[ -d /run/systemd/system ] || die "systemd is not running; devbox needs systemd user services"
+[ -d /run/systemd/system ] || die "systemd is not running; devkit needs systemd user services"
 user=$(id -un)
 if [ "$family" = apt ]; then
 	# Derivatives name their own release; Docker's repository knows the base one.
@@ -128,24 +128,24 @@ if [ -z "$(git config --global user.email 2>/dev/null)" ]; then
 	echo "  git config --global user.name 'Your Name' && git config --global user.email you@example.com"
 fi
 here=$(cd "$(dirname "$0")" && pwd)
-if [ -x "$here/devbox" ]; then
+if [ -x "$here/devkit" ]; then
 	# A release bundle: the binary sits next to this script.
 	cat <<EOF
-Next, install devbox and configure the host:
+Next, install devkit and configure the host:
 
-  install -D "$here/devbox" ~/.local/bin/devbox
-  devbox setup
+  install -D "$here/devkit" ~/.local/bin/devkit
+  devkit setup
 
-If devbox is not found, log in again: most distributions add ~/.local/bin to PATH at login.
+If devkit is not found, log in again: most distributions add ~/.local/bin to PATH at login.
 EOF
 else
 	cat <<EOF
-Next, build devbox in this checkout and configure the host (see README.md, Host setup):
+Next, build devkit in this checkout and configure the host (see README.md, Host setup):
 
   cd "$here"
   curl https://mise.run | sh                # if you have no Go yet; mise.toml pins it
-  mise trust && mise install && mise exec -- go build -o bin/devbox ./cmd/devbox
-  install -d ~/.local/bin && ln -sf "\$PWD/bin/devbox" ~/.local/bin/devbox
-  devbox setup
+  mise trust && mise install && mise exec -- go build -o bin/devkit ./cmd/devkit
+  install -d ~/.local/bin && ln -sf "\$PWD/bin/devkit" ~/.local/bin/devkit
+  devkit setup
 EOF
 fi

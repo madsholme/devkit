@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// container is the part of docker inspect output devbox uses.
+// container is the part of docker inspect output devkit uses.
 type container struct {
 	ID           string `json:"Id"`
 	Name         string
@@ -74,7 +74,7 @@ func inspect(ids ...string) ([]container, error) {
 	return containers, json.Unmarshal([]byte(out), &containers)
 }
 
-// dockerContainers returns every devbox-managed container, running or not.
+// dockerContainers returns every devkit-managed container, running or not.
 var dockerContainers = func() ([]container, error) {
 	ids, err := capture("docker", "ps", "-aq", "--filter", "label="+managedLabel+"=true")
 	if err != nil {
@@ -87,7 +87,7 @@ func containersFor(name string) ([]container, error) {
 	all, err := dockerContainers()
 	var matches []container
 	for _, c := range all {
-		if c.Config.Labels["devbox.preview"] == name {
+		if c.Config.Labels["devkit.preview"] == name {
 			matches = append(matches, c)
 		}
 	}
@@ -100,7 +100,7 @@ var assertOwner = func(name, common string) error {
 		return err
 	}
 	for _, c := range containers {
-		if c.Config.Labels["devbox.repository"] != common {
+		if c.Config.Labels["devkit.repository"] != common {
 			return fail("Preview name is used by another clone. Give clones distinct project names.")
 		}
 	}
@@ -122,7 +122,7 @@ type port struct {
 }
 
 // containerPorts lists container-internal ports, marking the one Traefik routes the preview URL to.
-// Ports are container-internal; explicit media mappings are recorded in devbox.media.* labels.
+// Ports are container-internal; explicit media mappings are recorded in devkit.media.* labels.
 func containerPorts(c container) []port {
 	routed := ""
 	for _, key := range sortedKeys(c.Config.Labels) {
@@ -151,9 +151,9 @@ func containerPorts(c container) []port {
 }
 
 // isWeb tells whether a container is its preview's web service. Previews saved before routes existed
-// have no devbox.web label; their only Traefik-enabled container is the web service.
+// have no devkit.web label; their only Traefik-enabled container is the web service.
 func isWeb(labels map[string]string) bool {
-	if web, ok := labels["devbox.web"]; ok {
+	if web, ok := labels["devkit.web"]; ok {
 		return web == "true"
 	}
 	return labels["traefik.enable"] == "true"

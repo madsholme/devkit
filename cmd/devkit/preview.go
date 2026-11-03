@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// restartPolicy makes running previews, live and review, come back after a reboot; devbox stop
+// restartPolicy makes running previews, live and review, come back after a reboot; devkit stop
 // still keeps them stopped. Services may override it, e.g. a one-shot seed service with restart: "no".
 func restartPolicy(service map[string]any) {
 	if _, ok := service["restart"]; !ok {
@@ -30,7 +30,7 @@ func up(path string) error {
 	missing := false
 	for _, s := range services {
 		service := asObject(s)
-		if _, has := service["restart"]; !has && str(object(service, "labels"), "devbox.mode") != "" {
+		if _, has := service["restart"]; !has && str(object(service, "labels"), "devkit.mode") != "" {
 			missing = true
 		}
 	}
@@ -46,7 +46,7 @@ func up(path string) error {
 }
 
 // composeUp starts a rendered preview and waits for its health checks, as long as its web service's
-// devbox.wait-timeout label allows (default 120 seconds).
+// devkit.wait-timeout label allows (default 120 seconds).
 // hasBuild reports whether any service of a rendered Compose project builds its image.
 func hasBuild(project map[string]any) bool {
 	for _, s := range object(project, "services") {
@@ -60,7 +60,7 @@ func hasBuild(project map[string]any) bool {
 func composeUp(path string, project map[string]any) error {
 	timeout := "120"
 	for _, s := range object(project, "services") {
-		if t := str(object(asObject(s), "labels"), "devbox.wait-timeout"); t != "" {
+		if t := str(object(asObject(s), "labels"), "devkit.wait-timeout"); t != "" {
 			timeout = t
 		}
 	}
@@ -105,7 +105,7 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 	if !within(source, resolve(root)) {
 		return nil, fail("Compose file must be inside the worktree.")
 	}
-	preview := envValue(env, "DEVBOX_PREVIEW")
+	preview := envValue(env, "DEVKIT_PREVIEW")
 	out, err := runCommand([]string{"docker", "compose", "--project-directory", root, "-f", source,
 		"-p", preview, "config", "--format", "json"}, runOpts{dir: root, env: env, capture: true})
 	if err != nil {
@@ -159,16 +159,16 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 	}
 	for _, r := range cfg.Routes {
 		if _, ok := services[r.Service]; !ok {
-			return nil, fail("Compose file has no %q service for a route in devbox.json.", r.Service)
+			return nil, fail("Compose file has no %q service for a route in devkit.json.", r.Service)
 		}
 	}
-	ensureObject(result, "networks")["proxy"] = map[string]any{"external": true, "name": "devbox-proxy"}
-	host := envValue(env, "DEVBOX_HOST")
+	ensureObject(result, "networks")["proxy"] = map[string]any{"external": true, "name": "devkit-proxy"}
+	host := envValue(env, "DEVKIT_HOST")
 	front := asObject(services[web])
 	expose(front, preview, preview, fmt.Sprintf("Host(`%s`)", host), cfg.webPort())
-	object(front, "labels")["devbox.web"] = "true"
+	object(front, "labels")["devkit.web"] = "true"
 	if cfg.WaitTimeout != nil {
-		object(front, "labels")["devbox.wait-timeout"] = fmt.Sprint(cfg.WaitTimeout)
+		object(front, "labels")["devkit.wait-timeout"] = fmt.Sprint(cfg.WaitTimeout)
 	}
 	for i, r := range cfg.Routes {
 		service := asObject(services[r.Service])
@@ -186,8 +186,8 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 		router := fmt.Sprintf("%s-route%d", preview, i+1)
 		expose(service, router, preview+"-"+r.Service+"-"+r.port(), rule, r.port())
 		labels := object(service, "labels")
-		if labels["devbox.web"] == nil {
-			labels["devbox.web"] = "false"
+		if labels["devkit.web"] == nil {
+			labels["devkit.web"] = "false"
 		}
 		if r.Subdomains {
 			// The host's wildcard certificate covers one level below DEV_DOMAIN only; this one covers the preview's subdomains.
@@ -197,7 +197,7 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 		}
 	}
 	if mode == "review" {
-		out, err := capture("docker", "image", "inspect", envValue(env, "DEVBOX_IMAGE"))
+		out, err := capture("docker", "image", "inspect", envValue(env, "DEVKIT_IMAGE"))
 		if err != nil {
 			return nil, err
 		}
@@ -205,12 +205,12 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 			ID string `json:"Id"`
 		}
 		if err := json.Unmarshal([]byte(out), &images); err != nil || len(images) == 0 {
-			return nil, fail("Could not inspect the built image %s.", envValue(env, "DEVBOX_IMAGE"))
+			return nil, fail("Could not inspect the built image %s.", envValue(env, "DEVKIT_IMAGE"))
 		}
 		// Run precisely the built web image even if its convenient tag is later changed.
 		front["image"] = images[0].ID
 		front["pull_policy"] = "never"
-		object(front, "labels")["devbox.image"] = images[0].ID
+		object(front, "labels")["devkit.image"] = images[0].ID
 	}
 	return result, nil
 }
@@ -220,7 +220,7 @@ func expose(service map[string]any, router, target, rule, port string) {
 	ensureObject(service, "networks")["proxy"] = nil
 	labels := object(service, "labels")
 	for k, v := range map[string]string{
-		"traefik.enable": "true", "traefik.docker.network": "devbox-proxy",
+		"traefik.enable": "true", "traefik.docker.network": "devkit-proxy",
 		"traefik.http.routers." + router + ".rule":                      rule,
 		"traefik.http.routers." + router + ".entrypoints":               "websecure",
 		"traefik.http.routers." + router + ".tls":                       "true",
@@ -279,7 +279,7 @@ func preparePreview(mode, ref string) (err error) {
 	exists := isFile(path)
 	previous := ""
 	if exists {
-		previous = saved[name]["devbox.worktree"]
+		previous = saved[name]["devkit.worktree"]
 	}
 	if mode == "live" && previous != "" && previous != root {
 		trees, err := worktreesOf(root)
@@ -301,7 +301,7 @@ func preparePreview(mode, ref string) (err error) {
 			return err
 		}
 		for _, s := range object(project, "services") {
-			if url := str(object(asObject(s), "labels"), "devbox.url"); url != "" {
+			if url := str(object(asObject(s), "labels"), "devkit.url"); url != "" {
 				fmt.Fprintln(stdout, url)
 				break
 			}
@@ -328,7 +328,7 @@ func preparePreview(mode, ref string) (err error) {
 		}
 	}()
 	if mode == "review" {
-		target := filepath.Join(common, "devbox", "checkouts", name)
+		target := filepath.Join(common, "devkit", "checkouts", name)
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
@@ -354,15 +354,15 @@ func preparePreview(mode, ref string) (err error) {
 	}
 	host := name + "." + dom
 	env := withEnv(os.Environ(), map[string]string{
-		"DEVBOX_PREVIEW": name, "DEVBOX_HOST": host, "DEVBOX_URL": "https://" + host,
-		"DEVBOX_COMMIT": commit, "DEVBOX_MODE": mode, "DEVBOX_IMAGE": "devbox/" + cfg.Project + ":" + commit,
+		"DEVKIT_PREVIEW": name, "DEVKIT_HOST": host, "DEVKIT_URL": "https://" + host,
+		"DEVKIT_COMMIT": commit, "DEVKIT_MODE": mode, "DEVKIT_IMAGE": "devkit/" + cfg.Project + ":" + commit,
 		"COMPOSE_PROJECT_NAME": name,
 	})
 	metadata := map[string]string{
-		managedLabel: "true", "devbox.preview": name, "devbox.mode": mode,
-		"devbox.project": cfg.Project, "devbox.repository": common,
-		"devbox.commit": commit, "devbox.branch": branch, "devbox.worktree": source,
-		"devbox.identity": identity, "devbox.url": "https://" + host,
+		managedLabel: "true", "devkit.preview": name, "devkit.mode": mode,
+		"devkit.project": cfg.Project, "devkit.repository": common,
+		"devkit.commit": commit, "devkit.branch": branch, "devkit.worktree": source,
+		"devkit.identity": identity, "devkit.url": "https://" + host,
 	}
 	if mode == "review" {
 		if _, err := hook(root, cfg, "prepare", env); err != nil {
@@ -383,7 +383,7 @@ func preparePreview(mode, ref string) (err error) {
 			return err
 		}
 		if !built {
-			return fail("devbox.json has no build hook; review needs one to produce $DEVBOX_IMAGE.")
+			return fail("devkit.json has no build hook; review needs one to produce $DEVKIT_IMAGE.")
 		}
 	} else if _, err := hook(root, cfg, "prepare", env); err != nil {
 		return err
@@ -439,7 +439,7 @@ func lifecycle(action, name string) error {
 			return err
 		}
 	} else if !previewID.MatchString(name) {
-		return fail("Use an exact preview ID from devbox ls.")
+		return fail("Use an exact preview ID from devkit ls.")
 	}
 	if err := assertOwner(name, common); err != nil {
 		return err
@@ -451,7 +451,7 @@ func lifecycle(action, name string) error {
 	if action != "start" {
 		// A stopped or destroyed preview must not stay public.
 		if err := unshareIfShared(name); err != nil {
-			fmt.Fprintf(os.Stderr, "devbox: %v\n", err)
+			fmt.Fprintf(os.Stderr, "devkit: %v\n", err)
 			failed("unshare", name, err)
 		}
 	}
@@ -494,7 +494,7 @@ func gc(apply bool) error {
 		if !ok {
 			unknown = append(unknown, name)
 		} else if !exists {
-			mode := labels["devbox.mode"]
+			mode := labels["devkit.mode"]
 			if mode == "" {
 				mode = "?"
 			}
@@ -520,7 +520,7 @@ func gc(apply bool) error {
 		fmt.Fprintf(stdout, "  %s\t%s\t%s\n", s.name, s.mode, s.source)
 	}
 	if !apply {
-		fmt.Fprintln(stdout, "Run devbox gc --yes to remove their containers, networks, volumes and run dirs.")
+		fmt.Fprintln(stdout, "Run devkit gc --yes to remove their containers, networks, volumes and run dirs.")
 		return nil
 	}
 	for _, s := range stale {
@@ -528,7 +528,7 @@ func gc(apply bool) error {
 			return err
 		}
 		if err := unshareIfShared(s.name); err != nil {
-			fmt.Fprintf(os.Stderr, "devbox: %v\n", err)
+			fmt.Fprintf(os.Stderr, "devkit: %v\n", err)
 			failed("unshare", s.name, err)
 		}
 		if err := destroyPreview(filepath.Join(runDir(common, s.name), "compose.json")); err != nil {
@@ -542,8 +542,8 @@ func gc(apply bool) error {
 
 // liveHead is the current commit of a live preview's worktree; its code is the worktree, not the start commit.
 func liveHead(labels map[string]string, treesByRepo map[string][]worktree) string {
-	repo := labels["devbox.repository"]
-	if labels["devbox.mode"] != "live" || repo == "" {
+	repo := labels["devkit.repository"]
+	if labels["devkit.mode"] != "live" || repo == "" {
 		return ""
 	}
 	if _, ok := treesByRepo[repo]; !ok {
@@ -567,16 +567,16 @@ func listing() error {
 	fmt.Fprintln(stdout, "PREVIEW\tMODE\tSTATUS\tCOMMIT\tURL")
 	for _, c := range containers {
 		labels := c.Config.Labels
-		if !isWeb(labels) || seen[labels["devbox.preview"]] {
+		if !isWeb(labels) || seen[labels["devkit.preview"]] {
 			continue
 		}
-		seen[labels["devbox.preview"]] = true
+		seen[labels["devkit.preview"]] = true
 		commit := liveHead(labels, trees)
 		if commit == "" {
-			commit = labels["devbox.commit"]
+			commit = labels["devkit.commit"]
 		}
-		fmt.Fprintln(stdout, strings.Join([]string{labels["devbox.preview"], labels["devbox.mode"],
-			containerStatus(c.State), commit[:min(12, len(commit))], labels["devbox.url"]}, "\t"))
+		fmt.Fprintln(stdout, strings.Join([]string{labels["devkit.preview"], labels["devkit.mode"],
+			containerStatus(c.State), commit[:min(12, len(commit))], labels["devkit.url"]}, "\t"))
 	}
 	return nil
 }
@@ -608,7 +608,7 @@ func publish(ref string) error {
 	}
 	var images []string
 	for _, c := range containers {
-		if image := c.Config.Labels["devbox.image"]; image != "" {
+		if image := c.Config.Labels["devkit.image"]; image != "" {
 			images = append(images, image)
 		}
 	}
@@ -619,14 +619,14 @@ func publish(ref string) error {
 		return err
 	}
 	env := withEnv(os.Environ(), map[string]string{
-		"DEVBOX_COMMIT": commit, "DEVBOX_IMAGE_ID": images[0], "DEVBOX_PREVIEW": name})
+		"DEVKIT_COMMIT": commit, "DEVKIT_IMAGE_ID": images[0], "DEVKIT_PREVIEW": name})
 	// An explicit per-project adapter owns registry and Dokploy configuration.
 	published, err := hook(root, cfg, "publish", env)
 	if err != nil {
 		return err
 	}
 	if !published {
-		return fail("Team publishing is not configured: add a publish hook to devbox.json.")
+		return fail("Team publishing is not configured: add a publish hook to devkit.json.")
 	}
 	happened("publish", name, "commit "+shortID(commit))
 	return nil
@@ -650,12 +650,12 @@ func liveService(root, service string) (string, error) {
 	}
 	for _, c := range containers {
 		labels := c.Config.Labels
-		if c.State.Running && labels["devbox.mode"] == "live" && labels["devbox.worktree"] == root &&
+		if c.State.Running && labels["devkit.mode"] == "live" && labels["devkit.worktree"] == root &&
 			labels["com.docker.compose.service"] == service {
 			return c.ID, nil
 		}
 	}
-	return "", fail("No running %s container in this worktree's live preview. Run devbox live first.", service)
+	return "", fail("No running %s container in this worktree's live preview. Run devkit live first.", service)
 }
 
 func isTerminal(f *os.File) bool {

@@ -1,4 +1,4 @@
-// Command devbox is a small, single-host preview runner for Git worktrees.
+// Command devkit is a small, single-host preview runner for Git worktrees.
 package main
 
 import (
@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
-const usage = `usage: devbox <command> [arguments]
+const usage = `usage: devkit <command> [arguments]
 
 Small, single-host preview runner for Git worktrees.
 
@@ -37,7 +38,7 @@ commands:
   unshare [preview]    end a preview's public share (--expired: every expired share, plus leftovers)
   shares               list public shares
   history [preview] [-n N]
-                       show what devbox did on this host, newest last (default the last 30 events)
+                       show what devkit did on this host, newest last (default the last 30 events)
   start [preview]      resume a stopped preview; data is retained
   stop [preview]       stop a preview's containers; data is retained
   destroy [preview]    remove a preview's containers, networks and volumes
@@ -47,6 +48,9 @@ stop, destroy and gc end a preview's share first.
 `
 
 func main() {
+	if filepath.Base(os.Args[0]) == "devbox" {
+		fmt.Fprintln(os.Stderr, "devkit: devbox is now called devkit; the old name still works for now.")
+	}
 	code, err := dispatch(os.Args[1:])
 	if err != nil {
 		var help helpRequested
@@ -54,7 +58,7 @@ func main() {
 			fmt.Print(usage)
 			os.Exit(0)
 		}
-		fmt.Fprintf(os.Stderr, "devbox: %v\n", err)
+		fmt.Fprintf(os.Stderr, "devkit: %v\n", err)
 		if code == 0 {
 			code = 1
 		}
@@ -162,7 +166,7 @@ func dispatch(args []string) (int, error) {
 			if len(rest) == 1 && (rest[0] == "-h" || rest[0] == "--help") {
 				return 0, helpRequested{}
 			}
-			return 2, usageError("usage: devbox proxy up")
+			return 2, usageError("usage: devkit proxy up")
 		}
 		return 0, noted("proxy up", "", proxyUp())
 	case "live":
@@ -186,7 +190,7 @@ func dispatch(args []string) (int, error) {
 		}
 		return 0, noted("publish", "", publish(ref))
 	case "exec":
-		// Only a leading -s/--service is devbox's; everything after it belongs to the command.
+		// Only a leading -s/--service is devkit's; everything after it belongs to the command.
 		service := ""
 		if len(rest) > 0 {
 			name, value, hasValue := strings.Cut(rest[0], "=")
@@ -204,7 +208,7 @@ func dispatch(args []string) (int, error) {
 			rest = rest[1:]
 		}
 		if len(rest) == 0 {
-			return 1, fail("Usage: devbox exec [-s service] <command> [args...]")
+			return 1, fail("Usage: devkit exec [-s service] <command> [args...]")
 		}
 		return execLive(service, rest)
 	case "logs":

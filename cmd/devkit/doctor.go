@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// devbox doctor checks everything a working host needs and says how to fix what is missing.
+// devkit doctor checks everything a working host needs and says how to fix what is missing.
 
 type check struct {
 	Status string // "ok", "warn" or "fail"
@@ -97,7 +97,7 @@ func unitPath() string {
 		home, _ := os.UserHomeDir()
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "systemd", "user", "devbox-web.service")
+	return filepath.Join(dir, "systemd", "user", "devkit-web.service")
 }
 
 // webUnit is the dashboard's systemd user service; the binary reads everything else from the host config.
@@ -105,9 +105,9 @@ func webUnit(executable string) string {
 	if strings.ContainsAny(executable, " \t") {
 		executable = `"` + executable + `"`
 	}
-	return `# Written by devbox setup; run it again rather than editing this file.
+	return `# Written by devkit setup; run it again rather than editing this file.
 [Unit]
-Description=devbox web overview
+Description=devkit web overview
 After=docker.service
 
 [Service]
@@ -139,13 +139,13 @@ func doctorChecks() []check {
 	}
 	dom, err := domain()
 	if err != nil {
-		checks = append(checks, bad("config", "no preview domain in %s: run devbox setup", configPath()))
+		checks = append(checks, bad("config", "no preview domain in %s: run devkit setup", configPath()))
 	} else {
 		checks = append(checks, ok("config", "%s, previews at *.%s", configPath(), dom))
 	}
 
 	if version, err := probe("docker", "version", "--format", "{{.Server.Version}}"); err != nil {
-		checks = append(checks, bad("docker", "Docker does not answer for this user: install Docker Engine and add yourself to the docker group (bootstrap.sh in the devbox checkout does it on Ubuntu, Debian and Fedora)"))
+		checks = append(checks, bad("docker", "Docker does not answer for this user: install Docker Engine and add yourself to the docker group (bootstrap.sh in the devkit checkout does it on Ubuntu, Debian and Fedora)"))
 	} else if compose, err := probe("docker", "compose", "version", "--short"); err != nil {
 		checks = append(checks, bad("docker", "Docker %s has no Compose v2 plugin: install docker-compose-plugin", version))
 	} else {
@@ -173,9 +173,9 @@ func doctorChecks() []check {
 	}
 
 	if _, err := probe("docker", "network", "inspect", "--format", "{{.Name}}", proxyNetwork); err != nil {
-		fix := "devbox proxy up"
+		fix := "devkit proxy up"
 		if cfg.Proxy == nil {
-			fix = "devbox setup"
+			fix = "devkit setup"
 		}
 		checks = append(checks, bad("network", "Docker network %s is missing: run %s", proxyNetwork, fix))
 	} else {
@@ -187,22 +187,22 @@ func doctorChecks() []check {
 	if self, err := webExecutable(); err == nil {
 		want := webUnit(self)
 		have, _ := os.ReadFile(unitPath())
-		active, _ := probe("systemctl", "--user", "is-active", "devbox-web")
+		active, _ := probe("systemctl", "--user", "is-active", "devkit-web")
 		switch {
 		case have == nil:
-			checks = append(checks, bad("dashboard", "devbox-web is not installed: run devbox setup"))
+			checks = append(checks, bad("dashboard", "devkit-web is not installed: run devkit setup"))
 		case string(have) != want:
-			checks = append(checks, warn("dashboard", "%s differs from what devbox setup writes for %s: run devbox setup", unitPath(), self))
+			checks = append(checks, warn("dashboard", "%s differs from what devkit setup writes for %s: run devkit setup", unitPath(), self))
 		case strings.TrimSpace(active) != "active":
-			checks = append(checks, bad("dashboard", "devbox-web is %s: systemctl --user restart devbox-web; journalctl --user -u devbox-web", strings.TrimSpace(active)))
+			checks = append(checks, bad("dashboard", "devkit-web is %s: systemctl --user restart devkit-web; journalctl --user -u devkit-web", strings.TrimSpace(active)))
 		default:
-			checks = append(checks, ok("dashboard", "devbox-web is running %s", self))
+			checks = append(checks, ok("dashboard", "devkit-web is running %s", self))
 		}
 	}
 	if lingering() {
 		checks = append(checks, ok("linger", "user services run without a login"))
 	} else {
-		checks = append(checks, warn("linger", "user services stop when you log out: sudo loginctl enable-linger $USER (or bootstrap.sh in the devbox checkout)"))
+		checks = append(checks, warn("linger", "user services stop when you log out: sudo loginctl enable-linger $USER (or bootstrap.sh in the devkit checkout)"))
 	}
 
 	if h := cfg.Harness; h == nil {
@@ -263,7 +263,7 @@ func proxyChecks(cfg hostConfig, dom, ip string) []check {
 	ids, _ := capture("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project="+proxyProject)
 	containers, err := inspect(strings.Fields(ids)...)
 	if err != nil || len(containers) == 0 {
-		return append(checks, bad("traefik", "not running: run devbox proxy up"))
+		return append(checks, bad("traefik", "not running: run devkit proxy up"))
 	}
 	c := containers[0]
 	status := containerStatus(c.State)
@@ -271,9 +271,9 @@ func proxyChecks(cfg hostConfig, dom, ip string) []check {
 		return append(checks, bad("traefik", "%s: docker logs %s", status, strings.TrimPrefix(c.Name, "/")))
 	}
 	if dir := c.Config.Labels["com.docker.compose.project.working_dir"]; dir != proxyDir() {
-		checks = append(checks, warn("traefik", "running from %s, not devbox's %s: run devbox proxy up", dir, proxyDir()))
+		checks = append(checks, warn("traefik", "running from %s, not devkit's %s: run devkit proxy up", dir, proxyDir()))
 	} else if dom != "" && ip != "" && !proxyCurrent(cfg, dom, ip) {
-		checks = append(checks, warn("traefik", "the host config changed since Traefik started: run devbox proxy up"))
+		checks = append(checks, warn("traefik", "the host config changed since Traefik started: run devkit proxy up"))
 	} else {
 		checks = append(checks, ok("traefik", "running %s", c.Config.Image))
 	}
@@ -281,13 +281,13 @@ func proxyChecks(cfg hostConfig, dom, ip string) []check {
 	if dom == "" || ip == "" {
 		return checks
 	}
-	host := "devbox." + dom
+	host := "devkit." + dom
 	cert, verr, err := servedCertificate(ip, host)
 	switch {
 	case err != nil:
 		checks = append(checks, bad("certificate", "nothing answers on %s:443: docker logs %s", ip, strings.TrimPrefix(c.Name, "/")))
 	case verr != nil && strings.Contains(cert.Issuer.CommonName, "STAGING"):
-		checks = append(checks, warn("certificate", "a Let's Encrypt staging certificate, which browsers distrust: run devbox setup to switch to production"))
+		checks = append(checks, warn("certificate", "a Let's Encrypt staging certificate, which browsers distrust: run devkit setup to switch to production"))
 	case verr != nil:
 		checks = append(checks, bad("certificate", "%s serves an untrusted certificate (%s): docker logs %s", host, cert.Issuer.CommonName, strings.TrimPrefix(c.Name, "/")))
 	default:
@@ -318,7 +318,7 @@ func proxyCurrent(cfg hostConfig, dom, ip string) bool {
 	return true
 }
 
-// doctor is devbox doctor: it prints every check and fails if any did.
+// doctor is devkit doctor: it prints every check and fails if any did.
 func doctor() (int, error) {
 	failed := 0
 	for _, c := range doctorChecks() {

@@ -74,8 +74,16 @@ func git(root string, args ...string) (string, error) {
 	return capture(append([]string{"git", "-C", root}, args...)...)
 }
 
-// withEnv returns base with the given variables set, replacing earlier values.
-func withEnv(base []string, set map[string]string) []string {
+// withEnv returns base with the given variables set, replacing earlier values. Each DEVKIT_*
+// variable also gets its DEVBOX_* twin for projects written before devbox became devkit.
+func withEnv(base []string, vars map[string]string) []string {
+	set := map[string]string{}
+	for key, value := range vars {
+		set[key] = value
+		if rest, ok := strings.CutPrefix(key, "DEVKIT_"); ok {
+			set["DEVBOX_"+rest] = value
+		}
+	}
 	env := make([]string, 0, len(base)+len(set))
 	for _, item := range base {
 		key, _, _ := strings.Cut(item, "=")

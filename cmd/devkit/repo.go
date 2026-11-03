@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const managedLabel = "devbox.managed"
+const managedLabel = "devkit.managed"
 
 type projectConfig struct {
 	Project    string            `json:"project"`
@@ -50,23 +50,31 @@ func (c projectConfig) webPort() string {
 
 var projectSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
+// configFile is the project's devkit.json, or devbox.json, its name before devbox became devkit.
+func configFile(root string) string {
+	if path := filepath.Join(root, "devbox.json"); !isFile(filepath.Join(root, "devkit.json")) && isFile(path) {
+		return path
+	}
+	return filepath.Join(root, "devkit.json")
+}
+
 func loadConfig(root string) (projectConfig, error) {
 	var cfg projectConfig
-	data, err := os.ReadFile(filepath.Join(root, "devbox.json"))
+	data, err := os.ReadFile(configFile(root))
 	if err != nil {
-		return cfg, fail("Missing devbox.json. Adapt the project-template first.")
+		return cfg, fail("Missing devkit.json. Adapt the project-template first.")
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.UseNumber()
 	if err := decoder.Decode(&cfg); err != nil {
-		return cfg, fail("devbox.json: %v", err)
+		return cfg, fail("devkit.json: %v", err)
 	}
 	if !projectSlug.MatchString(cfg.Project) {
-		return cfg, fail("devbox.json project must be a unique lowercase project slug (1–32 characters).")
+		return cfg, fail("devkit.json project must be a unique lowercase project slug (1–32 characters).")
 	}
 	if cfg.WaitTimeout != nil {
 		if seconds, err := strconv.Atoi(fmt.Sprint(cfg.WaitTimeout)); err != nil || seconds < 1 {
-			return cfg, fail("devbox.json wait_timeout must be a whole number of seconds.")
+			return cfg, fail("devkit.json wait_timeout must be a whole number of seconds.")
 		}
 	}
 	for _, r := range cfg.Routes {
@@ -86,17 +94,17 @@ func (r route) port() string { return fmt.Sprint(r.Port) }
 
 func (r route) validate() error {
 	if !serviceName.MatchString(r.Service) {
-		return fail("devbox.json routes need a Compose service name.")
+		return fail("devkit.json routes need a Compose service name.")
 	}
 	if port, err := strconv.Atoi(r.port()); err != nil || port < 1 || port > 65535 {
-		return fail("devbox.json route to %s needs a port number.", r.Service)
+		return fail("devkit.json route to %s needs a port number.", r.Service)
 	}
 	if len(r.Paths) == 0 && !r.Subdomains {
-		return fail("devbox.json route to %s needs paths, subdomains or both.", r.Service)
+		return fail("devkit.json route to %s needs paths, subdomains or both.", r.Service)
 	}
 	for _, p := range r.Paths {
 		if !routePath.MatchString(p) || p == "/" {
-			return fail("devbox.json route path %q must start with / and name a prefix.", p)
+			return fail("devkit.json route path %q must start with / and name a prefix.", p)
 		}
 	}
 	return nil
@@ -116,7 +124,7 @@ func domain() (string, error) {
 	}
 	value = strings.TrimRight(strings.ToLower(value), ".")
 	if !validDomain(value, 180) {
-		return "", fail("Set the preview domain with devbox setup (or DEV_DOMAIN), without a wildcard prefix.")
+		return "", fail("Set the preview domain with devkit setup (or DEV_DOMAIN), without a wildcard prefix.")
 	}
 	return value, nil
 }
@@ -178,12 +186,12 @@ func branchOf(trees []worktree, path string) (string, bool) {
 
 // sourceWorktree returns the worktree a preview came from and whether it still exists; ok is false if unknown.
 func sourceWorktree(labels map[string]string, trees []worktree) (path string, exists, ok bool) {
-	if wt := labels["devbox.worktree"]; wt != "" {
+	if wt := labels["devkit.worktree"]; wt != "" {
 		_, exists = branchOf(trees, wt)
 		return wt, exists, true
 	}
-	// Previews made before devbox.worktree was recorded: live ones are identified by branch.
-	if branch := labels["devbox.branch"]; labels["devbox.mode"] == "live" && branch != "" {
+	// Previews made before devkit.worktree was recorded: live ones are identified by branch.
+	if branch := labels["devkit.branch"]; labels["devkit.mode"] == "live" && branch != "" {
 		for _, t := range trees {
 			if t.Branch == branch {
 				return t.Path, true, true
@@ -194,11 +202,11 @@ func sourceWorktree(labels map[string]string, trees []worktree) (path string, ex
 	return "", false, false
 }
 
-func runDir(common, name string) string { return filepath.Join(common, "devbox", "runs", name) }
+func runDir(common, name string) string { return filepath.Join(common, "devkit", "runs", name) }
 
 // savedPreviews returns the labels of every preview with saved configuration in this repository, by preview ID.
 var savedPreviews = func(common string) (map[string]map[string]string, error) {
-	paths, _ := filepath.Glob(filepath.Join(common, "devbox", "runs", "*", "compose.json"))
+	paths, _ := filepath.Glob(filepath.Join(common, "devkit", "runs", "*", "compose.json"))
 	sort.Strings(paths)
 	previews := map[string]map[string]string{}
 	for _, path := range paths {
@@ -249,8 +257,8 @@ func currentPreview(root, common string) (string, error) {
 			candidates[name] = true
 		}
 	}
-	if isFile(filepath.Join(root, "devbox.json")) {
-		// The preview devbox live would use here, even if it predates devbox.worktree.
+	if isFile(configFile(root)) {
+		// The preview devkit live would use here, even if it predates devkit.worktree.
 		cfg, err := loadConfig(root)
 		if err != nil {
 			return "", err
@@ -266,13 +274,13 @@ func currentPreview(root, common string) (string, error) {
 	names := sortedKeys(candidates)
 	switch len(names) {
 	case 0:
-		return "", fail("No preview belongs to this worktree (%s). Pass a preview ID from devbox ls.", root)
+		return "", fail("No preview belongs to this worktree (%s). Pass a preview ID from devkit ls.", root)
 	case 1:
 		return names[0], nil
 	}
 	lines := []string{"Several previews belong to this worktree; pass one explicitly:"}
 	for _, name := range names {
-		mode := saved[name]["devbox.mode"]
+		mode := saved[name]["devkit.mode"]
 		if mode == "" {
 			mode = "?"
 		}
@@ -281,7 +289,7 @@ func currentPreview(root, common string) (string, error) {
 	return "", fail("%s", strings.Join(lines, "\n"))
 }
 
-// hook runs a project hook from devbox.json; a missing hook is skipped.
+// hook runs a project hook from devkit.json; a missing hook is skipped.
 var hook = func(root string, cfg projectConfig, name string, env []string) (bool, error) {
 	command := cfg.Hooks[name]
 	if command == "" {

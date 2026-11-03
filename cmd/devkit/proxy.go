@@ -9,15 +9,15 @@ import (
 	"strings"
 )
 
-// devbox proxy up writes the Traefik proxy (Compose project devbox-proxy) from the host config into
-// ~/.config/devbox/proxy and starts it. Traefik listens only on the Tailscale IP, gets one wildcard
+// devkit proxy up writes the Traefik proxy (Compose project devkit-proxy) from the host config into
+// ~/.config/devkit/proxy and starts it. Traefik listens only on the Tailscale IP, gets one wildcard
 // certificate for the domain by DNS-01, routes the dashboard and the harness from its file provider
 // and previews from Docker labels. The DNS credentials reach the container through the environment
 // of docker compose, so they are not written to the proxy directory.
 
 const (
-	proxyProject = "devbox-proxy"
-	proxyNetwork = "devbox-proxy"
+	proxyProject = "devkit-proxy"
+	proxyNetwork = "devkit-proxy"
 	stagingCA    = "https://acme-staging-v02.api.letsencrypt.org/directory"
 	productionCA = "https://acme-v02.api.letsencrypt.org/directory"
 )
@@ -33,7 +33,7 @@ func proxyDir() string { return filepath.Join(configDir(), "proxy") }
 // checkProxy validates the proxy section before any of it reaches Traefik's command line or rules.
 func checkProxy(e *proxyConfig) error {
 	if e == nil {
-		return fail("Traefik is not configured; run devbox setup.")
+		return fail("Traefik is not configured; run devkit setup.")
 	}
 	if !emailAddress.MatchString(e.Email) {
 		return fail("proxy.email %q is not a usable email address.", e.Email)
@@ -69,7 +69,7 @@ func proxyFiles(cfg hostConfig, dom, ip string) (compose, dynamic map[string]any
 	}
 	environment := map[string]any{}
 	for _, key := range sortedKeys(e.DNSEnv) {
-		environment[key] = "${" + key + ":?Start Traefik with devbox proxy up}"
+		environment[key] = "${" + key + ":?Start Traefik with devkit proxy up}"
 	}
 	compose = map[string]any{
 		"name": proxyProject,
@@ -99,9 +99,9 @@ func proxyFiles(cfg hostConfig, dom, ip string) (compose, dynamic map[string]any
 		}},
 		"volumes": map[string]any{"certificates": map[string]any{}},
 	}
-	routers := map[string]any{"devbox": map[string]any{
-		"rule": "Host(`devbox." + dom + "`)", "entryPoints": []string{"websecure"}, "service": "devbox", "tls": map[string]any{}}}
-	services := map[string]any{"devbox": map[string]any{
+	routers := map[string]any{"devkit": map[string]any{
+		"rule": "Host(`devkit." + dom + "`)", "entryPoints": []string{"websecure"}, "service": "devkit", "tls": map[string]any{}}}
+	services := map[string]any{"devkit": map[string]any{
 		"loadBalancer": map[string]any{"servers": []any{map[string]any{"url": fmt.Sprintf("http://127.0.0.1:%d", cfg.Web.Port)}}}}}
 	if h := cfg.Harness; h != nil && h.Host != "" && h.URL != "" {
 		routers["harness"] = map[string]any{
@@ -160,7 +160,7 @@ func ensureProxyNetwork() error {
 	return err
 }
 
-// proxyUp is devbox proxy up: (re)write Traefik's files and start or update it.
+// proxyUp is devkit proxy up: (re)write Traefik's files and start or update it.
 func proxyUp() error {
 	cfg, err := loadHostConfig()
 	if err != nil {

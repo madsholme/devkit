@@ -1,8 +1,8 @@
 services:
   web:
-    image: ${DEVBOX_IMAGE:?Run devbox review}
+    image: ${DEVKIT_IMAGE:?Run devkit review}
     environment:
-      DEVBOX_MODE: review
+      DEVKIT_MODE: review
       DATA_DIR: /data
     volumes:
       - data:/data

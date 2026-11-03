@@ -3,7 +3,7 @@
   "iconPath": "web/logo.svg",
   "scripts": [
     { "name": "Test", "command": "go test ./...", "icon": "test" },
-    { "name": "Rebuild and restart", "command": "go build -o bin/devbox ./cmd/devbox && systemctl --user restart devbox-web && systemctl --user --no-pager status devbox-web | head -3", "icon": "configure" },
-    { "name": "Dashboard logs", "command": "journalctl --user -u devbox-web -f", "icon": "debug" }
+    { "name": "Rebuild and restart", "command": "go build -o bin/devkit ./cmd/devkit && systemctl --user restart devkit-web && systemctl --user --no-pager status devkit-web | head -3", "icon": "configure" },
+    { "name": "Dashboard logs", "command": "journalctl --user -u devkit-web -f", "icon": "debug" }
   ]
 }

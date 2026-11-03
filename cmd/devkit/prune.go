@@ -6,7 +6,7 @@ import (
 )
 
 // Every review is a fresh build, so build cache and old images pile up as previews come and go.
-// prune trims both host-wide; devbox web runs it once a day unless the host config says
+// prune trims both host-wide; devkit web runs it once a day unless the host config says
 // "prune": {"daily": false}. How much it keeps comes from the same section.
 
 // prune trims the Docker build cache to build_cache_gb and removes images that no container,
@@ -25,7 +25,7 @@ func prune(apply bool) error {
 			return err
 		}
 		fmt.Fprintln(stdout, out)
-		fmt.Fprintf(stdout, "Run devbox prune --yes to trim the build cache to %s and remove unused images older than %d days. Volumes are kept.\n",
+		fmt.Fprintf(stdout, "Run devkit prune --yes to trim the build cache to %s and remove unused images older than %d days. Volumes are kept.\n",
 			limit, cfg.Prune.ImageAgeDays)
 		return nil
 	}

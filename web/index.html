@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>
 // Dark unless the viewer picked light or auto; set before first paint to avoid a flash.
-try { document.documentElement.dataset.theme = localStorage.getItem("devbox.theme") || "dark"; } catch { document.documentElement.dataset.theme = "dark"; }
+try { document.documentElement.dataset.theme = localStorage.getItem("devkit.theme") || "dark"; } catch { document.documentElement.dataset.theme = "dark"; }
 </script>
-<title>devbox</title>
+<title>devkit</title>
 <link rel="icon" href="/logo.svg?v=2" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico?v=2" sizes="16x16 32x32 64x64">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
@@ -257,7 +257,7 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
 <body>
 <main>
   <header>
-    <h1><img src="/logo.svg" alt="">devbox</h1>
+    <h1><img src="/logo.svg" alt="">devkit</h1>
     <div class="facts" id="facts"></div>
     <span class="refresh" id="refreshed">loading…</span>
     <span class="auth" id="auth"></span>
@@ -362,7 +362,7 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
 <dialog id="signin">
   <div class="dlg-head"><b>Sign in</b></div>
   <form class="form" id="signin-form" method="dialog">
-    <p class="note">Signing in lets this browser run devbox actions for 7 days.</p>
+    <p class="note">Signing in lets this browser run devkit actions for 7 days.</p>
     <label>Dashboard password<input type="password" id="signin-password" autocomplete="current-password" required></label>
     <p class="err" id="signin-error"></p>
     <div class="row"><button type="button" id="signin-cancel">Cancel</button><button class="primary" type="submit">Sign in</button></div>
@@ -441,8 +441,8 @@ function containerRows(p) {
 }
 
 const store = {
-  get(k) { try { return localStorage.getItem("devbox." + k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem("devbox." + k, v); } catch {} },
+  get(k) { try { return localStorage.getItem("devkit." + k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem("devkit." + k, v); } catch {} },
 };
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
@@ -524,7 +524,7 @@ function renderPreviews(all) {
   const previews = all.filter(matches);
   $("preview-count").textContent = previews.length === all.length ? `${all.length}` : `${previews.length} of ${all.length}`;
   const gone = new Set((lastData ? lastData.repositories : []).flatMap(r => r.orphans.map(o => o.name)));
-  if (!all.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews. Run <span class="mono">devbox live</span> in a worktree.</td></tr>`; return; }
+  if (!all.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews. Run <span class="mono">devkit live</span> in a worktree.</td></tr>`; return; }
   if (!previews.length) { $("previews").innerHTML = `<tr><td colspan="5" class="muted">No previews match the filter.</td></tr>`; return; }
   let html = "", project = null;
   for (const p of previews) {
@@ -535,7 +535,7 @@ function renderPreviews(all) {
     html += `<tr class="preview" data-row="${esc(p.name)}">
       <td><button class="expand" data-expand="${esc(p.name)}" aria-expanded="${open}" title="Show containers"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></button><span class="tag ${p.mode === "live" ? "live" : ""}">${esc(p.mode)}</span>
         ${p.status === "healthy" || p.status === "running" ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>` : esc(p.name)}
-        ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}${gone.has(p.name) ? ` <span class="badge warn" title="Its worktree was removed; clean up with Remove above or devbox gc">worktree gone</span>` : ""}</div>` : ""}
+        ${p.worktree ? `<div class="services mono path">${esc(home(p.worktree))}${gone.has(p.name) ? ` <span class="badge warn" title="Its worktree was removed; clean up with Remove above or devkit gc">worktree gone</span>` : ""}</div>` : ""}
 </td>
       <td>${status(p.status)}${others && !open ? `<div class="services">${others}</div>` : ""}</td>
       <td class="hide-sm">${commitCell(p)}</td>
@@ -553,8 +553,8 @@ function renderPreviews(all) {
   $("previews").innerHTML = html;
 }
 
-// Actions: a signed-in browser can run devbox commands. The server checks every target and runs
-// the devbox binary itself, so these do exactly what the CLI does.
+// Actions: a signed-in browser can run devkit commands. The server checks every target and runs
+// the devkit binary itself, so these do exactly what the CLI does.
 let session = {password_set: false, signed_in: false, share: null};
 
 const act = (action, label, target, cls = "") =>
@@ -578,7 +578,7 @@ function worktreeActions(w, byName) {
 function renderAuth() {
   $("auth").innerHTML = session.signed_in ? `<button id="signout">Sign out</button>`
     : session.password_set ? `<button id="signin-open">Sign in</button>`
-    : `<span title="Run devbox web password on the host to enable actions">read-only</span>`;
+    : `<span title="Run devkit web password on the host to enable actions">read-only</span>`;
 }
 
 async function loadSession() {
@@ -636,7 +636,7 @@ async function handleAct(button) {
   const action = button.dataset.act, target = JSON.parse(button.dataset.target);
   for (const m of document.querySelectorAll("details.menu[open]")) m.open = false;
   if (action === "destroy") return ask({title: `Destroy ${target.preview}`, ok: "Destroy", danger: true,
-    body: `<p class="note">Removes its containers, networks and volumes. The code stays in the worktree and devbox live
+    body: `<p class="note">Removes its containers, networks and volumes. The code stays in the worktree and devkit live
       or review can build it again, but the preview's own data, such as its database, starts over.</p>`,
     submit: () => run({action, ...target, confirm: target.preview})});
   if (action === "gc") return ask({title: "Clean up", ok: "Remove", danger: true,
@@ -733,7 +733,7 @@ function renderOrphans(repos) {
     <span class="mono">${rows.map(o => esc(o.name)).join(", ")}</span>
     ${session.signed_in
       ? repos.filter(r => r.orphans.length).map(r => act("gc", `Remove ${r.orphans.length} in ${home(r.path.replace(/\/\.git$/, ""))}…`, {repo: r.path}, "danger")).join(" ")
-      : `<span class="muted">Remove with <span class="mono">devbox gc --yes</span> in the repository.</span>`}`;
+      : `<span class="muted">Remove with <span class="mono">devkit gc --yes</span> in the repository.</span>`}`;
 }
 
 function certFact(h) {
@@ -1035,7 +1035,7 @@ document.addEventListener("keydown", e => {
   }
 });
 
-// History: what devbox did on this host, newest first, from every CLI run, dashboard action and expiry.
+// History: what devkit did on this host, newest first, from every CLI run, dashboard action and expiry.
 let lastHistory = [];
 const VERB = {live: "live preview", review: "review", publish: "published", start: "started", stop: "stopped",
   destroy: "destroyed", share: "shared publicly", extend: "share extended", unshare: "stopped sharing",
@@ -1070,7 +1070,7 @@ function renderHistory() {
   // The tab shows recent failures, so a share that failed to expire is not missed.
   const failures = lastHistory.filter(e => !e.ok && Date.now() - Date.parse(e.time) < 86400000).length;
   $("history-count").innerHTML = failures ? `<span class="badge bad">${plural(failures, "failure")}</span>` : "";
-  if (!lastHistory.length) { $("history-rows").innerHTML = `<tr><td colspan="3" class="muted">Nothing yet. devbox records what it does from now on.</td></tr>`; return; }
+  if (!lastHistory.length) { $("history-rows").innerHTML = `<tr><td colspan="3" class="muted">Nothing yet. devkit records what it does from now on.</td></tr>`; return; }
   if (!shown.length) { $("history-rows").innerHTML = `<tr><td colspan="3" class="muted">Nothing matches the filter.</td></tr>`; return; }
   let html = "", heading = null;
   for (const e of shown) {

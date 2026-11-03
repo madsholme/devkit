@@ -12,20 +12,20 @@ import (
 	"strings"
 )
 
-// hostConfig is ~/.config/devbox/config.json: what devbox knows about this host. devbox setup
-// writes it; devbox web password adds the dashboard password.
+// hostConfig is ~/.config/devkit/config.json: what devkit knows about this host. devkit setup
+// writes it; devkit web password adds the dashboard password.
 type hostConfig struct {
 	Domain      string         `json:"domain"`       // preview domain, e.g. "dev.example.com"; DEV_DOMAIN overrides it
 	TailscaleIP string         `json:"tailscale_ip"` // optional; read from tailscale ip -4 when empty
 	Harness     *harnessConfig `json:"harness"`      // the agent tool on this host, if any
-	Proxy       *proxyConfig   `json:"proxy"`        // the Traefik proxy started by devbox proxy up
+	Proxy       *proxyConfig   `json:"proxy"`        // the Traefik proxy started by devkit proxy up
 	Web         struct {
 		Port int `json:"port"`
 	} `json:"web"`
-	Prune pruneConfig `json:"prune"` // Docker clean-up by devbox prune and the web service
+	Prune pruneConfig `json:"prune"` // Docker clean-up by devkit prune and the web service
 }
 
-// pruneConfig is how much Docker build output devbox keeps. Every key is optional.
+// pruneConfig is how much Docker build output devkit keeps. Every key is optional.
 type pruneConfig struct {
 	BuildCacheGB int   `json:"build_cache_gb"` // build cache kept so rebuilds stay fast; default 30
 	ImageAgeDays int   `json:"image_age_days"` // unused images older than this are removed; default 7
@@ -55,11 +55,11 @@ const (
 )
 
 func configDir() string {
-	if dir := os.Getenv("DEVBOX_CONFIG_DIR"); dir != "" {
+	if dir := os.Getenv("DEVKIT_CONFIG_DIR"); dir != "" {
 		return dir
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "devbox")
+	return filepath.Join(home, ".config", "devkit")
 }
 
 func expandHome(path string) string {

@@ -8,6 +8,6 @@
   },
   "hooks": {
     "check": "python3 -c 'import ast; from pathlib import Path; ast.parse(Path(\"app.py\").read_text())'",
-    "build": "docker build --label \"org.opencontainers.image.revision=$DEVBOX_COMMIT\" --build-arg \"DEVBOX_COMMIT=$DEVBOX_COMMIT\" -t \"$DEVBOX_IMAGE\" ."
+    "build": "docker build --label \"org.opencontainers.image.revision=$DEVKIT_COMMIT\" --build-arg \"DEVKIT_COMMIT=$DEVKIT_COMMIT\" -t \"$DEVKIT_IMAGE\" ."
   }
 }

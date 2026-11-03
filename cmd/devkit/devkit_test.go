@@ -64,7 +64,7 @@ func TestReadableNames(t *testing.T) {
 
 func TestClashingNamesGetADigest(t *testing.T) {
 	swap(t, &savedPreviews, func(string) (map[string]map[string]string, error) { return nil, nil })
-	swap(t, &dockerContainers, withContainers(labelled(map[string]string{"devbox.preview": "shop-fix-login"})))
+	swap(t, &dockerContainers, withContainers(labelled(map[string]string{"devkit.preview": "shop-fix-login"})))
 	a, _ := newPreviewName("/r/.git", "shop", "live", "fix-login", sampleCommit, "fix-login")
 	b, _ := newPreviewName("/r/.git", "shop", "live", "fix/login", sampleCommit, "fix/login")
 	free, _ := newPreviewName("/r/.git", "shop", "live", "other", sampleCommit, "other")
@@ -83,8 +83,8 @@ func TestClashingNamesGetADigest(t *testing.T) {
 func TestExistingPreviewsAreFoundByIdentityOrLegacyName(t *testing.T) {
 	legacy := legacyName("shop", "v2", "live")
 	saved := map[string]map[string]string{
-		legacy:         {"devbox.mode": "live", "devbox.project": "shop"},
-		"shop-3052f1e": {"devbox.identity": "3052f1e", "devbox.mode": "review", "devbox.project": "shop"},
+		legacy:         {"devkit.mode": "live", "devkit.project": "shop"},
+		"shop-3052f1e": {"devkit.identity": "3052f1e", "devkit.mode": "review", "devkit.project": "shop"},
 	}
 	if got := findSaved(saved, "shop", "live", "v2"); got != legacy {
 		t.Errorf("legacy lookup = %q", got)
@@ -162,8 +162,8 @@ func TestT3FilesUseKnownFieldsAndIcons(t *testing.T) {
 }
 
 func composeEnv() []string {
-	return withEnv(os.Environ(), map[string]string{"DEVBOX_PREVIEW": "demo-review-123",
-		"DEVBOX_HOST": "demo-review-123.dev.example.com", "DEVBOX_IMAGE": "devbox/demo:abc", "DEVBOX_COMMIT": "abc"})
+	return withEnv(os.Environ(), map[string]string{"DEVKIT_PREVIEW": "demo-review-123",
+		"DEVKIT_HOST": "demo-review-123.dev.example.com", "DEVKIT_IMAGE": "devkit/demo:abc", "DEVKIT_COMMIT": "abc"})
 }
 
 // fakeImage answers docker image inspect and passes every other command to the real runner.
@@ -216,7 +216,7 @@ func TestRealComposeTemplateAndPinnedWebImage(t *testing.T) {
 	if name := str(object(object(output, "volumes"), "data"), "name"); name != "demo-review-123_data" {
 		t.Errorf("volume name %q", name)
 	}
-	if n := str(object(web, "labels"), "traefik.docker.network"); n != "devbox-proxy" {
+	if n := str(object(web, "labels"), "traefik.docker.network"); n != "devkit-proxy" {
 		t.Errorf("traefik network %q", n)
 	}
 }
@@ -259,8 +259,8 @@ func TestReviewRestartsAfterAReboot(t *testing.T) {
 func TestSavedPreviewGainsRestartPolicy(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "compose.json")
 	os.WriteFile(path, []byte(`{"services": {
-		"web": {"labels": {"devbox.mode": "review"}},
-		"seed": {"labels": {"devbox.mode": "review"}, "restart": "no"}}}`), 0o600)
+		"web": {"labels": {"devkit.mode": "review"}},
+		"seed": {"labels": {"devkit.mode": "review"}, "restart": "no"}}}`), 0o600)
 	swap(t, &composeRun, func(string, ...string) error { return nil })
 	if err := up(path); err != nil {
 		t.Fatal(err)
@@ -290,7 +290,7 @@ func TestRefuseSourceMountsInReviewAndSharedData(t *testing.T) {
 
 func TestStopPreservesAndDestroyRemovesVolumes(t *testing.T) {
 	common := t.TempDir()
-	path := filepath.Join(common, "devbox/runs/demo-live-123/compose.json")
+	path := filepath.Join(common, "devkit/runs/demo-live-123/compose.json")
 	os.MkdirAll(filepath.Dir(path), 0o700)
 	os.WriteFile(path, []byte("{}"), 0o600)
 	swap(t, &repository, func() (string, string, error) { return common, common, nil })
@@ -320,10 +320,10 @@ func TestNoArgumentResolvesCurrentWorktree(t *testing.T) {
 	temp := t.TempDir()
 	root, other, common := filepath.Join(temp, "wt"), filepath.Join(temp, "other"), filepath.Join(temp, ".git")
 	saved := map[string]map[string]string{
-		"demo-a-live-1":     {"devbox.mode": "live", "devbox.worktree": root},
-		"demo-b-live-2":     {"devbox.mode": "live", "devbox.worktree": other},
-		"demo-old-live-3":   {"devbox.mode": "live", "devbox.branch": "old"},
-		"demo-abc-review-4": {"devbox.mode": "review"},
+		"demo-a-live-1":     {"devkit.mode": "live", "devkit.worktree": root},
+		"demo-b-live-2":     {"devkit.mode": "live", "devkit.worktree": other},
+		"demo-old-live-3":   {"devkit.mode": "live", "devkit.branch": "old"},
+		"demo-abc-review-4": {"devkit.mode": "review"},
 	}
 	trees := []worktree{{root, "a"}, {other, "b"}}
 	swap(t, &savedPreviews, func(string) (map[string]map[string]string, error) { return saved, nil })
@@ -331,12 +331,12 @@ func TestNoArgumentResolvesCurrentWorktree(t *testing.T) {
 	if got, err := currentPreview(root, common); got != "demo-a-live-1" {
 		t.Errorf("current = %q, %v", got, err)
 	}
-	saved["demo-abc-review-5"] = map[string]string{"devbox.mode": "review", "devbox.worktree": root}
+	saved["demo-abc-review-5"] = map[string]string{"devkit.mode": "review", "devkit.worktree": root}
 	if _, err := currentPreview(root, common); err == nil ||
 		!regexp.MustCompile(`demo-a-live-1.*\n.*demo-abc-review-5`).MatchString(err.Error()) {
 		t.Errorf("expected ambiguity error, got %v", err)
 	}
-	// A legacy preview without devbox.worktree is found through its branch.
+	// A legacy preview without devkit.worktree is found through its branch.
 	trees[0].Branch = "old"
 	delete(saved, "demo-a-live-1")
 	delete(saved, "demo-abc-review-5")
@@ -352,11 +352,11 @@ func TestNoArgumentResolvesCurrentWorktree(t *testing.T) {
 func TestGCOnlyRemovesPreviewsOfRemovedWorktrees(t *testing.T) {
 	common := t.TempDir()
 	saved := map[string]map[string]string{
-		"demo-kept-live-1":   {"devbox.mode": "live", "devbox.worktree": "/wt/kept"},
-		"demo-gone-live-2":   {"devbox.mode": "live", "devbox.worktree": "/wt/gone"},
-		"demo-gone-review-3": {"devbox.mode": "review", "devbox.worktree": "/wt/gone"},
-		"demo-old-live-4":    {"devbox.mode": "live", "devbox.branch": "deleted"},
-		"demo-old-review-5":  {"devbox.mode": "review"},
+		"demo-kept-live-1":   {"devkit.mode": "live", "devkit.worktree": "/wt/kept"},
+		"demo-gone-live-2":   {"devkit.mode": "live", "devkit.worktree": "/wt/gone"},
+		"demo-gone-review-3": {"devkit.mode": "review", "devkit.worktree": "/wt/gone"},
+		"demo-old-live-4":    {"devkit.mode": "live", "devkit.branch": "deleted"},
+		"demo-old-review-5":  {"devkit.mode": "review"},
 	}
 	swap(t, &repository, func() (string, string, error) { return common, common, nil })
 	swap(t, &savedPreviews, func(string) (map[string]map[string]string, error) { return saved, nil })
@@ -394,14 +394,14 @@ func equalSets(a, b map[string]bool) bool {
 
 func TestRefuseAnotherClone(t *testing.T) {
 	swap(t, &dockerContainers, withContainers(labelled(map[string]string{
-		"devbox.preview": "demo-live", "devbox.repository": "/other/.git"})))
+		"devkit.preview": "demo-live", "devkit.repository": "/other/.git"})))
 	if err := assertOwner("demo-live", "/mine/.git"); err == nil {
 		t.Error("accepted a preview of another clone")
 	}
 }
 
 func webContainer(service string, running bool, health string, web bool) container {
-	labels := map[string]string{"devbox.preview": "demo-live-1", "devbox.mode": "live", "devbox.project": "demo",
+	labels := map[string]string{"devkit.preview": "demo-live-1", "devkit.mode": "live", "devkit.project": "demo",
 		"com.docker.compose.service": service}
 	if web {
 		labels["traefik.enable"] = "true"
@@ -516,7 +516,7 @@ func newGitRepo(t *testing.T) *gitRepo {
 		t.Fatalf("copy template: %v %s", err, out)
 	}
 	r.git("init", "-b", "main")
-	r.git("config", "user.name", "Devbox test")
+	r.git("config", "user.name", "Devkit test")
 	r.git("config", "user.email", "test@example.invalid")
 	r.git("config", "commit.gpgsign", "false")
 	r.git("config", "core.hooksPath", "/dev/null")
@@ -547,8 +547,8 @@ func TestReviewUsesCommittedFilesAndRemovesCheckout(t *testing.T) {
 	swap(t, &hook, func(root string, cfg projectConfig, name string, env []string) (bool, error) {
 		data, _ := os.ReadFile(filepath.Join(root, "message.txt"))
 		observed = append(observed, string(data))
-		if envValue(env, "DEVBOX_COMMIT") != r.commit {
-			t.Errorf("hook got commit %q", envValue(env, "DEVBOX_COMMIT"))
+		if envValue(env, "DEVKIT_COMMIT") != r.commit {
+			t.Errorf("hook got commit %q", envValue(env, "DEVKIT_COMMIT"))
 		}
 		return true, nil
 	})
@@ -568,7 +568,7 @@ func TestReviewUsesCommittedFilesAndRemovesCheckout(t *testing.T) {
 	}
 	saved, _ := savedPreviews(r.common)
 	name := "demo-main-" + r.commit[:7]
-	if len(saved) != 1 || saved[name]["devbox.identity"] != r.commit {
+	if len(saved) != 1 || saved[name]["devkit.identity"] != r.commit {
 		t.Errorf("saved previews %v", saved)
 	}
 	if len(observed) == 0 {
@@ -587,10 +587,10 @@ func TestReviewUsesCommittedFilesAndRemovesCheckout(t *testing.T) {
 	}
 }
 
-func TestHooksRunFromDevboxJSONAndMissingOnesAreSkipped(t *testing.T) {
+func TestHooksRunFromDevkitJSONAndMissingOnesAreSkipped(t *testing.T) {
 	r := newGitRepo(t)
-	cfg := projectConfig{Hooks: map[string]string{"check": `echo "$DEVBOX_COMMIT" > hook.out`}}
-	ran, err := hook(r.root, cfg, "check", withEnv(os.Environ(), map[string]string{"DEVBOX_COMMIT": "abc"}))
+	cfg := projectConfig{Hooks: map[string]string{"check": `echo "$DEVKIT_COMMIT" > hook.out`}}
+	ran, err := hook(r.root, cfg, "check", withEnv(os.Environ(), map[string]string{"DEVKIT_COMMIT": "abc"}))
 	if !ran || err != nil {
 		t.Fatalf("check hook: %v %v", ran, err)
 	}
@@ -665,8 +665,8 @@ func TestLsShowsLiveWorktreeCommitAndStoppedState(t *testing.T) {
 	head := r.git("rev-parse", "HEAD")
 	previewOf := func(name, mode string, running bool, health string) container {
 		c := webContainer("web", running, health, true)
-		for k, v := range map[string]string{"devbox.preview": name, "devbox.mode": mode, "devbox.commit": started,
-			"devbox.url": "https://" + name + ".x", "devbox.repository": r.common, "devbox.worktree": r.root} {
+		for k, v := range map[string]string{"devkit.preview": name, "devkit.mode": mode, "devkit.commit": started,
+			"devkit.url": "https://" + name + ".x", "devkit.repository": r.common, "devkit.worktree": r.root} {
 			c.Config.Labels[k] = v
 		}
 		return c
@@ -690,7 +690,7 @@ func TestLsShowsLiveWorktreeCommitAndStoppedState(t *testing.T) {
 
 func TestExistingCheckoutIsNeverRemovedOnFailure(t *testing.T) {
 	r := newGitRepo(t)
-	checkout := filepath.Join(r.common, "devbox/checkouts", "demo-main-"+r.commit[:7])
+	checkout := filepath.Join(r.common, "devkit/checkouts", "demo-main-"+r.commit[:7])
 	os.MkdirAll(checkout, 0o755)
 	sentinel := filepath.Join(checkout, "keep")
 	os.WriteFile(sentinel, []byte("existing work"), 0o644)
@@ -752,9 +752,9 @@ func TestRoutesExposeMoreServicesOfAPreview(t *testing.T) {
 	labels := func(name string) map[string]any { return object(object(services, name), "labels") }
 	host := "demo-review-123.dev.example.com"
 	for _, want := range []struct{ service, key, value string }{
-		{"web", "devbox.web", "true"},
+		{"web", "devkit.web", "true"},
 		{"web", "traefik.http.routers.demo-review-123.rule", "Host(`" + host + "`)"},
-		{"api", "devbox.web", "false"},
+		{"api", "devkit.web", "false"},
 		{"api", "traefik.enable", "true"},
 		{"api", "traefik.http.routers.demo-review-123-route1.rule", "Host(`" + host + "`) && (PathPrefix(`/api`) || PathPrefix(`/admin`))"},
 		{"api", "traefik.http.routers.demo-review-123-route1.service", "demo-review-123-api-8080"},
@@ -807,8 +807,8 @@ func TestWebContainerOfPreviewsWithAndWithoutRoutes(t *testing.T) {
 	}{
 		{map[string]string{"traefik.enable": "true"}, true},
 		{map[string]string{"traefik.enable": "false"}, false},
-		{map[string]string{"traefik.enable": "true", "devbox.web": "true"}, true},
-		{map[string]string{"traefik.enable": "true", "devbox.web": "false"}, false},
+		{map[string]string{"traefik.enable": "true", "devkit.web": "true"}, true},
+		{map[string]string{"traefik.enable": "true", "devkit.web": "false"}, false},
 	} {
 		if isWeb(c.labels) != c.web {
 			t.Errorf("isWeb(%v) = %v", c.labels, !c.web)
@@ -905,5 +905,21 @@ func TestRouteURLsComeFromTheRouterRules(t *testing.T) {
 	}
 	if got := routeURLs(map[string]string{"traefik.enable": "false"}); len(got) != 0 {
 		t.Errorf("unrouted container: %v", got)
+	}
+}
+
+func TestProjectsFromBeforeTheRenameStillWork(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "devbox.json"), []byte(`{"project": "old"}`), 0o600)
+	if cfg, err := loadConfig(root); err != nil || cfg.Project != "old" {
+		t.Fatalf("devbox.json: %+v, %v", cfg, err)
+	}
+	os.WriteFile(filepath.Join(root, "devkit.json"), []byte(`{"project": "new"}`), 0o600)
+	if cfg, err := loadConfig(root); err != nil || cfg.Project != "new" {
+		t.Errorf("devkit.json should win: %+v, %v", cfg, err)
+	}
+	env := withEnv([]string{"PATH=/bin"}, map[string]string{"DEVKIT_URL": "https://x", "OTHER": "1"})
+	if envValue(env, "DEVBOX_URL") != "https://x" || envValue(env, "DEVKIT_URL") != "https://x" || envValue(env, "DEVBOX_OTHER") != "" {
+		t.Errorf("env %q", env)
 	}
 }

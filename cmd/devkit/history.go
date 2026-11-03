@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-// The history is an append-only log of what devbox changed on this host: previews started, stopped
-// and destroyed, shares created, extended, ended and expired, and commands that failed. Every devbox
-// process appends one JSON line per event; the dashboard and devbox history read it back. It is the
+// The history is an append-only log of what devkit changed on this host: previews started, stopped
+// and destroyed, shares created, extended, ended and expired, and commands that failed. Every devkit
+// process appends one JSON line per event; the dashboard and devkit history read it back. It is the
 // event record outside Docker labels; losing it loses nothing but the past.
 
 type event struct {
@@ -32,22 +32,22 @@ type event struct {
 const historyLimit = 1 << 20
 
 func stateDir() string {
-	if dir := os.Getenv("DEVBOX_STATE_DIR"); dir != "" {
+	if dir := os.Getenv("DEVKIT_STATE_DIR"); dir != "" {
 		return dir
 	}
 	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
-		return filepath.Join(dir, "devbox")
+		return filepath.Join(dir, "devkit")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "state", "devbox")
+	return filepath.Join(home, ".local", "state", "devkit")
 }
 
 func historyPath() string { return filepath.Join(stateDir(), "history.jsonl") }
 
-// actor says who caused an event: "dashboard" for actions the page runs (it sets DEVBOX_BY),
+// actor says who caused an event: "dashboard" for actions the page runs (it sets DEVKIT_BY),
 // "auto" for the dashboard's own background work such as expiring shares, and "cli" otherwise.
 var actor = func() string {
-	if by := os.Getenv("DEVBOX_BY"); by != "" {
+	if by := os.Getenv("DEVKIT_BY"); by != "" {
 		return by
 	}
 	return "cli"
@@ -63,7 +63,7 @@ func record(e event) {
 		e.By = actor
 	}
 	if err := appendEvent(e); err != nil {
-		fmt.Fprintf(os.Stderr, "devbox: history: %v\n", err)
+		fmt.Fprintf(os.Stderr, "devkit: history: %v\n", err)
 	}
 }
 
@@ -92,7 +92,7 @@ func appendEvent(e event) error {
 	return f.Close()
 }
 
-// happened records something devbox did.
+// happened records something devkit did.
 func happened(action, preview, detail string) {
 	record(event{Action: action, Preview: preview, Detail: detail, OK: true})
 }
@@ -164,10 +164,10 @@ func shortHome(path string) string {
 	return path
 }
 
-// showHistory is devbox history: recent events, oldest first so the newest ends up next to the prompt.
+// showHistory is devkit history: recent events, oldest first so the newest ends up next to the prompt.
 func showHistory(preview string, limit int) error {
 	if preview != "" && !previewID.MatchString(preview) {
-		return fail("Use an exact preview ID from devbox ls.")
+		return fail("Use an exact preview ID from devkit ls.")
 	}
 	events, err := readHistory(preview, limit)
 	if err != nil {

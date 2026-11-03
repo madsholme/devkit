@@ -1,1 +1,1 @@
-Your devbox preview is running.
+Your devkit preview is running.

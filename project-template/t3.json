@@ -1,9 +1,9 @@
 {
   "$schema": "https://t3.codes/schema/t3.json",
   "scripts": [
-    { "name": "Live preview", "command": "devbox live", "icon": "play" },
-    { "name": "Review HEAD", "command": "devbox review HEAD", "icon": "build" },
-    { "name": "Logs", "command": "devbox logs -f", "icon": "debug" },
-    { "name": "Stop preview", "command": "devbox stop", "icon": "configure" }
+    { "name": "Live preview", "command": "devkit live", "icon": "play" },
+    { "name": "Review HEAD", "command": "devkit review HEAD", "icon": "build" },
+    { "name": "Logs", "command": "devkit logs -f", "icon": "debug" },
+    { "name": "Stop preview", "command": "devkit stop", "icon": "configure" }
   ]
 }

@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-// Dashboard actions run the devbox binary itself, exactly as the CLI would, as background jobs whose
+// Dashboard actions run the devkit binary itself, exactly as the CLI would, as background jobs whose
 // output the page follows. Every target is checked against what exists on this host first: a preview
-// devbox manages, or a worktree of a repository devbox knows.
+// devkit manages, or a worktree of a repository devkit knows.
 
 type actionRequest struct {
 	Action   string `json:"action"`
@@ -26,7 +26,7 @@ type actionRequest struct {
 	Confirm  string `json:"confirm"`
 }
 
-// plannedAction is a checked request: the devbox arguments, where to run them and what they lock.
+// plannedAction is a checked request: the devkit arguments, where to run them and what they lock.
 type plannedAction struct {
 	args   []string
 	dir    string
@@ -34,11 +34,11 @@ type plannedAction struct {
 	title  string
 }
 
-// knownRepos maps each repository devbox knows (from previews and harness worktrees) to its worktrees.
+// knownRepos maps each repository devkit knows (from previews and harness worktrees) to its worktrees.
 func knownRepos(containers []container) map[string][]worktree {
 	repos := map[string][]worktree{}
 	for _, c := range containers {
-		if common := c.Config.Labels["devbox.repository"]; common != "" {
+		if common := c.Config.Labels["devkit.repository"]; common != "" {
 			repos[common] = nil
 		}
 	}
@@ -76,7 +76,7 @@ func planAction(req actionRequest) (plannedAction, error) {
 		}
 		var labels map[string]string
 		for _, c := range containers {
-			if c.Config.Labels["devbox.preview"] == req.Preview {
+			if c.Config.Labels["devkit.preview"] == req.Preview {
 				labels = c.Config.Labels
 				break
 			}
@@ -84,7 +84,7 @@ func planAction(req actionRequest) (plannedAction, error) {
 		if labels == nil {
 			return plannedAction{}, fail("No preview %s on this host.", req.Preview)
 		}
-		dir := repoDir(repos[labels["devbox.repository"]], labels["devbox.worktree"])
+		dir := repoDir(repos[labels["devkit.repository"]], labels["devkit.worktree"])
 		if dir == "" {
 			return plannedAction{}, fail("The repository of %s is gone.", req.Preview)
 		}
@@ -126,12 +126,12 @@ func planAction(req actionRequest) (plannedAction, error) {
 				return p, nil
 			}
 		}
-		return plannedAction{}, fail("Not a worktree of a repository devbox knows.")
+		return plannedAction{}, fail("Not a worktree of a repository devkit knows.")
 	case "gc":
 		trees, ok := repos[req.Repo]
 		dir := repoDir(trees, "")
 		if !ok || dir == "" {
-			return plannedAction{}, fail("Not a repository devbox knows.")
+			return plannedAction{}, fail("Not a repository devkit knows.")
 		}
 		if req.Confirm != "remove" {
 			return plannedAction{}, fail("Confirm removing the previews of removed worktrees.")
@@ -184,7 +184,7 @@ var runAction = func(p plannedAction, out *job) error {
 	}
 	cmd := exec.Command(self, p.args...)
 	cmd.Dir, cmd.Stdout, cmd.Stderr = p.dir, out, out
-	cmd.Env = withEnv(os.Environ(), map[string]string{"DEVBOX_BY": "dashboard"})
+	cmd.Env = withEnv(os.Environ(), map[string]string{"DEVKIT_BY": "dashboard"})
 	return cmd.Run()
 }
 
@@ -206,7 +206,7 @@ func (s *jobs) start(p plannedAction) (*job, error) {
 	s.next++
 	j := &job{ID: strconv.Itoa(s.next), Title: p.title, Started: time.Now(), target: p.target}
 	s.list[j.ID] = j
-	fmt.Fprintf(j, "$ devbox %s\n", strings.Join(p.args, " "))
+	fmt.Fprintf(j, "$ devkit %s\n", strings.Join(p.args, " "))
 	go func() {
 		err := runAction(p, j)
 		j.mu.Lock()

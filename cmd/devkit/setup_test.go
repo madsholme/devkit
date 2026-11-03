@@ -20,7 +20,7 @@ import (
 func hostWith(t *testing.T, config string) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("DEVBOX_CONFIG_DIR", dir)
+	t.Setenv("DEVKIT_CONFIG_DIR", dir)
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(config), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -55,11 +55,11 @@ func TestSecretSources(t *testing.T) {
 	if _, err := (secretSource{File: path}).read(); err == nil || !strings.Contains(err.Error(), "chmod 600") {
 		t.Errorf("group-readable file accepted: %v", err)
 	}
-	t.Setenv("DEVBOX_TEST_TOKEN", "from-env")
-	if got, err := (secretSource{Env: "DEVBOX_TEST_TOKEN"}).read(); err != nil || got != "from-env" {
+	t.Setenv("DEVKIT_TEST_TOKEN", "from-env")
+	if got, err := (secretSource{Env: "DEVKIT_TEST_TOKEN"}).read(); err != nil || got != "from-env" {
 		t.Errorf("env: %q, %v", got, err)
 	}
-	if _, err := (secretSource{Env: "DEVBOX_TEST_UNSET"}).read(); err == nil {
+	if _, err := (secretSource{Env: "DEVKIT_TEST_UNSET"}).read(); err == nil {
 		t.Error("unset variable accepted")
 	}
 	var ran []string
@@ -81,8 +81,8 @@ func TestSecretSources(t *testing.T) {
 }
 
 func TestShareTokenCanComeFromTheEnvironment(t *testing.T) {
-	hostWith(t, `{"share": {"domain": "share.test", "account_id": "acct", "token": {"env": "DEVBOX_TEST_CF"}}}`)
-	t.Setenv("DEVBOX_TEST_CF", "env-token")
+	hostWith(t, `{"share": {"domain": "share.test", "account_id": "acct", "token": {"env": "DEVKIT_TEST_CF"}}}`)
+	t.Setenv("DEVKIT_TEST_CF", "env-token")
 	cfg, ok, err := loadShareConfig()
 	if err != nil || !ok || cfg.token != "env-token" {
 		t.Errorf("token %q ok=%v err=%v", cfg.token, ok, err)
@@ -123,7 +123,7 @@ func TestProxyFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T
 		t.Errorf("the token must be interpolated, not written: %v", env)
 	}
 	routers := object(object(dynamic, "http"), "routers")
-	if object(routers, "devbox")["rule"] != "Host(`devbox.dev.example.com`)" || object(routers, "harness")["rule"] != "Host(`t3.dev.example.com`)" {
+	if object(routers, "devkit")["rule"] != "Host(`devkit.dev.example.com`)" || object(routers, "harness")["rule"] != "Host(`t3.dev.example.com`)" {
 		t.Errorf("routers %v", routers)
 	}
 
@@ -214,8 +214,8 @@ func TestHarnessWorktreesAreWatchedOnlyWhenConfigured(t *testing.T) {
 }
 
 func TestWebUnitRunsThisBinaryWithoutEnvironment(t *testing.T) {
-	unit := webUnit("/opt/dev box/devbox")
-	if !strings.Contains(unit, `ExecStart="/opt/dev box/devbox" web`) || strings.Contains(unit, "DEV_DOMAIN") {
+	unit := webUnit("/opt/dev box/devkit")
+	if !strings.Contains(unit, `ExecStart="/opt/dev box/devkit" web`) || strings.Contains(unit, "DEV_DOMAIN") {
 		t.Error(unit)
 	}
 }

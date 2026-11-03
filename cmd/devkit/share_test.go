@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// fakeCloudflare is an in-memory stand-in for the parts of the Cloudflare API devbox uses.
+// fakeCloudflare is an in-memory stand-in for the parts of the Cloudflare API devkit uses.
 type fakeCloudflare struct {
 	mu      sync.Mutex
 	calls   []string
@@ -122,7 +122,7 @@ func (f *fakeCloudflare) serve(w http.ResponseWriter, r *http.Request) {
 // shareHost writes a host config for sharing under share.test and stubs this machine's name.
 func shareHost(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("DEVBOX_CONFIG_DIR", dir)
+	t.Setenv("DEVKIT_CONFIG_DIR", dir)
 	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"share": {"domain": "share.test",
 		"account_id": "acct", "hosts": ["sso-1"], "default_hours": 8, "max_hours": 24}}`), 0o644)
 	os.WriteFile(filepath.Join(dir, "cloudflare-token"), []byte("secret-token\n"), 0o600)
@@ -132,8 +132,8 @@ func shareHost(t *testing.T) {
 }
 
 func runningWeb(preview string) container {
-	c := labelled(map[string]string{"devbox.managed": "true", "devbox.preview": preview, "devbox.mode": "live",
-		"devbox.project": "demo", "devbox.repository": "/repo/.git", "devbox.worktree": "/repo", "traefik.enable": "true",
+	c := labelled(map[string]string{"devkit.managed": "true", "devkit.preview": preview, "devkit.mode": "live",
+		"devkit.project": "demo", "devkit.repository": "/repo/.git", "devkit.worktree": "/repo", "traefik.enable": "true",
 		"traefik.http.services." + preview + ".loadbalancer.server.port": "8000", "com.docker.compose.service": "web"})
 	c.ID, c.Name = preview+"-web-id", "/"+preview+"-web-1"
 	c.State.Running, c.State.Status = true, "running"
@@ -141,10 +141,10 @@ func runningWeb(preview string) container {
 }
 
 func shareContainer(preview, host, tunnelID, dnsID string, expires time.Time) container {
-	c := labelled(map[string]string{"devbox.managed": "true", "devbox.preview": preview, "devbox.service": "share",
-		"devbox.repository": "/repo/.git", "devbox.share.host": host, "devbox.share.url": "https://" + host,
-		"devbox.share.tunnel": tunnelID, "devbox.share.dns": dnsID, "devbox.share.fixed": "false",
-		"devbox.share.expires": expires.UTC().Format(time.RFC3339)})
+	c := labelled(map[string]string{"devkit.managed": "true", "devkit.preview": preview, "devkit.service": "share",
+		"devkit.repository": "/repo/.git", "devkit.share.host": host, "devkit.share.url": "https://" + host,
+		"devkit.share.tunnel": tunnelID, "devkit.share.dns": dnsID, "devkit.share.fixed": "false",
+		"devkit.share.expires": expires.UTC().Format(time.RFC3339)})
 	c.ID, c.Name = preview+"-share-id", "/"+preview+"-share"
 	c.State.Running, c.State.Status = true, "running"
 	return c
@@ -199,7 +199,7 @@ func TestShareCreatesTunnelDNSAndConnector(t *testing.T) {
 	for _, v := range cf.tunnels {
 		tun = v
 	}
-	if tun.Name != "devbox-m5-demo-main" {
+	if tun.Name != "devkit-m5-demo-main" {
 		t.Errorf("tunnel name %q", tun.Name)
 	}
 	route, _ := json.Marshal(cf.routes[tun.ID])
@@ -208,7 +208,7 @@ func TestShareCreatesTunnelDNSAndConnector(t *testing.T) {
 		t.Errorf("route %s", route)
 	}
 	for _, r := range cf.records {
-		if r.Name != "preview-demo-main.share.test" || r.Content != tun.ID+".cfargotunnel.com" || r.Comment != "devbox share m5" {
+		if r.Name != "preview-demo-main.share.test" || r.Content != tun.ID+".cfargotunnel.com" || r.Comment != "devkit share m5" {
 			t.Errorf("dns record %+v", r)
 		}
 	}
@@ -216,8 +216,8 @@ func TestShareCreatesTunnelDNSAndConnector(t *testing.T) {
 		t.Errorf("connector token %v", rec.tokens)
 	}
 	labels := rec.started[0]
-	for _, want := range []string{"devbox.preview=demo-main", "devbox.service=share", "devbox.share.tunnel=" + tun.ID,
-		"devbox.share.url=https://preview-demo-main.share.test", "devbox.repository=/repo/.git"} {
+	for _, want := range []string{"devkit.preview=demo-main", "devkit.service=share", "devkit.share.tunnel=" + tun.ID,
+		"devkit.share.url=https://preview-demo-main.share.test", "devkit.repository=/repo/.git"} {
 		if !hasLabel(labels, want) {
 			t.Errorf("missing label %s in %v", want, labels)
 		}
@@ -250,7 +250,7 @@ func TestShareUsesOnlyConfiguredFixedHostsAndBoundedHours(t *testing.T) {
 			t.Errorf("fixed host record %q", r.Name)
 		}
 	}
-	if !hasLabel(rec.started[0], "devbox.share.fixed=true") {
+	if !hasLabel(rec.started[0], "devkit.share.fixed=true") {
 		t.Errorf("fixed label missing: %v", rec.started[0])
 	}
 }
@@ -273,7 +273,7 @@ func TestShareRefusesAForeignDNSRecord(t *testing.T) {
 func TestShareReusesThisMachinesLeftoverRecord(t *testing.T) {
 	shareHost(t)
 	cf := newFakeCloudflare(t)
-	cf.records["old"] = dnsRecord{ID: "old", Type: "CNAME", Name: "sso-1.share.test", Content: "gone.cfargotunnel.com", Comment: "devbox share m5"}
+	cf.records["old"] = dnsRecord{ID: "old", Type: "CNAME", Name: "sso-1.share.test", Content: "gone.cfargotunnel.com", Comment: "devkit share m5"}
 	var rec recorded
 	stubDocker(t, &rec, nil)
 	swap(t, &dockerContainers, withContainers(runningWeb("demo-main")))
@@ -336,7 +336,7 @@ func TestSharingAgainExtendsWithoutANewTunnel(t *testing.T) {
 	if len(rec.removed) != 1 || rec.removed[0] != "demo-main-share-id" || len(rec.started) != 1 {
 		t.Errorf("connector not replaced: removed %v started %d", rec.removed, len(rec.started))
 	}
-	if !hasLabel(rec.started[0], "devbox.share.tunnel=tun-1") || rec.tokens[0] != "token-for-tun-1" {
+	if !hasLabel(rec.started[0], "devkit.share.tunnel=tun-1") || rec.tokens[0] != "token-for-tun-1" {
 		t.Errorf("extended share lost its tunnel: %v", rec.started[0])
 	}
 	if err := sharePreview("demo-main", "sso-1", 5); err == nil {
@@ -347,8 +347,8 @@ func TestSharingAgainExtendsWithoutANewTunnel(t *testing.T) {
 func TestReapRemovesOnlyExpiredShares(t *testing.T) {
 	shareHost(t)
 	cf := newFakeCloudflare(t)
-	cf.tunnels["tun-old"] = tunnel{ID: "tun-old", Name: "devbox-m5-demo-old"}
-	cf.tunnels["tun-new"] = tunnel{ID: "tun-new", Name: "devbox-m5-demo-new"}
+	cf.tunnels["tun-old"] = tunnel{ID: "tun-old", Name: "devkit-m5-demo-old"}
+	cf.tunnels["tun-new"] = tunnel{ID: "tun-new", Name: "devkit-m5-demo-new"}
 	cf.records["dns-old"] = dnsRecord{ID: "dns-old"}
 	cf.records["dns-new"] = dnsRecord{ID: "dns-new"}
 	var rec recorded
@@ -384,15 +384,15 @@ func TestSweepDeletesOnlyOldLeftoversOfThisMachine(t *testing.T) {
 	old := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
 	young := time.Now().UTC().Format(time.RFC3339)
 	cf.tunnels = map[string]tunnel{
-		"live":   {ID: "live", Name: "devbox-m5-demo-live", CreatedAt: old},
-		"orphan": {ID: "orphan", Name: "devbox-m5-demo-crashed", CreatedAt: old},
-		"young":  {ID: "young", Name: "devbox-m5-demo-starting", CreatedAt: young},
-		"other":  {ID: "other", Name: "devbox-other-box-demo", CreatedAt: old},
+		"live":   {ID: "live", Name: "devkit-m5-demo-live", CreatedAt: old},
+		"orphan": {ID: "orphan", Name: "devkit-m5-demo-crashed", CreatedAt: old},
+		"young":  {ID: "young", Name: "devkit-m5-demo-starting", CreatedAt: young},
+		"other":  {ID: "other", Name: "devkit-other-box-demo", CreatedAt: old},
 	}
 	cf.records = map[string]dnsRecord{
-		"r-live":   {ID: "r-live", Type: "CNAME", Content: "live.cfargotunnel.com", Comment: "devbox share m5", CreatedOn: old},
-		"r-orphan": {ID: "r-orphan", Type: "CNAME", Content: "gone.cfargotunnel.com", Comment: "devbox share m5", CreatedOn: old},
-		"r-other":  {ID: "r-other", Type: "CNAME", Content: "gone.cfargotunnel.com", Comment: "devbox share other-box", CreatedOn: old},
+		"r-live":   {ID: "r-live", Type: "CNAME", Content: "live.cfargotunnel.com", Comment: "devkit share m5", CreatedOn: old},
+		"r-orphan": {ID: "r-orphan", Type: "CNAME", Content: "gone.cfargotunnel.com", Comment: "devkit share m5", CreatedOn: old},
+		"r-other":  {ID: "r-other", Type: "CNAME", Content: "gone.cfargotunnel.com", Comment: "devkit share other-box", CreatedOn: old},
 		"r-mine":   {ID: "r-mine", Type: "A", Content: "192.0.2.1", CreatedOn: old},
 	}
 	swap(t, &dockerContainers, withContainers(shareContainer("demo-live", "demo-live.share.test", "live", "r-live", time.Now().Add(time.Hour))))
@@ -435,7 +435,7 @@ func TestSetPublicURLChangesOnlyTheWebService(t *testing.T) {
 	}
 	project, _ := readCompose(path)
 	services := object(project, "services")
-	if env := object(object(services, "web"), "environment"); env["DEVBOX_PUBLIC_URL"] != "https://demo-main.share.test" || env["DOMAIN"] != "https://demo-main.dev" {
+	if env := object(object(services, "web"), "environment"); env["DEVKIT_PUBLIC_URL"] != "https://demo-main.share.test" || env["DEVBOX_PUBLIC_URL"] != env["DEVKIT_PUBLIC_URL"] || env["DOMAIN"] != "https://demo-main.dev" {
 		t.Errorf("web environment %v", env)
 	}
 	if _, has := object(services, "db")["environment"]; has {
@@ -446,18 +446,19 @@ func TestSetPublicURLChangesOnlyTheWebService(t *testing.T) {
 	}
 	setPublicURL(common, "demo-main", "", false)
 	project, _ = readCompose(path)
-	if _, has := object(object(object(project, "services"), "web"), "environment")["DEVBOX_PUBLIC_URL"]; has || ups != 1 {
+	env := object(object(object(project, "services"), "web"), "environment")
+	if _, has := env["DEVKIT_PUBLIC_URL"]; has || env["DEVBOX_PUBLIC_URL"] != nil || ups != 1 {
 		t.Errorf("not removed, or restarted (%d)", ups)
 	}
 }
 
 func TestShareConfigNeedsAPrivateToken(t *testing.T) {
 	shareHost(t)
-	os.Chmod(filepath.Join(os.Getenv("DEVBOX_CONFIG_DIR"), "cloudflare-token"), 0o644)
+	os.Chmod(filepath.Join(os.Getenv("DEVKIT_CONFIG_DIR"), "cloudflare-token"), 0o644)
 	if _, _, err := loadShareConfig(); err == nil || !strings.Contains(err.Error(), "chmod 600") {
 		t.Errorf("readable token accepted: %v", err)
 	}
-	t.Setenv("DEVBOX_CONFIG_DIR", t.TempDir())
+	t.Setenv("DEVKIT_CONFIG_DIR", t.TempDir())
 	if _, ok, err := loadShareConfig(); ok || err != nil {
 		t.Errorf("missing config: ok=%v err=%v", ok, err)
 	}
@@ -468,7 +469,7 @@ func TestShareConfigNeedsAPrivateToken(t *testing.T) {
 
 func TestOverviewShowsTheShare(t *testing.T) {
 	web := runningWeb("demo-main")
-	web.Config.Labels["devbox.branch"], web.Config.Labels["devbox.commit"] = "main", "abc123"
+	web.Config.Labels["devkit.branch"], web.Config.Labels["devkit.commit"] = "main", "abc123"
 	// Docker lists the newest container first, so the share comes before the web container.
 	swap(t, &dockerContainers, withContainers(
 		shareContainer("demo-main", "demo-main.share.test", "tun-1", "dns-1", time.Now().Add(time.Hour)), web))

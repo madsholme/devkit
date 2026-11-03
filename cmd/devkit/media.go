@@ -16,7 +16,7 @@ import (
 )
 
 // Media ports are an explicit exception to the no-published-ports project contract.
-// Projects declare services/protocols; only devbox chooses the host IP and ports.
+// Projects declare services/protocols; only devkit chooses the host IP and ports.
 type mediaPort struct {
 	Name     string `json:"name"`
 	Service  string `json:"service"`
@@ -31,7 +31,7 @@ var tailscaleRange = netip.MustParsePrefix("100.64.0.0/10")
 
 func validateMediaPorts(ports []mediaPort) error {
 	if len(ports) > 16 {
-		return fail("devbox.json supports at most 16 media_ports per preview.")
+		return fail("devkit.json supports at most 16 media_ports per preview.")
 	}
 	names, targets := map[string]bool{}, map[string]bool{}
 	for _, p := range ports {
@@ -54,7 +54,7 @@ func validateMediaPorts(ports []mediaPort) error {
 	return nil
 }
 
-func (p mediaPort) envKey() string { return "DEVBOX_MEDIA_" + strings.ToUpper(p.Name) + "_PORT" }
+func (p mediaPort) envKey() string { return "DEVKIT_MEDIA_" + strings.ToUpper(p.Name) + "_PORT" }
 
 // mediaHostIP only accepts the local Tailscale IPv4, never a public/wildcard bind.
 var mediaHostIP = func() (string, error) {
@@ -129,7 +129,7 @@ func mediaLeasePath(compose string) string {
 	return filepath.Join(mediaLeaseDir(), digest(resolve(compose))+".json")
 }
 
-// A host-wide flock protects allocation across separate devbox processes/repos.
+// A host-wide flock protects allocation across separate devkit processes/repos.
 // It is held only while rendering/saving configuration, never while building images.
 func lockMediaPorts() (func(), error) {
 	if err := os.MkdirAll(mediaLeaseDir(), 0o700); err != nil {
@@ -253,7 +253,7 @@ func savePreviewCompose(root string, cfg projectConfig, mode string, env []strin
 	if err != nil {
 		return nil, err
 	}
-	variables := map[string]string{"DEVBOX_MEDIA_IP": ip}
+	variables := map[string]string{"DEVKIT_MEDIA_IP": ip}
 	for _, p := range cfg.MediaPorts {
 		variables[p.envKey()] = strconv.Itoa(allocated[p.Name])
 	}
@@ -295,9 +295,9 @@ func exposeMedia(services map[string]any, ports []mediaPort, env []string) error
 	if err := validateMediaPorts(ports); err != nil {
 		return err
 	}
-	ip, err := netip.ParseAddr(envValue(env, "DEVBOX_MEDIA_IP"))
+	ip, err := netip.ParseAddr(envValue(env, "DEVKIT_MEDIA_IP"))
 	if err != nil || !tailscaleRange.Contains(ip) {
-		return fail("Media ports require the allocated DEVBOX_MEDIA_IP Tailscale address.")
+		return fail("Media ports require the allocated DEVKIT_MEDIA_IP Tailscale address.")
 	}
 	targets := map[string]bool{}
 	for _, p := range ports {
@@ -323,7 +323,7 @@ func exposeMedia(services map[string]any, ports []mediaPort, env []string) error
 			"host_ip": ip.String(), "target": target, "published": strconv.Itoa(port), "protocol": p.Protocol,
 		})
 		labels := ensureObject(service, "labels")
-		labels["devbox.media."+p.Name] = net.JoinHostPort(ip.String(), strconv.Itoa(port)) + "/" + p.Protocol
+		labels["devkit.media."+p.Name] = net.JoinHostPort(ip.String(), strconv.Itoa(port)) + "/" + p.Protocol
 	}
 	return nil
 }

@@ -20,7 +20,7 @@ func mediaConfig() projectConfig {
 }
 
 func fakeMediaHost(t *testing.T) {
-	t.Setenv("DEVBOX_STATE_DIR", t.TempDir())
+	t.Setenv("DEVKIT_STATE_DIR", t.TempDir())
 	swap(t, &mediaHostIP, func() (string, error) { return "100.64.0.10", nil })
 	swap(t, &mediaPublishedPorts, func(string) (map[int]bool, error) { return map[int]bool{}, nil })
 	swap(t, &mediaPortAvailable, func(string, int) bool { return true })
@@ -45,7 +45,7 @@ func TestMediaPortConfigValidation(t *testing.T) {
 		}
 	}
 	root := t.TempDir()
-	os.WriteFile(filepath.Join(root, "devbox.json"), []byte(`{"project":"test","media_ports":[{"name":"bad","service":"web","protocol":"udp","target":"123"}]}`), 0o600)
+	os.WriteFile(filepath.Join(root, "devkit.json"), []byte(`{"project":"test","media_ports":[{"name":"bad","service":"web","protocol":"udp","target":"123"}]}`), 0o600)
 	if _, err := loadConfig(root); err == nil {
 		t.Error("accepted non-numeric target")
 	}
@@ -56,7 +56,7 @@ func TestRenderMediaOnlyAddsDeclaredTailnetBindings(t *testing.T) {
 	cfg := mediaConfig()
 	cfg.MediaPorts[1].Target = 4443
 	env := withEnv(composeEnv(), map[string]string{
-		"DEVBOX_MEDIA_IP": "100.64.0.10", "DEVBOX_MEDIA_SFU_UDP_PORT": "20010", "DEVBOX_MEDIA_ICE_TCP_PORT": "20011",
+		"DEVKIT_MEDIA_IP": "100.64.0.10", "DEVKIT_MEDIA_SFU_UDP_PORT": "20010", "DEVKIT_MEDIA_ICE_TCP_PORT": "20011",
 	})
 	resolved, err := render(kit, cfg, "live", env, nil)
 	if err != nil {
@@ -81,7 +81,7 @@ func TestRenderMediaOnlyAddsDeclaredTailnetBindings(t *testing.T) {
 		t.Error("accepted a fixed target that collides with an allocated target")
 	}
 	for _, ip := range []string{"0.0.0.0", "127.0.0.1", "192.168.0.10", "::", "203.0.113.1", ""} {
-		if _, err := render(kit, cfg, "live", withEnv(env, map[string]string{"DEVBOX_MEDIA_IP": ip}), nil); err == nil {
+		if _, err := render(kit, cfg, "live", withEnv(env, map[string]string{"DEVKIT_MEDIA_IP": ip}), nil); err == nil {
 			t.Errorf("accepted non-tailnet IP %q", ip)
 		}
 	}
@@ -235,9 +235,9 @@ func TestRealComposeInterpolatesMediaEnvironment(t *testing.T) {
   web:
     image: python:3.13-slim
     environment:
-      ICE_IP: ${DEVBOX_MEDIA_IP:?}
-      UDP_PORT: ${DEVBOX_MEDIA_SFU_UDP_PORT:?}
-      TCP_PORT: ${DEVBOX_MEDIA_ICE_TCP_PORT:?}
+      ICE_IP: ${DEVKIT_MEDIA_IP:?}
+      UDP_PORT: ${DEVKIT_MEDIA_SFU_UDP_PORT:?}
+      TCP_PORT: ${DEVKIT_MEDIA_ICE_TCP_PORT:?}
 `
 	os.WriteFile(filepath.Join(root, "compose.live.yaml"), []byte(compose), 0o600)
 	path := filepath.Join(root, "saved.json")
@@ -252,7 +252,7 @@ func TestRealComposeInterpolatesMediaEnvironment(t *testing.T) {
 	}
 	data, _ := os.ReadFile(path)
 	var saved map[string]any
-	if json.Unmarshal(data, &saved) != nil || strings.Contains(string(data), "${DEVBOX_MEDIA") {
+	if json.Unmarshal(data, &saved) != nil || strings.Contains(string(data), "${DEVKIT_MEDIA") {
 		t.Error("allocation was not saved as resolved Compose")
 	}
 }

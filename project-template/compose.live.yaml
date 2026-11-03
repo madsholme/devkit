@@ -4,8 +4,8 @@ services:
     working_dir: /app
     command: [python, app.py]
     environment:
-      DEVBOX_MODE: live
-      DEVBOX_COMMIT: working-files
+      DEVKIT_MODE: live
+      DEVKIT_COMMIT: working-files
       DATA_DIR: /data
     volumes:
       - .:/app:ro

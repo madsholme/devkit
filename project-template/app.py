@@ -23,11 +23,11 @@ class Handler(BaseHTTPRequestHandler):
         with sqlite3.connect(database) as db:
             count = db.execute("SELECT value FROM counter WHERE id = 1").fetchone()[0]
         message = escape(Path("message.txt").read_text().strip())
-        mode = escape(os.environ.get("DEVBOX_MODE", "unknown"))
-        commit = escape(os.environ.get("DEVBOX_COMMIT", "working-files"))
+        mode = escape(os.environ.get("DEVKIT_MODE", "unknown"))
+        commit = escape(os.environ.get("DEVKIT_COMMIT", "working-files"))
         body = f"""<!doctype html><html lang="en"><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>Devbox preview</title><style>
+        <title>Devkit preview</title><style>
         body{{font:18px system-ui;max-width:760px;margin:10vh auto;padding:24px;color:#18332e;background:#f3f6f1}}
         code{{overflow-wrap:anywhere}}button{{font:inherit;padding:10px 18px;cursor:pointer}}
         </style><h1>{message}</h1><p>Mode: <strong>{mode}</strong></p>

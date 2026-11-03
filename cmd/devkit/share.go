@@ -12,7 +12,7 @@ import (
 
 // A public share is a cloudflared container next to a preview. Its labels are the only record of it:
 // the preview it belongs to, the public hostname, the Cloudflare tunnel and DNS record, and when it expires.
-// Tunnels are named devbox-<machine>-<preview> and DNS records carry the comment "devbox share <machine>",
+// Tunnels are named devkit-<machine>-<preview> and DNS records carry the comment "devkit share <machine>",
 // so clean-up only ever touches this machine's resources, even when several hosts share one account.
 
 type share struct {
@@ -29,13 +29,13 @@ type share struct {
 
 func shareOf(c container) (share, bool) {
 	l := c.Config.Labels
-	if l["devbox.service"] != "share" {
+	if l["devkit.service"] != "share" {
 		return share{}, false
 	}
-	expires, _ := time.Parse(time.RFC3339, l["devbox.share.expires"])
-	return share{Preview: l["devbox.preview"], Container: c.ID, Host: l["devbox.share.host"], URL: l["devbox.share.url"],
-		Tunnel: l["devbox.share.tunnel"], DNS: l["devbox.share.dns"], Expires: expires,
-		Fixed: l["devbox.share.fixed"] == "true", Repository: l["devbox.repository"]}, true
+	expires, _ := time.Parse(time.RFC3339, l["devkit.share.expires"])
+	return share{Preview: l["devkit.preview"], Container: c.ID, Host: l["devkit.share.host"], URL: l["devkit.share.url"],
+		Tunnel: l["devkit.share.tunnel"], DNS: l["devkit.share.dns"], Expires: expires,
+		Fixed: l["devkit.share.fixed"] == "true", Repository: l["devkit.repository"]}, true
 }
 
 func allShares() ([]share, error) {
@@ -65,8 +65,8 @@ var machine = func() string {
 	return slug(name, 20)
 }
 
-func tunnelPrefix() string { return "devbox-" + machine() + "-" }
-func dnsComment() string   { return "devbox share " + machine() }
+func tunnelPrefix() string { return "devkit-" + machine() + "-" }
+func dnsComment() string   { return "devkit share " + machine() }
 
 // shareName is the DNS label of a preview's share: prefix + preview ID, shortened with a digest
 // when that would pass the 63-character limit of a DNS label.
@@ -98,10 +98,10 @@ func shareTarget(preview string) (container, string, error) {
 		}
 		return c, "", fail("Preview %s has no routed web port.", preview)
 	}
-	return container{}, "", fail("No preview %s on this host (see devbox ls).", preview)
+	return container{}, "", fail("No preview %s on this host (see devkit ls).", preview)
 }
 
-// setPublicURL records DEVBOX_PUBLIC_URL in the preview's web service ("" removes it) and, if apply,
+// setPublicURL records DEVKIT_PUBLIC_URL in the preview's web service ("" removes it) and, if apply,
 // recreates the web container so the app sees it.
 var setPublicURL = func(common, preview, publicURL string, apply bool) error {
 	path := filepath.Join(runDir(common, preview), "compose.json")
@@ -120,12 +120,16 @@ var setPublicURL = func(common, preview, publicURL string, apply bool) error {
 			continue
 		}
 		env := ensureObject(service, "environment")
-		if publicURL == "" {
-			_, changed = env["DEVBOX_PUBLIC_URL"]
-			delete(env, "DEVBOX_PUBLIC_URL")
-		} else {
-			changed = env["DEVBOX_PUBLIC_URL"] != publicURL
-			env["DEVBOX_PUBLIC_URL"] = publicURL
+		// DEVBOX_PUBLIC_URL is its name from before devbox became devkit; projects may still read it.
+		for _, key := range []string{"DEVKIT_PUBLIC_URL", "DEVBOX_PUBLIC_URL"} {
+			if publicURL == "" {
+				_, had := env[key]
+				changed = changed || had
+				delete(env, key)
+			} else {
+				changed = changed || env[key] != publicURL
+				env[key] = publicURL
+			}
 		}
 	}
 	if !changed {
@@ -142,13 +146,13 @@ var setPublicURL = func(common, preview, publicURL string, apply bool) error {
 
 func shareLabels(web container, s share) []string {
 	labels := map[string]string{
-		managedLabel: "true", "devbox.service": "share", "devbox.share.host": s.Host, "devbox.share.url": s.URL,
-		"devbox.share.tunnel": s.Tunnel, "devbox.share.dns": s.DNS, "devbox.share.fixed": fmt.Sprint(s.Fixed),
-		"devbox.share.expires": s.Expires.UTC().Format(time.RFC3339),
+		managedLabel: "true", "devkit.service": "share", "devkit.share.host": s.Host, "devkit.share.url": s.URL,
+		"devkit.share.tunnel": s.Tunnel, "devkit.share.dns": s.DNS, "devkit.share.fixed": fmt.Sprint(s.Fixed),
+		"devkit.share.expires": s.Expires.UTC().Format(time.RFC3339),
 	}
 	// The share carries its preview's labels, so it groups with the preview wherever containers are listed.
-	for _, key := range []string{"devbox.preview", "devbox.mode", "devbox.project", "devbox.repository", "devbox.worktree",
-		"devbox.branch", "devbox.commit", "devbox.identity", "devbox.url"} {
+	for _, key := range []string{"devkit.preview", "devkit.mode", "devkit.project", "devkit.repository", "devkit.worktree",
+		"devkit.branch", "devkit.commit", "devkit.identity", "devkit.url"} {
 		labels[key] = web.Config.Labels[key]
 	}
 	args := []string{}
@@ -160,7 +164,7 @@ func shareLabels(web container, s share) []string {
 
 // startCloudflared runs the connector; the token travels in the environment, not on the command line.
 var startCloudflared = func(cfg shareConfig, web container, s share, token string) (string, error) {
-	args := append([]string{"docker", "run", "-d", "--quiet", "--name", s.Preview + "-share", "--network", "devbox-proxy",
+	args := append([]string{"docker", "run", "-d", "--quiet", "--name", s.Preview + "-share", "--network", "devkit-proxy",
 		"--restart", "unless-stopped", "--env", "TUNNEL_TOKEN"}, shareLabels(web, s)...)
 	args = append(args, cfg.Image, "tunnel", "--no-autoupdate", "run")
 	return runCommand(args, runOpts{capture: true, env: withEnv(os.Environ(), map[string]string{"TUNNEL_TOKEN": token})})
@@ -191,7 +195,7 @@ func waitHealthy(cf *cloudflare, id string) bool {
 func resolvePreview(name string) (string, error) {
 	if name != "" {
 		if !previewID.MatchString(name) {
-			return "", fail("Use an exact preview ID from devbox ls.")
+			return "", fail("Use an exact preview ID from devkit ls.")
 		}
 		return name, nil
 	}
@@ -242,7 +246,7 @@ func sharePreview(name, fixedHost string, hours int) error {
 	for _, s := range shares {
 		if s.Preview == name {
 			if s.Host != host {
-				return fail("%s is already shared at %s; run devbox unshare first.", name, s.URL)
+				return fail("%s is already shared at %s; run devkit unshare first.", name, s.URL)
 			}
 			return extendShare(cfg, cf, web, s, expires)
 		}
@@ -261,12 +265,12 @@ func sharePreview(name, fixedHost string, hours int) error {
 	for _, r := range records {
 		// A leftover of this machine's earlier shares may be reused; anything else is not ours to change.
 		if r.Type != "CNAME" || r.Comment != dnsComment() || record != "" {
-			return fail("%s already has a DNS record that devbox on this machine did not create.", host)
+			return fail("%s already has a DNS record that devkit on this machine did not create.", host)
 		}
 		record = r.ID
 	}
 	s := share{Preview: name, Host: host, URL: "https://" + host, Expires: expires, Fixed: fixedHost != "",
-		Repository: web.Config.Labels["devbox.repository"]}
+		Repository: web.Config.Labels["devkit.repository"]}
 	var undo []func()
 	rollback := func(err error) error {
 		for i := len(undo) - 1; i >= 0; i-- {
@@ -334,7 +338,7 @@ func extendShare(cfg shareConfig, cf *cloudflare, web container, s share, expire
 }
 
 // removeShare deletes the connector, the app's public URL, the DNS record and the tunnel.
-// restartApp recreates a running web container without DEVBOX_PUBLIC_URL; stop and destroy skip that.
+// restartApp recreates a running web container without DEVKIT_PUBLIC_URL; stop and destroy skip that.
 func removeShare(s share, restartApp bool) error {
 	var problems []string
 	if err := removeContainer(s.Container); err != nil {
@@ -497,7 +501,7 @@ func listShares() error {
 	return nil
 }
 
-// cleanShares is devbox unshare --expired: remove expired shares, then sweep leftovers.
+// cleanShares is devkit unshare --expired: remove expired shares, then sweep leftovers.
 func cleanShares() error {
 	removed, err := reapExpired(time.Now())
 	for _, r := range removed {

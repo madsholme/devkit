@@ -176,7 +176,7 @@ func sampleContainers() ([]containerUsage, error) {
 		}
 		l := labels[d.Name]
 		mem, _, _ := strings.Cut(d.MemUsage, " / ")
-		rows = append(rows, containerUsage{d.Name, l["devbox.preview"], l["com.docker.compose.service"],
+		rows = append(rows, containerUsage{d.Name, l["devkit.preview"], l["com.docker.compose.service"],
 			percent(d.CPUPerc), mem, percent(d.MemPerc), d.NetIO, d.BlockIO, d.PIDs})
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].CPU > rows[j].CPU })
@@ -282,7 +282,7 @@ func (r *resources) loop() {
 			r.mu.Unlock()
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "devbox web: resource sample failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "devkit web: resource sample failed: %v\n", err)
 		}
 		select {
 		case <-r.wake:

@@ -2,25 +2,25 @@
 
 Status: idea, not started (written 2026-10-03). Nothing here is implemented.
 
-`devbox share` publishes a preview through a Cloudflare Tunnel today. This plan adds a
-self-hosted alternative: a small public "edge" that several devboxes share, so public
+`devkit share` publishes a preview through a Cloudflare Tunnel today. This plan adds a
+self-hosted alternative: a small public "edge" that several devkites share, so public
 shares no longer need a Cloudflare account, token or tunnel per share. Cloudflare stays
 available; a host picks one in its config.
 
-"Edge" means this public piece only. The private Traefik on each devbox is the proxy
-(`devbox proxy up`).
+"Edge" means this public piece only. The private Traefik on each devkit is the proxy
+(`devkit proxy up`).
 
 ## Goals
 
 - **Dumb edge.** It routes by hostname and forwards encrypted bytes. It holds no
   certificates for shares, never decrypts share traffic and knows nothing about
   individual shares.
-- **Several devboxes on one edge**, each with its own names and certificate.
+- **Several devkites on one edge**, each with its own names and certificate.
 - **No VPN requirement.** Works for hosts without Tailscale and for teams that won't let
   a public machine join their private network.
 - **Nothing private is reachable.** A compromised edge can reach only what a box
   currently shares; T3, the dashboard and the host network stay out of reach.
-- **Standard library only**, like the rest of devbox.
+- **Standard library only**, like the rest of devkit.
 
 ## Design
 
@@ -31,12 +31,12 @@ browser ──TLS──▶ edge (public VPS, :443)
            idle connection that box1 opened to the edge
                    │
                    ▼
-box1: devbox-web ──▶ Traefik public entrypoint 127.0.0.1:8443 ──▶ preview
+box1: devkit-web ──▶ Traefik public entrypoint 127.0.0.1:8443 ──▶ preview
 ```
 
 ### Boxes connect out
 
-Each devbox keeps a small pool (e.g. 4) of idle, authenticated TLS connections to
+Each devkit keeps a small pool (e.g. 4) of idle, authenticated TLS connections to
 `edge.<share-domain>:443`. When a browser connects to `x.box1.<share-domain>`, the edge
 reads the server name from the TLS ClientHello (sent in the clear), takes an idle
 connection from box1's pool, sends a short "go" frame, replays the ClientHello bytes and
@@ -57,18 +57,18 @@ one path to build and test.
 - Nothing per share. Unknown names, or a box with no idle connection, get the TCP
   connection closed (or a tiny fixed TLS alert).
 
-### What each devbox does
+### What each devkit does
 
-- **Public-only entrypoint.** The proxy (`devbox proxy up`) gets a second Traefik
+- **Public-only entrypoint.** The proxy (`devkit proxy up`) gets a second Traefik
   entrypoint, e.g. `127.0.0.1:8443`, that only share routers use. T3 and the dashboard
   stay on the Tailscale entrypoint, so a forged hostname cannot reach them via the edge.
 - **Its own certificate** for `*.box1.<share-domain>`, by DNS-01 like the preview
   certificate. A box can only serve its own names.
-- **A share is a route.** `devbox share` adds a router for the share host on the public
+- **A share is a route.** `devkit share` adds a router for the share host on the public
   entrypoint; unshare and expiry remove it. Prefer a file-provider entry per share over
   container labels so routing changes don't recreate containers (the web container is
-  still recreated for `DEVBOX_PUBLIC_URL`, as today).
-- **The connector** runs inside `devbox-web`, which is always on and already expires shares.
+  still recreated for `DEVKIT_PUBLIC_URL`, as today).
+- **The connector** runs inside `devkit-web`, which is always on and already expires shares.
 
 ### Names
 
@@ -80,14 +80,14 @@ one path to build and test.
 
 ## Config sketch
 
-On a devbox (`~/.config/devbox/config.json`):
+On a devkit (`~/.config/devkit/config.json`):
 
 ```json
 "share": {
   "via": "edge",
   "domain": "share.example.com",
   "box": "box1",
-  "edge": {"address": "edge.share.example.com:443", "key": {"file": "~/.config/devbox/edge-key"}},
+  "edge": {"address": "edge.share.example.com:443", "key": {"file": "~/.config/devkit/edge-key"}},
   "hosts": ["sso-1"], "default_hours": 8, "max_hours": 72
 }
 ```
@@ -95,7 +95,7 @@ On a devbox (`~/.config/devbox/config.json`):
 `"via": "cloudflare"` (the default, today's behaviour) keeps the current fields. The key
 is a [secret source](../README.md#secrets).
 
-On the edge (`devbox edge serve --config edge.json`):
+On the edge (`devkit edge serve --config edge.json`):
 
 ```json
 {"domain": "share.example.com", "listen": ":443",
@@ -104,12 +104,12 @@ On the edge (`devbox edge serve --config edge.json`):
 
 ## Commands
 
-- `devbox edge serve`: run the edge (on the VPS, as a systemd service).
-- `devbox edge add-box NAME`: on the edge, generate a key, print it once, store its hash.
-- `devbox setup`: on a box, ask Cloudflare or edge for shares; for edge, take the address
+- `devkit edge serve`: run the edge (on the VPS, as a systemd service).
+- `devkit edge add-box NAME`: on the edge, generate a key, print it once, store its hash.
+- `devkit setup`: on a box, ask Cloudflare or edge for shares; for edge, take the address
   and key, create the `*.box.<share-domain>` record if the DNS provider allows, get the
   certificate and add the public entrypoint.
-- `devbox doctor`: check the edge connection (pool connected, key accepted), the share
+- `devkit doctor`: check the edge connection (pool connected, key accepted), the share
   certificate and that `*.box.<share-domain>` resolves to the edge.
 
 ## Steps
@@ -118,8 +118,8 @@ On the edge (`devbox edge serve --config edge.json`):
    working on top of it.
 2. Edge server: SNI peek, box registry, idle pools, splice; tests with in-memory
    listeners. Size target: a few hundred lines.
-3. Box connector in `devbox-web`: pool, reconnect with backoff, auth, local dial.
-4. `devbox share` with `"via": "edge"`: names, certificate, routes, expiry; the existing
+3. Box connector in `devkit-web`: pool, reconnect with backoff, auth, local dial.
+4. `devkit share` with `"via": "edge"`: names, certificate, routes, expiry; the existing
    lifecycle (stop/destroy/gc end shares) stays as is.
 5. Setup and doctor for both sides; README section; history events (`edge connected`,
    `edge lost` maybe only as doctor/dashboard state, not history).
@@ -135,7 +135,7 @@ On the edge (`devbox edge serve --config edge.json`):
 - Edge-side access logs: keep minimal (time, host, box, bytes), no paths, since the edge
   cannot see them anyway.
 - A separate, related step: private routing without Tailscale (a setting for the private
-  interface: NetBird, ZeroTier, WireGuard or LAN), so devbox works for teams without a tailnet.
+  interface: NetBird, ZeroTier, WireGuard or LAN), so devkit works for teams without a tailnet.
 
 ## Compared with Cloudflare
 
