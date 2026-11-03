@@ -233,6 +233,19 @@ dialog pre { margin: 0; padding: 12px 14px; overflow: auto; max-height: calc(100
 .facts .svc-menu > summary:hover, .facts .svc-menu[open] > summary { border-color: var(--line); }
 .svc-menu > summary svg { width: 12px; height: 12px; color: var(--muted); }
 .settings > summary { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; color: var(--muted); }
+/* Hover cards for elements with data-tip: one shared, fixed element placed by showTip(). */
+.tip { position: fixed; z-index: 20; max-width: 320px; padding: 9px 11px; font-size: 12px; line-height: 1.4;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / .3); pointer-events: none; opacity: 0; transform: translateY(-2px);
+  transition: opacity .12s, transform .12s; }
+.tip.on { opacity: 1; transform: none; }
+.tip-head { display: flex; align-items: center; gap: 7px; font-weight: 600; margin-bottom: 6px; }
+.tip-head .state { font-weight: 400; color: var(--muted); }
+.tip table { border-collapse: collapse; }
+.tip td { padding: 1px 0; vertical-align: top; border: 0; }
+.tip td:first-child { color: var(--muted); padding-right: 12px; white-space: nowrap; }
+.tip .hint { margin-top: 6px; color: var(--muted); font-size: 11.5px; }
+.tip .warn { color: var(--warn); } .tip .bad { color: var(--bad); }
 .signed-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .menu-note { font-size: 12px; color: var(--muted); padding: 6px 10px; max-width: 220px; }
 .settings > summary svg { width: 16px; height: 16px; }
@@ -400,6 +413,8 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <div class="row"><button type="button" id="act-cancel">Cancel</button><button class="primary" type="submit" id="act-ok"></button></div>
   </form>
 </dialog>
+
+<div class="tip" id="tip" role="tooltip"></div>
 
 <dialog id="pair">
   <div class="dlg-head"><b>Pair a device with T3 Code</b></div>
@@ -802,6 +817,55 @@ function certFact(h) {
   return `<span class="${level ? "badge " + level : ""}" title="${esc(h.certificate_expires)}">cert ${when}</span>`;
 }
 
+// certDate turns OpenSSL's "Dec 13 13:18:17 2026 GMT" into "13 Dec 2026".
+const certDate = text => { const m = /^(\w{3})\s+(\d+)\s+[\d:]+\s+(\d{4})/.exec(text || ""); return m ? `${m[2]} ${m[1]} ${m[3]}` : text; };
+
+// serviceTip is the hover card of a service in the header.
+function serviceTip(s, h, menu) {
+  const up = s.status === "up", rows = [];
+  if (s.url) rows.push(["Address", esc(s.url.replace(/^https:\/\//, ""))]);
+  if (s.name === "Traefik") {
+    rows.push(["State", esc(s.detail)], ["Certificate", esc("*." + h.domain)]);
+    const d = h.certificate_days;
+    rows.push(["Expires", d === null ? `<span class="bad">${esc(h.certificate_expires)}</span>`
+      : `<span class="${d < 7 ? "bad" : d < 21 ? "warn" : ""}">${esc(certDate(h.certificate_expires))} · ${d < 0 ? "expired" : d === 0 ? "today" : "in " + plural(d, "day")}</span>`]);
+  } else if (s.detail) {
+    rows.push([up ? "Runs at" : "Problem", esc(s.detail.replace(/^https?:\/\//, ""))]);
+  }
+  return `<div class="tip-head"><span class="status s-${up ? "healthy" : "dead"}"><span class="dot"></span></span>${esc(s.name)}
+      <span class="state">${up ? "up" : esc(s.status)}</span></div>
+    <table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>
+    ${menu ? `<div class="hint">Click for Open T3 Code and Pair device</div>` : ""}`;
+}
+
+// Hover cards: any element with data-tip (escaped HTML) shows it after a short pause, on hover or focus.
+let tipFor = null, tipTimer = null;
+function hideTip() { clearTimeout(tipTimer); tipFor = null; $("tip").classList.remove("on"); }
+function showTip(el) {
+  const tip = $("tip");
+  tip.innerHTML = el.dataset.tip;
+  const r = el.getBoundingClientRect(), w = tip.offsetWidth, ht = tip.offsetHeight;
+  const below = r.bottom + 8 + ht <= window.innerHeight - 8;
+  tip.style.top = (below ? r.bottom + 8 : Math.max(8, r.top - 8 - ht)) + "px";
+  tip.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
+  tip.classList.add("on");
+}
+function tipTarget(e) {
+  const el = e.target.closest && e.target.closest("[data-tip]");
+  return el && !el.closest("details[open]") ? el : null;
+}
+for (const type of ["pointerover", "focusin"]) document.addEventListener(type, e => {
+  const el = tipTarget(e);
+  if (el === tipFor) return;
+  hideTip();
+  if (el) { tipFor = el; tipTimer = setTimeout(() => showTip(el), type === "focusin" ? 0 : 280); }
+});
+for (const type of ["pointerout", "focusout"]) document.addEventListener(type, e => {
+  if (tipFor && !(e.relatedTarget && tipFor.contains(e.relatedTarget))) hideTip();
+});
+for (const type of ["click", "scroll", "keydown"]) document.addEventListener(type, hideTip, true);
+window.addEventListener("resize", hideTip);
+
 function renderHost(h) {
   $("host-name").textContent = h.name || "devkit";
   $("host-domain").textContent = h.domain;
@@ -815,17 +879,18 @@ function renderHost(h) {
   $("facts").innerHTML = h.services.map(s => {
     const up = s.status === "up", traefik = s.name === "Traefik";
     const certOK = h.certificate_days !== null && h.certificate_days >= 21;
-    const title = `${s.name}: ${s.status} (${s.detail})` + (traefik ? ` · certificate ${h.certificate_expires}` : "");
     const dot = `<span class="dot"></span>`;
+    const menu = s.url && up && session.signed_in && session.pair && s.name === "T3 Code";
+    const tip = esc(serviceTip(s, h, menu));
     // T3 Code gets a menu when there is more to do than open it: pairing a device.
-    if (s.url && up && session.signed_in && session.pair && s.name === "T3 Code") {
-      return `<details class="menu svc-menu"><summary class="status s-healthy" title="${esc(title)}">${dot}${esc(s.name)}${caret}</summary>
+    if (menu) {
+      return `<details class="menu svc-menu"><summary class="status s-healthy" data-tip="${tip}">${dot}${esc(s.name)}${caret}</summary>
         <div class="menu-items"><a href="${esc(s.url)}" target="_blank" rel="noopener">Open T3 Code</a>
         <button id="pair-open" title="Connect a phone or another computer with a one-time QR code">Pair device…</button></div></details>`;
     }
     const name = s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name);
     // The certificate renews by itself; it only shows when it needs attention.
-    return `<span class="service-fact"><span class="status s-${up ? "healthy" : "dead"}" title="${esc(title)}">${dot}${name}</span>${
+    return `<span class="service-fact"><span class="status s-${up ? "healthy" : "dead"}" data-tip="${tip}" tabindex="0">${dot}${name}</span>${
       traefik && !certOK ? certFact(h) : ""}</span>`;
   }).join("");
   // Docker's sizes are strings like "7.157GB (75%)"; the summary bar mentions reclaimable space from 5 GB up.
@@ -1208,7 +1273,7 @@ $("system-close").onclick = () => $("system").close();
 load();
 loadSession();
 // Refreshing redraws the rows, so it waits while a dialog or an actions menu is open.
-setInterval(() => { if (!document.hidden && !document.querySelector("dialog[open], details.menu[open]")) load(); }, 10000);
+setInterval(() => { if (!document.hidden && !tipFor && !document.querySelector("dialog[open], details.menu[open]")) load(); }, 10000);
 </script>
 </body>
 </html>
