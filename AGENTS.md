@@ -29,6 +29,9 @@ This file covers what you need to change the kit itself.
   Traefik listens only on the Tailscale IP. `setup.go` writes the `devbox-web` user unit.
   "Edge" is kept free for a possible public edge that could replace Cloudflare for shares;
   don't use it for the private proxy.
+  Why Traefik and not Caddy: it routes previews from Docker labels and has lego's DNS
+  providers for the wildcard certificate built in, so devbox runs the stock, pinned image.
+  Caddy needs plugins (caddy-docker-proxy, a DNS module) and therefore a custom build.
 - `project-template/`: the sample project recipe (`devbox.json`, Compose files and a
   `t3.json` with T3 actions for the devbox commands).
 - `t3.json`: T3 actions for working on the kit itself, and its project icon.
