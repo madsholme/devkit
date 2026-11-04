@@ -40,19 +40,16 @@ again at any time to change something or repair the host. It:
 1. Checks Docker, Compose, Tailscale and systemd, and notes if lingering is off (`sudo loginctl
    enable-linger $USER`, or `./bootstrap.sh`, keeps user services running after you log out).
 2. Asks for the preview domain (`dev.example.com`), the agent harness (`t3`, `none` or
-   `custom`), the email for the Let's Encrypt account and the DNS provider.
+   `custom`), the email for the Let's Encrypt account, the DNS provider, and any addresses
+   besides the Tailscale IP Traefik should listen on (see [Beyond the tailnet](#beyond-the-tailnet)).
 3. Asks where each DNS credential comes from (see [Secrets](#secrets)) and checks it; a
    Cloudflare token needs Zone / DNS / Edit and Zone / Zone / Read for the domain's zone.
 4. Checks that `*.<domain>` resolves to the Tailscale IP. On Cloudflare it offers to create the
    DNS-only record `*.<domain> A <tailscale ip>`; elsewhere create it yourself.
 5. Starts Traefik (`devkit proxy up`). Without a trusted certificate yet, it first gets one from
    Let's Encrypt's staging service, whose rate limits forgive mistakes, then switches to production.
-   Setup checks staging connectivity first (up to 10 seconds). If staging is unavailable but
-   production responds (checked with another 10-second timeout), it explains the fallback and
-   requests a production certificate directly; production rate limits apply. If both are
-   unavailable, it stops with an outbound HTTPS diagnostic before changing the proxy. DNS
-   validation and other issuance failures still stop setup; they do not trigger this fallback.
-   Setup only continues once the production certificate is trusted.
+   If staging is out of reach (down, or blocked where production is not), it asks production
+   directly; if neither answers, it stops before touching Traefik.
 6. Installs and starts the dashboard as the user service `devkit-web`, running this binary.
 7. With the `t3` harness (the default), makes sure T3 Code answers on `127.0.0.1:3773`. If it is
    missing, it offers T3's official installer (`curl -fsSL https://t3.codes/install.sh | sh`, a
@@ -65,13 +62,55 @@ again at any time to change something or repair the host. It:
 `devkit setup --yes` takes every default without asking (`--domain`, `--email`, `--harness`
 set them) and fails where there is none, e.g. a credential that is not configured yet.
 `devkit doctor` checks the same things at any time: config, Docker, Tailscale, DNS, the proxy
-network, Traefik, the certificate (trusted, days left), the dashboard service, lingering, the
+network, where Traefik listens, Traefik, the certificate (trusted, days left), the dashboard service, lingering, the
 harness and the Cloudflare tokens. Each line ends with how to fix it; it exits non-zero when a
 check fails.
 
 Rebuild after pulling changes; replacing the binary is safe while `devkit web` runs, which
 then needs `systemctl --user restart devkit-web`. If you move the binary, run setup again so
 the service follows it.
+
+## Optional QEMU/KVM prerequisites
+
+Run `./bootstrap.sh --qemu` as the devkit user to install the normal prerequisites
+plus QEMU/KVM and libvirt. It is safe to rerun on an existing devkit host. Supported
+native host architectures are x86_64 and aarch64; graphical and headless guests use
+the same installation. Hardware acceleration needs enabled CPU virtualization and
+access to `/dev/kvm`; nested virtualization must be available on a VM host.
+
+| Host | Additional packages |
+|---|---|
+| Ubuntu/Debian x86_64 | `qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients ovmf swtpm swtpm-tools` |
+| Fedora x86_64 | `qemu-kvm qemu-img qemu-ui-spice-core qemu-char-spice qemu-device-display-qxl libvirt-daemon-kvm libvirt-client edk2-ovmf swtpm swtpm-tools` |
+
+On aarch64, Ubuntu/Debian uses `qemu-system-arm` and `qemu-efi-aarch64`; Fedora
+uses `edk2-aarch64` firmware with the native `qemu-kvm` package. Firmware locations
+vary by distribution: use the installed package's paths in your launch scripts.
+
+Bootstrap adds the devkit user to the existing `kvm` and `libvirt` groups. Log out
+and back in after group changes; restart `devkit-web` in the new session if it is
+already running. An existing active `libvirtd` is preserved; otherwise bootstrap
+starts local `virtqemud` sockets where installed, or `libvirtd.service` on older
+layouts. It does not enable libvirt TCP/TLS listeners or change socket permissions.
+
+Verify access after login:
+
+```sh
+virsh --readonly --connect qemu:///session list
+virsh --readonly --connect qemu:///system list
+devkit vms
+```
+
+QEMU is optional: absence is not a `devkit doctor` failure. Keep using your existing
+VM launch scripts or libvirt workflow; discovery is read-only unless you add
+[project lifecycle controls](projects.md#start-stop-and-restart-vms). With controls,
+devkit can start/stop/restart those guests and lists them even when stopped. The host
+needs no desktop or remote-viewer. Install `virt-viewer` on the client computer for
+SPICE/VNC; headless guests can use SSH. See [VM connections](dashboard.md#virtual-machines).
+
+Package guidance: [Fedora virtualization](https://developer.fedoraproject.org/tools/virtualization/about.html),
+[Ubuntu libvirt](https://ubuntu.com/server/docs/how-to/virtualisation/libvirt/), and
+[libvirt daemon sockets](https://libvirt.org/kbase/failed_connection_after_install.html).
 
 ## Host config
 
@@ -81,16 +120,28 @@ which setup writes and which you may edit:
 ```json
 {
   "domain": "dev.example.com",
+  "projects_dir": "~/Work",
   "harness": {"name": "T3 Code", "host": "t3", "url": "http://127.0.0.1:3773",
               "worktrees": "~/.t3/worktrees/*/*"},
   "proxy": {"email": "you@example.com", "dns_provider": "cloudflare",
-            "dns_env": {"CF_DNS_API_TOKEN": {"file": "~/.config/devkit/dns-token"}}},
+            "dns_env": {"CF_DNS_API_TOKEN": {"file": "~/.config/devkit/dns-token"}},
+            "listen": []},
   "web": {"port": 3780},
   "prune": {"build_cache_gb": 30, "image_age_days": 7, "daily": true},
   "share": {"…": "see Public shares"}
 }
 ```
 
+- `projects_dir`: optional parent directory of your main projects, absolute or starting
+  with `~/` (for example `~/Work` or `~/Projects`). The dashboard discovers up to 128
+  immediate non-hidden subdirectories; it does not recurse or follow child symlinks.
+  Missing/unreadable directories and discovery limits show a warning and disable VM
+  lifecycle controls until fixed, since unseen recipes could contain conflicting claims. Folders without
+  recipes remain visible as **Setup needed**. Changes take effect on refresh.
+  Discovered repositories also appear in Worktrees, and recipes supply stopped VM
+  definitions without requiring a preview, a running VM or T3.
+- `vm_projects`: optional list of absolute or `~/` project directories whose VM mappings
+  the dashboard should read, including VM-only and libvirt projects. See [VM mappings](projects.md#virtual-machines).
 - `name`: optional; the dashboard's title, the hostname by default.
 - `domain`: previews are `<name>.<domain>`, the dashboard `devkit.<domain>`. `DEV_DOMAIN`
   overrides it, e.g. for tests.
@@ -99,7 +150,9 @@ which setup writes and which you may edit:
   Traefik routes `<host>.<domain>` to `url`, and repositories with worktrees matching the
   `worktrees` glob appear on the dashboard. `null` for none.
 - `proxy`: `dns_provider` is a [lego provider](https://go-acme.github.io/lego/dns/) and `dns_env`
-  its credentials by variable name. Optional: `image` (a pinned Traefik), `staging`.
+  its credentials by variable name. Optional: `image` (a pinned Traefik), `staging`, and
+  `listen`, addresses Traefik takes HTTPS on besides the Tailscale IP (see
+  [Beyond the tailnet](#beyond-the-tailnet)).
 - `web.port`: where `devkit web` listens on localhost.
 - `prune`: optional; what `devkit prune` keeps. `build_cache_gb` of Docker build cache
   (default 30), unused images newer than `image_age_days` (default 7), and `daily: false`
@@ -126,7 +179,7 @@ to the proxy directory, but Docker keeps them in the container's configuration.
 ## Private routing
 
 Traefik (`devkit proxy up`, Compose project `devkit-proxy`) runs with host networking and binds
-HTTPS only to the Tailscale IP. Its files are generated into `~/.config/devkit/proxy/`; edit the
+HTTPS only to the Tailscale IP, unless `proxy.listen` adds addresses (see below). Its files are generated into `~/.config/devkit/proxy/`; edit the
 host config rather than these. It requests one wildcard certificate for `*.<domain>` by DNS-01,
 so no public inbound port is needed, routes `devkit.<domain>` to the dashboard and the harness
 host to the harness, and takes preview routes from Docker labels on the `devkit-proxy` network.
@@ -147,6 +200,37 @@ keep databases on their Compose-scoped networks. Do not publish database ports. 
 firewall/Tailscale policy should grant the intended users access to TCP 443 and SSH.
 
 Traefik's image is pinned (`proxy.image` overrides it). Do not run automatic image updates.
+
+## Beyond the tailnet
+
+For devices that can't join the tailnet, such as a TV or a test phone, Traefik can also listen on
+other addresses of the host. `proxy.listen` (or setup's question) lists them:
+
+```json
+"proxy": {"listen": ["192.168.1.20"]}
+```
+
+- An address of this host, IPv4 or IPv6, such as its LAN address. Several are fine; each gets
+  its own Traefik entrypoint. `devkit proxy up` and doctor fail if the host doesn't have one,
+  e.g. after DHCP handed out another, so give the host a fixed address.
+- `0.0.0.0` (or `::`, IPv4 and IPv6) for every interface. It covers the others, so Traefik binds
+  only that. On a host with a public address, this puts the dashboard and every preview on the
+  internet; `devkit proxy up` and doctor say so. Let a firewall decide who gets in.
+
+The Tailscale IP is always included; the public DNS record keeps pointing at it. Devices off the
+tailnet need DNS that answers `*.<domain>` with the other address, typically a local DNS
+override (split DNS) in your router, Pi-hole or AdGuard Home. The certificate is the same
+wildcard on every address. `devkit doctor` accepts the Tailscale IP or a configured listener
+from the host's DNS resolver; a local DNS answer does not verify public DNS for remote clients.
+`bootstrap.sh` only opens the firewall on `tailscale0`, so open
+port 443 for the network yourself, e.g. `sudo firewall-cmd --permanent --add-service=https` and
+`sudo firewall-cmd --reload`, or `sudo ufw allow from 192.168.1.0/24 to any port 443 proto tcp`.
+
+Everyone who reaches one of these addresses gets what the tailnet gets: the dashboard (its
+actions still need the password), every preview, and the harness at `<host>.<domain>` (T3 Code
+behind its own pairing). Media ports stay on the Tailscale IP. After changing `listen`, run
+`devkit proxy up`. Previews started by an older devkit answer on the new addresses once they are
+next started (`devkit start`, `live` or `review`).
 
 ## References
 

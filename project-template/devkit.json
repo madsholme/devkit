@@ -1,5 +1,6 @@
 {
   "project": "demo",
+  "vms": [],
   "web_service": "web",
   "web_port": 8000,
   "compose": {

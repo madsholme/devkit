@@ -14,6 +14,8 @@ import (
 const managedLabel = "devkit.managed"
 
 type projectConfig struct {
+	root       string
+	VMs        []vmSelector      `json:"vms,omitempty"`
 	Project    string            `json:"project"`
 	WebService string            `json:"web_service"`
 	WebPort    any               `json:"web_port"`
@@ -59,7 +61,7 @@ func configFile(root string) string {
 }
 
 func loadConfig(root string) (projectConfig, error) {
-	var cfg projectConfig
+	cfg := projectConfig{root: resolve(root)}
 	data, err := os.ReadFile(configFile(root))
 	if err != nil {
 		return cfg, fail("Missing devkit.json. Adapt the project-template first.")
@@ -71,6 +73,9 @@ func loadConfig(root string) (projectConfig, error) {
 	}
 	if !projectSlug.MatchString(cfg.Project) {
 		return cfg, fail("devkit.json project must be a unique lowercase project slug (1–32 characters).")
+	}
+	if err := validateVMSelectors(cfg.VMs); err != nil {
+		return cfg, err
 	}
 	if cfg.WaitTimeout != nil {
 		if seconds, err := strconv.Atoi(fmt.Sprint(cfg.WaitTimeout)); err != nil || seconds < 1 {

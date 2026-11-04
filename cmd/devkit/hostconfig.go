@@ -15,11 +15,13 @@ import (
 // hostConfig is ~/.config/devkit/config.json: what devkit knows about this host. devkit setup
 // writes it; devkit web password adds the dashboard password.
 type hostConfig struct {
-	Name        string         `json:"name"`         // optional; the dashboard's title, the hostname by default
-	Domain      string         `json:"domain"`       // preview domain, e.g. "dev.example.com"; DEV_DOMAIN overrides it
-	TailscaleIP string         `json:"tailscale_ip"` // optional; read from tailscale ip -4 when empty
-	Harness     *harnessConfig `json:"harness"`      // the agent tool on this host, if any
-	Proxy       *proxyConfig   `json:"proxy"`        // the Traefik proxy started by devkit proxy up
+	ProjectsDir string         `json:"projects_dir,omitempty"` // parent of main project folders
+	VMProjects  []string       `json:"vm_projects,omitempty"`  // explicit recipe roots for VM-only projects
+	Name        string         `json:"name"`                   // optional; the dashboard's title, the hostname by default
+	Domain      string         `json:"domain"`                 // preview domain, e.g. "dev.example.com"; DEV_DOMAIN overrides it
+	TailscaleIP string         `json:"tailscale_ip"`           // optional; read from tailscale ip -4 when empty
+	Harness     *harnessConfig `json:"harness"`                // the agent tool on this host, if any
+	Proxy       *proxyConfig   `json:"proxy"`                  // the Traefik proxy started by devkit proxy up
 	Web         struct {
 		Port int `json:"port"`
 	} `json:"web"`
@@ -48,6 +50,9 @@ type proxyConfig struct {
 	DNSEnv      map[string]secretSource `json:"dns_env"`         // the provider's API credentials, e.g. CF_DNS_API_TOKEN
 	Staging     bool                    `json:"staging"`         // use Let's Encrypt's staging CA (untrusted certificates)
 	Image       string                  `json:"image,omitempty"` // Traefik image; default defaultTraefik
+	// Listen adds addresses for Traefik besides the Tailscale IP: other addresses of this host, or
+	// 0.0.0.0 or :: for every interface.
+	Listen []string `json:"listen,omitempty"`
 }
 
 const (
@@ -81,6 +86,17 @@ func loadHostConfig() (hostConfig, error) {
 	if err == nil {
 		if err := json.Unmarshal(data, &cfg); err != nil {
 			return cfg, fail("%s: %v", configPath(), err)
+		}
+	}
+	if cfg.ProjectsDir != "" && !filepath.IsAbs(expandHome(cfg.ProjectsDir)) {
+		return cfg, fail("projects_dir must be absolute or start with ~/.")
+	}
+	if len(cfg.VMProjects) > 128 {
+		return cfg, fail("vm_projects accepts at most 128 project directories.")
+	}
+	for _, root := range cfg.VMProjects {
+		if !filepath.IsAbs(expandHome(root)) {
+			return cfg, fail("vm_projects directories must be absolute or start with ~/.")
 		}
 	}
 	cfg.Domain = strings.TrimRight(strings.ToLower(cfg.Domain), ".")

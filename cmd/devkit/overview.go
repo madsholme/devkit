@@ -82,17 +82,22 @@ func commitsBetween(root, base, head string) *int {
 	return &count
 }
 
-// watchedRepositories finds the Git common dirs of the harness's worktrees (its "worktrees" glob,
-// e.g. ~/.t3/worktrees/*/* for T3).
+// watchedRepositories finds repositories in the projects directory and harness worktree glob.
 func watchedRepositories() []string {
 	cfg, err := loadHostConfig()
-	if err != nil || cfg.Harness == nil || cfg.Harness.Worktrees == "" {
+	if err != nil {
 		return nil
 	}
-	trees, _ := filepath.Glob(expandHome(cfg.Harness.Worktrees))
+	trees, _ := projectDirectories(cfg)
+	trees = append(trees, cfg.VMProjects...)
+	if cfg.Harness != nil && cfg.Harness.Worktrees != "" {
+		watched, _ := filepath.Glob(expandHome(cfg.Harness.Worktrees))
+		trees = append(trees, watched...)
+	}
 	sort.Strings(trees)
 	var found []string
 	for _, tree := range trees {
+		tree = resolve(expandHome(tree))
 		if _, err := os.Stat(filepath.Join(tree, ".git")); err == nil {
 			if common, err := git(tree, "rev-parse", "--path-format=absolute", "--git-common-dir"); err == nil {
 				found = append(found, common)

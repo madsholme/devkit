@@ -108,6 +108,18 @@ var (
 	setupProxy         = proxyUp
 	certificateTimeout = 4 * time.Minute
 	certificatePoll    = 5 * time.Second
+	// acmeReachable fetches an ACME directory, which needs no account and orders nothing.
+	acmeReachable = func(directory string) error {
+		resp, err := (&http.Client{Timeout: 10 * time.Second}).Get(directory)
+		if err != nil {
+			return err
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("%s answered HTTP %d", directory, resp.StatusCode)
+		}
+		return nil
+	}
 )
 
 func setup(opts setupOptions) error {
@@ -180,6 +192,12 @@ func setup(opts setupOptions) error {
 	if proxy.DNSProvider != provider {
 		proxy.DNSEnv = nil
 	}
+	listen, err := p.ask("Traefik listens on the Tailscale IP. Other addresses of this host for it, or 0.0.0.0 for every interface (empty for none)",
+		strings.Join(proxy.Listen, " "))
+	if err != nil {
+		return err
+	}
+	proxy.Listen = strings.Fields(strings.ReplaceAll(listen, ",", " "))
 
 	step("Credentials")
 	if proxy.DNSEnv, err = askDNSCredentials(p, proxy.DNSProvider, proxy.DNSEnv, dom); err != nil {
@@ -503,23 +521,9 @@ func ensureWildcard(p *prompter, dom, ip string, proxy *proxyConfig) error {
 	return nil
 }
 
-// probeACMEDirectory checks connectivity without creating an account or ordering a certificate.
-func probeACMEDirectory(endpoint string) error {
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(endpoint)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fail("%s returned HTTP %d", endpoint, resp.StatusCode)
-	}
-	_, err = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
-	return err
-}
-
 // startProxyWithCertificate starts Traefik. Without a trusted certificate yet it proves issuance against
-// staging first, unless that service is unavailable and production is reachable.
+// Let's Encrypt's staging service first, whose limits forgive mistakes, then switches to production.
+// When staging is out of reach it asks production directly.
 func startProxyWithCertificate(raw map[string]any, proxy *proxyConfig, dom, ip string) error {
 	host := "devkit." + dom
 	run := func(staging bool, want string, accept func(*x509.Certificate, error) bool) error {
@@ -550,13 +554,13 @@ func startProxyWithCertificate(raw map[string]any, proxy *proxyConfig, dom, ip s
 		fmt.Fprintf(stdout, "Traefik already serves a trusted certificate (until %s).\n", cert.NotAfter.Format("2 Jan 2006"))
 		return run(false, "trusted", trusted)
 	}
-	fmt.Fprintln(stdout, "Checking Let's Encrypt staging connectivity (up to 10s)...")
-	if stagingErr := probeACMEDirectory(stagingCA); stagingErr != nil {
-		fmt.Fprintf(stdout, "Let's Encrypt staging is unavailable: %v\nChecking production connectivity (up to 10s)...\n", stagingErr)
-		if productionErr := probeACMEDirectory(productionCA); productionErr != nil {
-			return fail("Cannot reach Let's Encrypt staging (%v) or production (%v). Check outbound HTTPS access and run devkit setup again.", stagingErr, productionErr)
+	// Staging can be down, or blocked where production is not; waiting for its certificate would
+	// only time out.
+	if stagingErr := acmeReachable(stagingCA); stagingErr != nil {
+		if productionErr := acmeReachable(productionCA); productionErr != nil {
+			return fail("Let's Encrypt is out of reach (staging: %v; production: %v). Check outbound HTTPS and run devkit setup again.", stagingErr, productionErr)
 		}
-		fmt.Fprintln(stdout, "Production is reachable; skipping staging and requesting a trusted certificate. Production rate limits apply.")
+		fmt.Fprintf(stdout, "Let's Encrypt's staging service is out of reach (%v), so setup asks production directly.\n", stagingErr)
 		return run(false, "trusted", trusted)
 	}
 	staging := func(cert *x509.Certificate, _ error) bool { return strings.Contains(cert.Issuer.CommonName, "STAGING") }

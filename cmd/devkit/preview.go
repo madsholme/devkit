@@ -20,24 +20,34 @@ func restartPolicy(service map[string]any) {
 	}
 }
 
-// up starts a saved preview, adding the restart policy to previews saved without it.
+// up starts a saved preview, bringing previews saved by older versions up to date: it adds the
+// restart policy, and unpins routers from the single entrypoint Traefik had before proxy.listen.
 func up(path string) error {
 	saved, err := readCompose(path)
 	if err != nil {
 		return err
 	}
 	services := object(saved, "services")
-	missing := false
+	missing, changed := false, false
 	for _, s := range services {
 		service := asObject(s)
-		if _, has := service["restart"]; !has && str(object(service, "labels"), "devkit.mode") != "" {
+		labels := object(service, "labels")
+		if _, has := service["restart"]; !has && str(labels, "devkit.mode") != "" {
 			missing = true
+		}
+		for key, value := range labels {
+			if strings.HasPrefix(key, "traefik.http.routers.") && strings.HasSuffix(key, ".entrypoints") && value == "websecure" {
+				delete(labels, key)
+				changed = true
+			}
 		}
 	}
 	if missing {
 		for _, s := range services {
 			restartPolicy(asObject(s))
 		}
+	}
+	if missing || changed {
 		if err := writeCompose(path, saved); err != nil {
 			return err
 		}
@@ -222,7 +232,6 @@ func expose(service map[string]any, router, target, rule, port string) {
 	for k, v := range map[string]string{
 		"traefik.enable": "true", "traefik.docker.network": "devkit-proxy",
 		"traefik.http.routers." + router + ".rule":                      rule,
-		"traefik.http.routers." + router + ".entrypoints":               "websecure",
 		"traefik.http.routers." + router + ".tls":                       "true",
 		"traefik.http.routers." + router + ".service":                   target,
 		"traefik.http.services." + target + ".loadbalancer.server.port": port,

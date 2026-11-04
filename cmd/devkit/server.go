@@ -121,8 +121,14 @@ func newHandler() (http.Handler, error) {
 		return nil, err
 	}
 	res := newResources()
+	vms := newVMInventory()
 	go reapLoop()
 	actions := newActionHandler()
+	actions.jobs.after = func(p plannedAction) {
+		if p.target == "vm lifecycle" {
+			vms.invalidate()
+		}
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		plain := "text/plain; charset=utf-8"
 		if a, ok := assets[r.URL.Path]; ok && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
@@ -140,6 +146,18 @@ func newHandler() (http.Handler, error) {
 		query := r.URL.Query()
 		var err error
 		switch r.URL.Path {
+		case "/api/containers":
+			var data containersData
+			if data, err = containersOverview(r.Context()); err == nil {
+				sendJSON(w, data)
+			}
+		case "/api/projects":
+			var data projectsData
+			if data, err = projectsOverview(); err == nil {
+				sendJSON(w, data)
+			}
+		case "/api/vms":
+			sendJSON(w, vms.snapshot(r.Context()))
 		case "/api/overview":
 			var data overviewData
 			if data, err = overview(); err == nil {

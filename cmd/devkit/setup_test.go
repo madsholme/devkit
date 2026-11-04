@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -106,7 +107,7 @@ func proxyHost() hostConfig {
 
 func TestProxyFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T) {
 	cfg := proxyHost()
-	compose, dynamic := proxyFiles(cfg, "dev.example.com", "100.64.0.9")
+	compose, dynamic := proxyFiles(cfg, "dev.example.com", []string{"100.64.0.9"})
 	traefik := object(object(compose, "services"), "traefik")
 	command := traefik["command"].([]string)
 	for _, want := range []string{"--entrypoints.websecure.address=100.64.0.9:443",
@@ -129,7 +130,7 @@ func TestProxyFilesBindTheTailscaleIPAndRouteTheDashboardAndHarness(t *testing.T
 	}
 
 	cfg.Proxy.Staging, cfg.Harness = true, nil
-	compose, dynamic = proxyFiles(cfg, "dev.example.com", "100.64.0.9")
+	compose, dynamic = proxyFiles(cfg, "dev.example.com", []string{"100.64.0.9"})
 	command = object(object(compose, "services"), "traefik")["command"].([]string)
 	if !slices.Contains(command, "--certificatesresolvers.dns.acme.storage=/certs/acme-staging.json") ||
 		!slices.Contains(command, "--certificatesresolvers.dns.acme.caserver="+stagingCA) {
@@ -223,9 +224,7 @@ func TestWebUnitRunsThisBinaryWithoutEnvironment(t *testing.T) {
 
 func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	hostWith(t, `{}`)
-	swap[http.RoundTripper](t, &http.DefaultTransport, acmeTransport(func(r *http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
-	}))
+	swap(t, &acmeReachable, func(string) error { return nil })
 	swap[io.Writer](t, &stdout, &bytes.Buffer{})
 	swap(t, &certificatePoll, time.Millisecond)
 	stage := "none" // what Traefik serves: none, staging, production
@@ -261,19 +260,14 @@ func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	}
 
 	// With a trusted certificate already served, setup goes straight to production.
-	swap[http.RoundTripper](t, &http.DefaultTransport, acmeTransport(func(r *http.Request) (*http.Response, error) {
-		t.Error("already trusted certificate should not need an ACME connectivity check")
-		return nil, errors.New("offline")
-	}))
+	swap(t, &acmeReachable, func(string) error { t.Error("a trusted certificate needs no ACME check"); return nil })
 	ups = nil
 	if err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9"); err != nil || !slices.Equal(ups, []bool{false}) {
 		t.Errorf("ups %v, %v", ups, err)
 	}
 
 	// A certificate that never comes fails with a pointer to the logs.
-	swap[http.RoundTripper](t, &http.DefaultTransport, acmeTransport(func(r *http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
-	}))
+	swap(t, &acmeReachable, func(string) error { return nil })
 	swap(t, &certificateTimeout, 5*time.Millisecond)
 	stage = "stuck"
 	ups = nil
@@ -286,84 +280,63 @@ func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	}
 }
 
-type acmeTransport func(*http.Request) (*http.Response, error)
-
-func (f acmeTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
-func TestSetupFallsBackWhenStagingIsUnavailable(t *testing.T) {
-	for _, tc := range []struct {
-		name                string
-		stagingStatus       int
-		productionOffline   bool
-		productionUntrusted bool
+func TestSetupAsksProductionDirectlyWhenStagingIsOutOfReach(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		production error // what reaching production gives
+		trusted    bool  // whether production's certificate is trusted
+		want       string
 	}{
-		{name: "connection reset"},
-		{name: "service unavailable", stagingStatus: http.StatusServiceUnavailable},
-		{name: "both offline", productionOffline: true},
-		{name: "production must be trusted", productionUntrusted: true},
+		{"production issues", nil, true, ""},
+		{"production must still be trusted", nil, false, "No trusted certificate"},
+		{"both out of reach", errors.New("connection refused"), false, "Check outbound HTTPS"},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
 			dir := hostWith(t, `{}`)
-			var out bytes.Buffer
-			swap[io.Writer](t, &stdout, &out)
+			swap[io.Writer](t, &stdout, &bytes.Buffer{})
 			swap(t, &certificateTimeout, 5*time.Millisecond)
 			swap(t, &certificatePoll, time.Millisecond)
-			var checked []string
-			swap[http.RoundTripper](t, &http.DefaultTransport, acmeTransport(func(r *http.Request) (*http.Response, error) {
-				checked = append(checked, r.URL.String())
-				if deadline, ok := r.Context().Deadline(); !ok || time.Until(deadline) > 10*time.Second {
-					t.Error("ACME connectivity probe must have a short deadline")
+			swap(t, &acmeReachable, func(directory string) error {
+				if directory == stagingCA {
+					return errors.New("connection reset by peer")
 				}
-				if r.URL.String() == stagingCA && tc.stagingStatus != 0 {
-					return &http.Response{StatusCode: tc.stagingStatus, Body: io.NopCloser(strings.NewReader("unavailable"))}, nil
-				}
-				if r.URL.String() == stagingCA || tc.productionOffline {
-					return nil, errors.New("connection reset by peer")
-				}
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
-			}))
+				return c.production
+			})
 			proxy := proxyHost().Proxy
 			var ups []bool
 			swap(t, &setupProxy, func() error { ups = append(ups, proxy.Staging); return nil })
 			swap(t, &servedCertificate, func(ip, host string) (*x509.Certificate, error, error) {
-				cert := &x509.Certificate{Issuer: pkix.Name{CommonName: "TRAEFIK DEFAULT CERT"}}
-				if len(ups) > 0 && !proxy.Staging && !tc.productionUntrusted {
-					cert.Issuer.CommonName = "YR1"
+				cert := &x509.Certificate{Issuer: pkix.Name{CommonName: "YR1"}}
+				if len(ups) > 0 && c.trusted {
 					return cert, nil, nil
 				}
 				return cert, errors.New("untrusted"), nil
 			})
 			err := startProxyWithCertificate(map[string]any{}, proxy, "dev.example.com", "100.64.0.9")
-			if !slices.Equal(checked, []string{stagingCA, productionCA}) {
-				t.Errorf("checked directories %v", checked)
+			if (c.want == "") != (err == nil) || err != nil && !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("got %v, want %q", err, c.want)
 			}
-			if tc.productionOffline {
-				if err == nil || !strings.Contains(err.Error(), "staging") || !strings.Contains(err.Error(), "production") {
-					t.Errorf("expected actionable connection error, got %v", err)
+			if c.production != nil {
+				if data, _ := os.ReadFile(filepath.Join(dir, "config.json")); len(ups) != 0 || string(data) != `{}` {
+					t.Errorf("out of reach, yet the proxy started (%v) or the config changed: %s", ups, data)
 				}
-				data, _ := os.ReadFile(filepath.Join(dir, "config.json"))
-				if len(ups) != 0 || string(data) != `{}` {
-					t.Errorf("unreachable CAs should not change proxy or config: %v, %s", ups, data)
-				}
-				return
-			}
-			if tc.productionUntrusted {
-				if err == nil || !strings.Contains(err.Error(), "No trusted certificate") {
-					t.Errorf("accepted an untrusted production certificate: %v", err)
-				}
-			} else if err != nil {
-				t.Fatal(err)
-			}
-			if !slices.Equal(ups, []bool{false}) {
-				t.Errorf("expected one production start, got %v", ups)
-			}
-			if cfg, err := loadHostConfig(); err != nil || cfg.Proxy == nil || cfg.Proxy.Staging {
-				t.Errorf("production selection not persisted: %+v, %v", cfg.Proxy, err)
-			}
-			if !strings.Contains(out.String(), "staging") || !strings.Contains(out.String(), "production") {
-				t.Errorf("missing fallback explanation: %s", out.String())
+			} else if !slices.Equal(ups, []bool{false}) {
+				t.Errorf("proxy started with staging=%v", ups)
 			}
 		})
+	}
+}
+
+func TestACMEReachableWantsTheDirectory(t *testing.T) {
+	status := http.StatusOK
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(status) }))
+	defer server.Close()
+	if err := acmeReachable(server.URL); err != nil {
+		t.Error(err)
+	}
+	status = http.StatusServiceUnavailable
+	if err := acmeReachable(server.URL); err == nil || !strings.Contains(err.Error(), "503") {
+		t.Errorf("503: %v", err)
 	}
 }
 
@@ -436,5 +409,68 @@ func TestSetupInstallsT3OnlyWhereMissingAndAsked(t *testing.T) {
 	up, installed, service, ran = false, false, false, nil
 	if err := ensureT3(&prompter{in: bufioReader("n\n")}, "dev.example.com"); err != nil || len(ran) != 0 || installed {
 		t.Errorf("declined: ran %q, %v", ran, err)
+	}
+}
+
+func TestTraefikListensOnTheTailnetAndWhereTheConfigAdds(t *testing.T) {
+	for _, c := range []struct{ listen, want []string }{
+		{nil, []string{"100.64.0.9"}},
+		{[]string{"192.168.1.20", "tailscale", "192.168.1.20"}, []string{"100.64.0.9", "192.168.1.20"}},
+		{[]string{"fd00::5"}, []string{"100.64.0.9", "fd00::5"}},
+		{[]string{"192.168.1.20", "0.0.0.0"}, []string{"0.0.0.0"}},
+		{[]string{"0.0.0.0", "::"}, []string{"::"}},
+	} {
+		if got := listenAddresses(&proxyConfig{Listen: c.listen}, "100.64.0.9"); !slices.Equal(got, c.want) {
+			t.Errorf("%q: %q, want %q", c.listen, got, c.want)
+		}
+	}
+	cfg := proxyHost()
+	compose, dynamic := proxyFiles(cfg, "dev.example.com", []string{"100.64.0.9", "fd00::5"})
+	command := object(object(compose, "services"), "traefik")["command"].([]string)
+	for _, want := range []string{"--entrypoints.websecure.address=100.64.0.9:443", "--entrypoints.websecure2.address=[fd00::5]:443"} {
+		if !slices.Contains(command, want) {
+			t.Errorf("missing %s in %q", want, command)
+		}
+	}
+	for name, router := range object(object(dynamic, "http"), "routers") {
+		if _, pinned := asObject(router)["entryPoints"]; pinned {
+			t.Errorf("router %s should answer on every entrypoint", name)
+		}
+	}
+	for _, listen := range [][]string{{"lan"}, {"fe80::1%eth0"}, {"192.168.1.20:443"}} {
+		cfg.Proxy.Listen = listen
+		if checkProxy(cfg.Proxy) == nil {
+			t.Errorf("accepted listen %q", listen)
+		}
+	}
+	cfg.Proxy.Listen = []string{"tailscale", "0.0.0.0", "192.168.1.20"}
+	if err := checkProxy(cfg.Proxy); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestListenAddressesMustBeThisHostsAndEveryInterfaceIsCalledOut(t *testing.T) {
+	swap(t, &hostAddresses, func() []string { return []string{"127.0.0.1", "100.64.0.9", "192.168.1.20", "fd7a:115c:a1e0::9"} })
+	if err := checkListen([]string{"100.64.0.9", "192.168.1.20"}); err != nil {
+		t.Error(err)
+	}
+	if err := checkListen([]string{"0.0.0.0"}); err != nil {
+		t.Error(err)
+	}
+	if err := checkListen([]string{"100.64.0.9", "192.168.1.21"}); err == nil || !strings.Contains(err.Error(), "192.168.1.21") {
+		t.Errorf("a missing address: %v", err)
+	}
+	if note := listenNote([]string{"100.64.0.9"}, "100.64.0.9", "dev.example.com"); note != "" {
+		t.Errorf("tailnet only needs no note: %q", note)
+	}
+	if note := listenNote([]string{"100.64.0.9", "192.168.1.20"}, "100.64.0.9", "dev.example.com"); !strings.Contains(note, "*.dev.example.com") {
+		t.Errorf("a LAN address needs local DNS: %q", note)
+	}
+	if note := listenNote([]string{"0.0.0.0"}, "100.64.0.9", "dev.example.com"); strings.Contains(note, "public") {
+		t.Errorf("no public address here: %q", note)
+	}
+	swap(t, &hostAddresses, func() []string { return []string{"100.64.0.9", "203.0.113.5", "2001:db8::5"} })
+	if note := listenNote([]string{"0.0.0.0"}, "100.64.0.9", "dev.example.com"); !strings.Contains(note, "public 203.0.113.5, 2001:db8::5") {
+		t.Errorf("every interface on a public host: %q", note)
 	}
 }

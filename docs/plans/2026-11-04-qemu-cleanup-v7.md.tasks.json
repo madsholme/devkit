@@ -1,0 +1,39 @@
+{
+  "planPath": "docs/plans/2026-11-04-qemu-cleanup-v7.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Specify cleanup behavior and record version 7 plan",
+      "description": "User chose retention by default with explicit purge; plan and ADR 0006 define exact scope and safety boundaries.",
+      "status": "completed"
+    },
+    {
+      "id": 2,
+      "subject": "Implement cleanup with regression tests",
+      "description": "Named/project CLI, batch preflight, stop/purge sequencing, atomic registration removal and partial-progress history verified by focused and full Go tests.",
+      "status": "completed",
+      "blockedBy": [
+        1
+      ]
+    },
+    {
+      "id": 3,
+      "subject": "Verify disposable flows and documentation",
+      "description": "Existing real-QEMU runner passes cleanup, retained disk hashes, explicit purge and failed-purge retry; affected docs updated.",
+      "status": "completed",
+      "blockedBy": [
+        2
+      ]
+    },
+    {
+      "id": 4,
+      "subject": "Review safety boundaries and hand off",
+      "description": "Single-agent review resolved stale definitions and catalog limit; final tests/vet/build/format/diff checks pass. No deployment/integration.",
+      "status": "completed",
+      "blockedBy": [
+        3
+      ]
+    }
+  ],
+  "lastUpdated": "2026-11-04T22:09:32.560298+00:00"
+}

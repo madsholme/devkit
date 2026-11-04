@@ -57,9 +57,10 @@ flowchart LR
   review -. "devkit share, for a few hours" .-> public["The internet,<br>via Cloudflare Tunnel"]
 ```
 
-Everything runs on one Linux host. Traefik listens only on the host's Tailscale address and holds
-a wildcard certificate for `*.<your domain>`, obtained through your DNS provider's API, so no port
-is open to the internet. Each preview is a Docker Compose project described by a small
+Everything runs on one Linux host. Traefik listens only on the host's Tailscale address (unless
+you [add others](docs/setup.md#beyond-the-tailnet), such as its LAN address) and holds a wildcard
+certificate for `*.<your domain>`, obtained through your DNS provider's API, so no port is open to
+the internet. Each preview is a Docker Compose project described by a small
 `devkit.json` in your repository, and Traefik routes to it by its Docker labels. devkit itself is
 one Go binary with the dashboard built in. It keeps no database: Git knows the worktrees and
 Docker labels know the previews.
@@ -72,8 +73,9 @@ Docker labels know the previews.
   the previews, and the host is assumed to be yours. Apps on it are not isolated from each other.
 - **Not a CI or deployment system.** Deploying for team review goes through a `publish` hook you
   write (see [Publishing](docs/publishing.md)).
-- **Not in charge of your Git.** devkit never creates or deletes worktrees, commits, pushes or
-  merges; your agent tool and Git do that.
+- **Explicit Git controls only.** Fetch origin, fast-forward a clean branch from its origin
+  upstream, or push separately. devkit never creates/deletes worktrees, commits, stashes,
+  rebases or force-pushes. Resolve dirty or diverged branches with your own Git tools.
 
 ## Quick start
 
@@ -97,6 +99,14 @@ password with `devkit web password` to act from it. For a first project, copy
 `project-template` into a Git repository, commit it and run `devkit live` there; see
 [Project recipe](docs/projects.md) for your own apps and [Host setup](docs/setup.md) for details.
 
+For headless or graphical QEMU VMs, `./bootstrap.sh --qemu` adds the optional Fedora/Ubuntu prerequisites.
+Set `"projects_dir": "~/Work"` in the [host config](docs/setup.md#host-config) to discover
+project folders automatically. The dashboard's **Projects** tree groups main checkouts,
+worktrees, container previews and VMs, with launch controls after sign-in.
+The dashboard groups VMs by project using [VM mappings](docs/projects.md#virtual-machines),
+with unmatched guests under Other VMs. Opt-in launcher/libvirt controls add start, stop and restart,
+including stopped managed VMs. See [VM connections](docs/dashboard.md#virtual-machines).
+
 ## Commands
 
 Worktree → agent work → commit → local review → explicit team deployment → merge.
@@ -114,11 +124,17 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit doctor` | Check the host and say how to fix what is missing |
 | `devkit version` | Show which devkit release or commit this is (the dashboard's footer shows it too) |
 | `devkit proxy up` | Write Traefik's configuration from the host config and start or update it |
+| `devkit up` | Alias for `devkit live` |
+| `devkit up/start/stop/restart --vm TARGET` | Control a configured VM through its launcher or libvirt; retain disks |
 | `devkit live` | Start/resume current workspace's live preview |
 | `devkit review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devkit exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
 | `devkit logs [-s service] [-f]` | Show (or follow) this worktree's live web log (or another service's) |
 | `devkit web` | Serve the dashboard (see [Dashboard](docs/dashboard.md)); `devkit web password` enables its actions |
+| `devkit git fetch / sync / push` | Fetch origin, safely fast-forward from its upstream, or push explicitly |
+| `devkit vms [--json]` | QEMU/libvirt VMs, including stopped managed guests, sizing and private connections |
+| `devkit cleanup --vm NAME [--purge] [--yes]` | Stop/unregister one configured QEMU VM; dry run by default, retain files unless an explicit purge adapter is requested |
+| `devkit cleanup --project SLUG [--purge] [--yes]` | Clean all registered QEMU VMs in that exact project; preflight the whole batch first |
 | `devkit ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devkit stop [preview]` | Stop containers; retain data |
 | `devkit start [preview]` | Resume saved configuration; retain data |

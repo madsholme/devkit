@@ -3,14 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
 // devkit proxy up writes the Traefik proxy (Compose project devkit-proxy) from the host config into
-// ~/.config/devkit/proxy and starts it. Traefik listens only on the Tailscale IP, gets one wildcard
+// ~/.config/devkit/proxy and starts it. Traefik listens on the Tailscale IP (and wherever proxy.listen
+// adds), gets one wildcard
 // certificate for the domain by DNS-01, routes the dashboard and the harness from its file provider
 // and previews from Docker labels. The DNS credentials reach the container through the environment
 // of docker compose, so they are not written to the proxy directory.
@@ -52,11 +56,105 @@ func checkProxy(e *proxyConfig) error {
 	if strings.ContainsAny(e.Image, " $\"'") {
 		return fail("proxy.image %q is not an image reference.", e.Image)
 	}
+	for _, entry := range e.Listen {
+		if ip, err := netip.ParseAddr(entry); entry != "tailscale" && (err != nil || ip.Zone() != "") {
+			return fail("proxy.listen: %q is not an IP address.", entry)
+		}
+	}
 	return nil
 }
 
+// listenAddresses are the addresses Traefik binds: the Tailscale IP, which DNS points at, and those
+// in proxy.listen ("tailscale" there names it too). An unspecified address (0.0.0.0, or :: which takes IPv4 too) covers every interface, so it stands
+// alone: binding a specific address next to it would fail.
+func listenAddresses(e *proxyConfig, tailscale string) []string {
+	var out []string
+	all := ""
+	for _, entry := range append([]string{"tailscale"}, e.Listen...) {
+		if entry == "tailscale" {
+			entry = tailscale
+		}
+		ip, err := netip.ParseAddr(entry)
+		switch {
+		case err != nil:
+		case ip.IsUnspecified():
+			if all == "" || ip.Is6() {
+				all = ip.String()
+			}
+		case !slices.Contains(out, ip.String()):
+			out = append(out, ip.String())
+		}
+	}
+	if all != "" {
+		return []string{all}
+	}
+	return out
+}
+
+// hostAddresses are this host's own IP addresses; Traefik can only bind those.
+var hostAddresses = func() []string {
+	var out []string
+	addrs, _ := net.InterfaceAddrs()
+	for _, a := range addrs {
+		if p, err := netip.ParsePrefix(a.String()); err == nil {
+			out = append(out, p.Addr().String())
+		}
+	}
+	return out
+}
+
+// checkListen fails for an added address this host does not have, e.g. a LAN address DHCP changed.
+// The Tailscale IP is Tailscale's to check.
+func checkListen(addrs []string) error {
+	have := hostAddresses()
+	for _, a := range addrs {
+		if ip, _ := netip.ParseAddr(a); !ip.IsUnspecified() && !tailscaleRange.Contains(ip) && !slices.Contains(have, a) {
+			return fail("proxy.listen: %s is not an address of this host (ip -brief address lists them).", a)
+		}
+	}
+	return nil
+}
+
+// publicAddresses are the host's addresses the internet may reach: an unspecified listen address
+// exposes the dashboard and every preview on them.
+func publicAddresses() []string {
+	var out []string
+	for _, a := range hostAddresses() {
+		ip, _ := netip.ParseAddr(a)
+		if ip.IsGlobalUnicast() && !ip.IsPrivate() && !tailscaleRange.Contains(ip) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// listenNote says who can reach Traefik besides the tailnet, or nothing when only the tailnet can.
+func listenNote(addrs []string, tailscale, dom string) string {
+	if len(addrs) == 1 && addrs[0] == tailscale {
+		return ""
+	}
+	if ip, _ := netip.ParseAddr(addrs[0]); ip.IsUnspecified() {
+		if public := publicAddresses(); len(public) > 0 {
+			return "Traefik listens on every interface, including the public " + strings.Join(public, ", ") +
+				": anyone who reaches port 443 there reaches the dashboard and every preview, so let a firewall decide who can."
+		}
+		return "Traefik listens on every interface: anything that reaches this host on port 443 reaches the dashboard and every preview."
+	}
+	return "Devices off the tailnet need DNS that answers *." + dom + " with one of these addresses (e.g. your router or Pi-hole), and a firewall that lets port 443 in there."
+}
+
+// entrypointName keeps the first entrypoint's old name, so previews started before proxy.listen
+// existed, whose routers name it, keep answering until they are next started.
+func entrypointName(i int) string {
+	if i == 0 {
+		return "websecure"
+	}
+	return fmt.Sprintf("websecure%d", i+1)
+}
+
 // proxyFiles renders Traefik's Compose project and file-provider configuration.
-func proxyFiles(cfg hostConfig, dom, ip string) (compose, dynamic map[string]any) {
+// Routers name no entrypoint, so they answer on all of them.
+func proxyFiles(cfg hostConfig, dom string, addrs []string) (compose, dynamic map[string]any) {
 	e := cfg.Proxy
 	ca, storage := productionCA, "/certs/acme.json"
 	if e.Staging {
@@ -71,25 +169,28 @@ func proxyFiles(cfg hostConfig, dom, ip string) (compose, dynamic map[string]any
 	for _, key := range sortedKeys(e.DNSEnv) {
 		environment[key] = "${" + key + ":?Start Traefik with devkit proxy up}"
 	}
+	var command []string
+	for i, a := range addrs {
+		command = append(command, "--entrypoints."+entrypointName(i)+".address="+net.JoinHostPort(a, "443"))
+	}
 	compose = map[string]any{
 		"name": proxyProject,
 		"services": map[string]any{"traefik": map[string]any{
 			"image":        image,
 			"restart":      "unless-stopped",
 			"network_mode": "host",
-			"command": []string{
-				"--entrypoints.websecure.address=" + ip + ":443",
+			"command": append(command,
 				"--providers.docker=true",
 				"--providers.docker.exposedbydefault=false",
-				"--providers.docker.network=" + proxyNetwork,
+				"--providers.docker.network="+proxyNetwork,
 				"--providers.file.filename=/etc/traefik/dynamic.yaml",
 				"--api.dashboard=false",
-				"--certificatesresolvers.dns.acme.email=" + e.Email,
-				"--certificatesresolvers.dns.acme.storage=" + storage,
-				"--certificatesresolvers.dns.acme.caserver=" + ca,
-				"--certificatesresolvers.dns.acme.dnschallenge.provider=" + e.DNSProvider,
+				"--certificatesresolvers.dns.acme.email="+e.Email,
+				"--certificatesresolvers.dns.acme.storage="+storage,
+				"--certificatesresolvers.dns.acme.caserver="+ca,
+				"--certificatesresolvers.dns.acme.dnschallenge.provider="+e.DNSProvider,
 				"--certificatesresolvers.dns.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53",
-			},
+			),
 			"environment": environment,
 			"volumes": []string{
 				"/var/run/docker.sock:/var/run/docker.sock:ro",
@@ -100,12 +201,12 @@ func proxyFiles(cfg hostConfig, dom, ip string) (compose, dynamic map[string]any
 		"volumes": map[string]any{"certificates": map[string]any{}},
 	}
 	routers := map[string]any{"devkit": map[string]any{
-		"rule": "Host(`devkit." + dom + "`)", "entryPoints": []string{"websecure"}, "service": "devkit", "tls": map[string]any{}}}
+		"rule": "Host(`devkit." + dom + "`)", "service": "devkit", "tls": map[string]any{}}}
 	services := map[string]any{"devkit": map[string]any{
 		"loadBalancer": map[string]any{"servers": []any{map[string]any{"url": fmt.Sprintf("http://127.0.0.1:%d", cfg.Web.Port)}}}}}
 	if h := cfg.Harness; h != nil && h.Host != "" && h.URL != "" {
 		routers["harness"] = map[string]any{
-			"rule": "Host(`" + h.Host + "." + dom + "`)", "entryPoints": []string{"websecure"}, "service": "harness", "tls": map[string]any{}}
+			"rule": "Host(`" + h.Host + "." + dom + "`)", "service": "harness", "tls": map[string]any{}}
 		services["harness"] = map[string]any{
 			"loadBalancer": map[string]any{"servers": []any{map[string]any{"url": h.URL}}}}
 	}
@@ -180,6 +281,10 @@ func proxyUp() error {
 	if err != nil {
 		return err
 	}
+	addrs := listenAddresses(cfg.Proxy, ip)
+	if err := checkListen(addrs); err != nil {
+		return err
+	}
 	secrets := map[string]string{}
 	for _, key := range sortedKeys(cfg.Proxy.DNSEnv) {
 		if secrets[key], err = cfg.Proxy.DNSEnv[key].read(); err != nil {
@@ -189,7 +294,7 @@ func proxyUp() error {
 	if err := ensureProxyNetwork(); err != nil {
 		return err
 	}
-	compose, dynamic := proxyFiles(cfg, dom, ip)
+	compose, dynamic := proxyFiles(cfg, dom, addrs)
 	if err := writeProxyFiles(compose, dynamic); err != nil {
 		return err
 	}
@@ -202,7 +307,14 @@ func proxyUp() error {
 	if cfg.Proxy.Staging {
 		ca = "staging"
 	}
-	fmt.Fprintf(stdout, "Traefik is up on %s:443 for *.%s (Let's Encrypt %s).\n", ip, dom, ca)
-	happened("proxy up", "", fmt.Sprintf("*.%s on %s, %s certificates", dom, ip, ca))
+	where := make([]string, len(addrs))
+	for i, a := range addrs {
+		where[i] = net.JoinHostPort(a, "443")
+	}
+	fmt.Fprintf(stdout, "Traefik is up on %s for *.%s (Let's Encrypt %s).\n", strings.Join(where, ", "), dom, ca)
+	if note := listenNote(addrs, ip, dom); note != "" {
+		fmt.Fprintln(stdout, note)
+	}
+	happened("proxy up", "", fmt.Sprintf("*.%s on %s, %s certificates", dom, strings.Join(addrs, ", "), ca))
 	return nil
 }

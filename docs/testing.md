@@ -21,3 +21,59 @@ does not issue certificates or alter DNS, and removes its test containers/volume
 The media check is `DEVKIT_RUNTIME_TEST=1 python3 tests/media_acceptance.py`; it
 requires local Tailscale, creates temporary UDP/TCP echo previews, checks distinct
 ports and restart persistence through the tailnet IP, and cleans them up.
+
+
+Project discovery and QEMU regression tests run with `go test ./...`. They cover
+shallow directory discovery, external linked worktrees, recipe validation, Docker
+failure and rejection of arbitrary or removed launch paths.
+Git control tests use disposable local bare origins and clones, without contacting
+project remotes. They cover fetch-only, fast-forward sync, separate exact-target push,
+dirty/detached/diverged branches, ignored-file preservation, upstream validation, in-progress operations, repository
+locks, pre-push hook rejection, discovery revalidation and anonymous action denial.
+Build `bin/devkit`, then run `python3 tests/git_runtime_acceptance.py` for the actual
+authenticated dashboard job → CLI → local Git round trip (or set `DEVKIT_GIT_BINARY`
+to an alternate build). It uses temporary credentials and stubbed Docker housekeeping,
+and removes its server and disposable repositories afterward.
+Container inventory tests cover managed/unmanaged metadata, stopped/paused status, secret
+omission and Docker failures. These run in `go test ./...`.
+
+For UI changes, exercise the Projects Git controls and Containers tab using synthetic
+fixtures: signed-in/out states, action targets, text/status filters, empty/error/recovery,
+Details/Logs availability, tab deep links and narrow viewports. Never test Git actions
+against a user's project merely to validate the UI.
+
+Installer behavior is
+checked without sudo, package installation, or host changes by
+`python3 tests/bootstrap_acceptance.py` (mocked Ubuntu/Fedora commands, architecture
+profiles, existing daemon preservation, repeated group setup and failures).
+
+Build the binary, then run `DEVKIT_VM_RUNTIME_TEST=1 python3 tests/vm_runtime_acceptance.py`
+for the optional x86_64 QEMU smoke check. It needs `qemu-system-x86_64` with SPICE and
+`qemu-img`. It creates two paused, 64 MiB TCG guests with no OS, one with a temporary
+32 MiB qcow2 disk and SPICE, the other with a localhost SSH forwarding listener.
+It verifies real process discovery, sizes, connection commands, metadata privacy
+project mapping (including an unmatched guest), and `/api/vms` CPU sampling. Its temporary web server stubs Docker to isolate
+background cleanup from real containers. It terminates only its own processes and
+removes its temporary files. This does not test a booted guest login or graphical
+session; those need an existing test guest and client. Libvirt parsing, access
+failure and deduplication are covered by fixtures; live libvirt validation needs
+an active domain visible to the devkit account.
+
+### VM lifecycle acceptance
+
+Build the binary, then run `DEVKIT_VM_RUNTIME_TEST=1 python3 tests/vm_lifecycle_acceptance.py`.
+It creates a temporary paused 64 MiB TCG guest and project launcher, verifies
+start/idempotence/restart/stop, failed-stop protection, stopped inventory and
+unchanged disk contents, and cleans up its own QMP socket/guest. It never uses a
+real user's VM. `DEVKIT_VM_BINARY` can select a test binary outside the checkout.
+The no-OS fixture uses QMP quit; production adapters must use graceful guest shutdown.
+Go tests cover local libvirt command arguments/state handling, missing/denied
+providers, conflicts, lifecycle locking and authenticated dashboard target checks.
+
+QEMU cleanup regressions cover exact name/project selection, dry-run and --yes, blocked
+batches, missing stop/purge authority, retained files, adapter failures/timeouts, changed
+identities/recipes, symlink rejection, legacy recipe names, unrelated JSON preservation,
+lifecycle locking and partial-success history. The lifecycle acceptance runner also
+starts its disposable guest for named and project cleanup, checks retained disk hashes,
+and verifies --purge removes only its explicitly configured fixture files. No real
+user guest or disk is used.
