@@ -154,6 +154,64 @@ with socket.socket(socket.AF_UNIX) as s:
                 rows = [v for v in request('/api/vms')['vms'] if v['name'] == name]
                 assert len(rows) == 1 and rows[0]['state'] == expected, rows
             assert hashlib.sha256(disk.read_bytes()).hexdigest() == original
+            # Cleanup uses only these disposable registrations and disks.
+            recipe_path = root / 'devkit.json'
+            def registered():
+                return [v for v in json.loads(run('vms', '--json'))['vms']
+                        if v['name'] in {name, name + '-other'}]
+            run('up', '--vm', name)
+            cleanup_pid = vm()['pid']
+            original_recipe = recipe_path.read_bytes()
+            assert 'dry run' in run('cleanup', '--vm', name)
+            assert recipe_path.read_bytes() == original_recipe and vm()['pid'] == cleanup_pid
+            run('cleanup', '--vm', name, '--yes')
+            assert registered() == []
+            assert hashlib.sha256(disk.read_bytes()).hexdigest() == original
+
+            # Project selection includes an active guest and a stopped definition.
+            other_disk = root / 'other.qcow2'
+            other_disk.write_bytes(b'other retained disk')
+            first_entry = recipe['vms'][0]
+            second_entry = {'name': name + '-other', 'control': {
+                'start': 'exit 91', 'stop': 'exit 92', 'timeout_seconds': 10}}
+            recipe['vms'] = [first_entry, second_entry]
+            recipe_path.write_text(json.dumps(recipe))
+            run('up', '--vm', name)
+            run('cleanup', '--project', 'vm-lifecycle-test', '--yes')
+            assert registered() == []
+            assert hashlib.sha256(disk.read_bytes()).hexdigest() == original
+            assert other_disk.read_bytes() == b'other retained disk'
+
+            # Purge is explicit, follows successful stop, and removes only fixture files.
+            first_entry['control']['purge'] = 'rm -- guest.qcow2'
+            second_entry['control']['purge'] = 'rm -- other.qcow2'
+            recipe_path.write_text(json.dumps(recipe))
+            run('up', '--vm', name)
+            original_recipe = recipe_path.read_bytes()
+            assert 'dry run' in run('cleanup', '--project', 'vm-lifecycle-test', '--purge')
+            assert recipe_path.read_bytes() == original_recipe and len(registered()) == 2
+            assert disk.exists() and other_disk.exists()
+            # A failed second purge leaves its registration and disk; do not replay
+            # the already completed first purge when retrying the remaining batch.
+            recipe['vms'][1]['control']['purge'] = 'exit 7'
+            recipe_path.write_text(json.dumps(recipe))
+            failed_cleanup = subprocess.run(
+                [binary, 'cleanup', '--project', 'vm-lifecycle-test', '--purge', '--yes'],
+                cwd=root, env=env, capture_output=True, text=True, timeout=15)
+            assert failed_cleanup.returncode != 0 and 'after 1 completed' in failed_cleanup.stderr
+            remaining = registered()
+            assert len(remaining) == 1 and remaining[0]['name'] == name + '-other'
+            assert not disk.exists() and other_disk.read_bytes() == b'other retained disk'
+            recipe = json.loads(recipe_path.read_text())
+            recipe['vms'][0]['control']['purge'] = 'rm -- other.qcow2'
+            recipe_path.write_text(json.dumps(recipe))
+            run('cleanup', '--project', 'vm-lifecycle-test', '--purge', '--yes')
+            assert registered() == [] and not disk.exists() and not other_disk.exists()
+            events = [json.loads(line) for line in (root / 'history.jsonl').read_text().splitlines()]
+            assert sum(e['action'] == 'vm-cleanup' and e['ok'] for e in events) == 5
+            assert sum(e['action'] == 'vm-purge' and e['ok'] for e in events) == 2
+            assert any(e['action'] == 'vm-cleanup' and not e['ok'] for e in events)
+            print('PASS: named/project cleanup, no-op dry runs, retained disk hashes, explicit purge, partial failure/retry, removed inventory and cleanup history')
             print('PASS: stopped inventory, real QEMU launch/idempotence/restart/stop, failed-stop guard, retained disk, stable ID, private metadata, history and authenticated HTTP jobs/cache refresh')
         finally:
             if server is not None:

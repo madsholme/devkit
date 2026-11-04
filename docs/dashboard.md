@@ -67,7 +67,8 @@ returns the link to that page only, without keeping it, and records only that a 
 
 Every command that changes something records an event: setup, proxy up, a DNS record
 setup created, live and review (created or resumed), start, stop, destroy (including `gc`), prune, publish, share, extend, unshare,
-shares that expired and leftover tunnels or DNS records removed. A failed command is
+shares that expired and leftover tunnels or DNS records removed. QEMU cleanup records
+successful stop, purge and registration removal separately so partial work remains visible. A failed command is
 recorded too, with its error. Each event says who caused it: `cli` (also T3 actions),
 `dashboard`, or `auto` for what the web service does by itself, such as expiring shares or the daily prune.
 The log is one JSON line per event in `~/.local/state/devkit/history.jsonl`
@@ -162,6 +163,9 @@ before restarting.
 
 Buttons run the same CLI commands through the dashboard's authenticated job
 system. The job window shows progress/errors, then refreshes VM state. A failed
-stop prevents restart. There is no VM destroy action or public display tunnel.
+stop prevents restart. There is no dashboard VM destroy action or public display tunnel.
+The CLI [QEMU cleanup command](projects.md#clean-up-standalone-qemu-vms) can stop and
+unregister guests by name or project, retaining files unless an explicit purge adapter
+is requested. Removed registrations disappear on the next inventory refresh.
 The API adds `control_id`, supported `actions`, and optional `control_note` to
 managed rows, without exposing recipe paths or launcher command text.

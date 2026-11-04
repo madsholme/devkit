@@ -214,6 +214,73 @@ control definitions are supported. Unavailable/missing libvirt domains remain
 unavailable, not stopped. Inventory and private connection discovery still work
 for guests without lifecycle configuration.
 
+### Clean up standalone QEMU VMs
+
+Cleanup stops a registered guest through its configured stop adapter and removes its
+entry from the project recipe. Disks and other guest files are retained by default.
+
+```sh
+devkit cleanup --vm native-ubuntu22-task30                # dry run
+devkit cleanup --vm native-ubuntu22-task30 --yes          # stop and unregister
+devkit cleanup --project swiftconfig                     # list the whole batch
+devkit cleanup --project swiftconfig --yes               # clean all registered QEMU VMs in that project
+devkit cleanup --project swiftconfig --purge              # preview explicit purge adapters
+devkit cleanup --project swiftconfig --purge --yes        # apply those adapters, then unregister
+```
+
+Choose exactly one `--vm` or `--project`. VM selection accepts an exact configured
+name, UUID, or control ID, using the same current-recipe scope as lifecycle commands.
+Project selection uses the exact recipe `project` slug across discovered recipes;
+it includes stopped registrations. No name prefixes, arbitrary PIDs or guessed disk
+paths are accepted. An unregistered guest must first have an explicit project mapping.
+
+A stopped plain mapping can be removed without lifecycle commands. A running guest
+needs its own configured stop adapter; read-only mappings never permit devkit to
+terminate it. If any selected guest has missing authority, conflicting definitions,
+unreadable inventory or an unsafe recipe, the whole batch is blocked before changes.
+Libvirt-controlled/observed guests are not supported by cleanup; use their existing manager.
+
+For optional data removal, add `purge` to the existing standalone control block:
+
+```json
+{
+  "name": "native-ubuntu22-task30",
+  "control": {
+    "start": "./scripts/native-vm start",
+    "stop": "./scripts/native-vm stop",
+    "purge": "./scripts/native-vm purge",
+    "timeout_seconds": 120
+  }
+}
+```
+
+This is an adapter you provide, not a devkit-supplied script. It must remove only this
+guest's disposable resources and return a failure if cleanup is incomplete. Devkit
+does not infer deletion paths or check that arbitrary trusted shell code preserves
+shared images; the adapter owns that responsibility. Start and stop remain required.
+The purge command receives the same working directory, `DEVKIT_*`/`DEVBOX_*` identity
+variables and bounded process-group execution as the other lifecycle adapters. It
+runs only with `--purge --yes`, after the guest is confirmed stopped. Libvirt control
+blocks cannot include it.
+
+Cleanup shares the lifecycle lock, checks fresh process identities and registrations,
+and preserves unrelated recipe fields, VM entries and file permissions when writing.
+Symlink recipes are refused; the legacy `devbox.json` filename is retained. JSON
+formatting/key order may change. After registration removal the stopped VM disappears
+from inventory; starting it through devkit again requires restoring its mapping and
+control settings. The disks retained by default remain available for reuse.
+
+A stop timeout never escalates to forced shutdown. Stop/purge failure halts the batch
+and retains that guest's registration and all unattempted entries; already completed
+targets stay removed and are reported. A successful stop or purge may have happened
+before a later failure, so inspect the output before retrying. Successful stop, purge
+and unregister steps are recorded separately in history. Observed concurrent recipe
+edits abort the operation rather than overwrite them. The lock coordinates devkit
+commands; pause external launchers/editors while cleanup runs.
+
+This is a CLI command; the dashboard has no cleanup button. Its next inventory refresh
+reflects removed registrations.
+
 ## Media ports
 
 WebRTC and other media protocols cannot travel through an HTTP preview route.

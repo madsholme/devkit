@@ -133,6 +133,8 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit web` | Serve the dashboard (see [Dashboard](docs/dashboard.md)); `devkit web password` enables its actions |
 | `devkit git fetch / sync / push` | Fetch origin, safely fast-forward from its upstream, or push explicitly |
 | `devkit vms [--json]` | QEMU/libvirt VMs, including stopped managed guests, sizing and private connections |
+| `devkit cleanup --vm NAME [--purge] [--yes]` | Stop/unregister one configured QEMU VM; dry run by default, retain files unless an explicit purge adapter is requested |
+| `devkit cleanup --project SLUG [--purge] [--yes]` | Clean all registered QEMU VMs in that exact project; preflight the whole batch first |
 | `devkit ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devkit stop [preview]` | Stop containers; retain data |
 | `devkit start [preview]` | Resume saved configuration; retain data |

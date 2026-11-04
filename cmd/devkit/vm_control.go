@@ -15,6 +15,7 @@ import (
 type vmControl struct {
 	Start          string `json:"start,omitempty"`
 	Stop           string `json:"stop,omitempty"`
+	Purge          string `json:"purge,omitempty"`
 	LibvirtURI     string `json:"libvirt_uri,omitempty"`
 	TimeoutSeconds int    `json:"timeout_seconds,omitempty"`
 }
@@ -23,11 +24,14 @@ func (c *vmControl) validate(s vmSelector) error {
 	if c == nil {
 		return nil
 	}
+	if c.Purge != "" && (strings.TrimSpace(c.Purge) == "" || len(c.Purge) > 8192 || strings.ContainsRune(c.Purge, 0)) {
+		return fail("VM control purge must be a nonempty command of at most 8192 bytes, without NUL.")
+	}
 	if c.TimeoutSeconds < 0 || c.TimeoutSeconds > 600 {
 		return fail("VM control timeout_seconds must be 1–600 (or omitted).")
 	}
 	if c.LibvirtURI != "" {
-		if (c.LibvirtURI != "qemu:///session" && c.LibvirtURI != "qemu:///system") || s.UUID == "" || c.Start != "" || c.Stop != "" {
+		if (c.LibvirtURI != "qemu:///session" && c.LibvirtURI != "qemu:///system") || s.UUID == "" || c.Start != "" || c.Stop != "" || c.Purge != "" {
 			return fail("VM libvirt control needs a UUID and local qemu:///session or qemu:///system URI, without launcher commands.")
 		}
 	} else if strings.TrimSpace(c.Start) == "" || strings.TrimSpace(c.Stop) == "" || len(c.Start) > 8192 || len(c.Stop) > 8192 || strings.ContainsRune(c.Start+c.Stop, 0) {

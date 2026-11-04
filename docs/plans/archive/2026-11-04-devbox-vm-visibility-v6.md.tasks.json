@@ -1,0 +1,31 @@
+{
+  "planPath": "docs/plans/archive/2026-11-04-devbox-vm-visibility-v6.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Capture private baseline and backups",
+      "status": "completed"
+    },
+    {
+      "id": 2,
+      "subject": "Repair service primary group and verify discovery",
+      "status": "completed"
+    },
+    {
+      "id": 3,
+      "subject": "Add exact read-only VM project mappings",
+      "status": "completed"
+    },
+    {
+      "id": 4,
+      "subject": "Verify running guests in both live dashboard views",
+      "status": "completed"
+    },
+    {
+      "id": 5,
+      "subject": "Record private results and rollback instructions",
+      "status": "completed"
+    }
+  ],
+  "note": "Full original task descriptions and host evidence retained in the operator's private archive; see the sanitized plan for preserved constraints and outcomes."
+}

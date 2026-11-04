@@ -1,6 +1,6 @@
 # Project Git controls and container inventory — version 5
 
-Supersedes [v4](archive/2026-11-04-projects-v4.md). All previous VM, project discovery,
+Supersedes [v4](2026-11-04-projects-v4.md). All previous VM, project discovery,
 launch, authentication, identity and retention requirements remain. Continue as one
 agent in the existing codex/projects-qemu worktree. This extends the combined branch;
 it does not deploy, merge or change any user repository through the new controls.

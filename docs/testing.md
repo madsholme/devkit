@@ -69,3 +69,11 @@ real user's VM. `DEVKIT_VM_BINARY` can select a test binary outside the checkout
 The no-OS fixture uses QMP quit; production adapters must use graceful guest shutdown.
 Go tests cover local libvirt command arguments/state handling, missing/denied
 providers, conflicts, lifecycle locking and authenticated dashboard target checks.
+
+QEMU cleanup regressions cover exact name/project selection, dry-run and --yes, blocked
+batches, missing stop/purge authority, retained files, adapter failures/timeouts, changed
+identities/recipes, symlink rejection, legacy recipe names, unrelated JSON preservation,
+lifecycle locking and partial-success history. The lifecycle acceptance runner also
+starts its disposable guest for named and project cleanup, checks retained disk hashes,
+and verifies --purge removes only its explicitly configured fixture files. No real
+user guest or disk is used.

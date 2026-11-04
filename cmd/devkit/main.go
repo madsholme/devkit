@@ -30,6 +30,8 @@ commands:
   logs [-s SERVICE] [-f]
                        show this worktree's live web log, or SERVICE's (-f, --follow to follow it)
   vms [--json]          list QEMU/libvirt VMs, including stopped managed guests
+  cleanup --vm NAME|--project SLUG [--purge] [--yes]
+                       stop and unregister QEMU VMs; dry run, retain disks unless --purge
   git fetch|sync|push   fetch origin, fast-forward from its upstream, or explicitly push
   ls                   list managed previews, including stopped ones
   web [--host H] [--port P]
@@ -199,6 +201,19 @@ func dispatch(args []string) (int, error) {
 			return 2, err
 		}
 		return 0, noted("setup", "", setup(opts))
+	case "cleanup":
+		positional, values, err := splitArgs(rest, map[string]bool{"--vm": true, "--project": true}, map[string]bool{"--purge": true, "--yes": true})
+		if err != nil {
+			return 2, err
+		}
+		name, hasName := values["--vm"]
+		project, hasProject := values["--project"]
+		if len(positional) != 0 || hasName == hasProject || (hasName && strings.TrimSpace(name) == "") || (hasProject && !projectSlug.MatchString(project)) {
+			return 2, usageError("Use cleanup --vm NAME or cleanup --project SLUG, optionally --purge and --yes.")
+		}
+		_, purge := values["--purge"]
+		_, yes := values["--yes"]
+		return 0, noted("vm-cleanup", firstOf(name, project), cleanupVMs(name, project, purge, yes))
 	case "vms":
 		set := flags(command)
 		asJSON := set.Bool("json", false, "")
