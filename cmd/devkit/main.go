@@ -30,6 +30,7 @@ commands:
   logs [-s SERVICE] [-f]
                        show this worktree's live web log, or SERVICE's (-f, --follow to follow it)
   vms [--json]          list QEMU/libvirt VMs, including stopped managed guests
+  git fetch|sync|push   fetch origin, fast-forward from its upstream, or explicitly push
   ls                   list managed previews, including stopped ones
   web [--host H] [--port P]
                        serve the web overview (default 127.0.0.1 and the configured port, 3780)
@@ -171,6 +172,16 @@ func dispatch(args []string) (int, error) {
 		}
 	}
 	switch command {
+	case "git":
+		dashboard := len(rest) == 2 && rest[1] == "--dashboard"
+		if len(rest) != 1 && !dashboard {
+			return 2, usageError("usage: devkit git fetch|sync|push")
+		}
+		root, err := os.Getwd()
+		if err != nil {
+			return 1, err
+		}
+		return 0, noted("git-"+rest[0], "", runGitAction(root, rest[0], dashboard))
 	case "-h", "--help", "help":
 		return 0, helpRequested{}
 	case "version", "--version":

@@ -66,6 +66,9 @@ func repoDir(trees []worktree, preferred string) string {
 }
 
 func planAction(req actionRequest) (plannedAction, error) {
+	if strings.HasPrefix(req.Action, "git-") {
+		return planGitAction(req)
+	}
 	if strings.HasPrefix(req.Action, "vm-") {
 		return planVMAction(req)
 	}

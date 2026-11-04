@@ -8,13 +8,15 @@ also mentions reclaimable Docker data from 5 GB up) that opens a system monitor:
 per-container usage, top host processes and Docker disk use. Containers and processes
 are sampled only while it is open.
 
-Below it are five tabs, remembered per browser and linkable (`#projects`, `#previews`, `#vms`, `#worktrees`, `#history`):
+Below it are six tabs, remembered per browser and linkable (`#projects`, `#previews`, `#containers`, `#vms`, `#worktrees`, `#history`):
 
 - **Projects** (default for new browsers): each main checkout with its linked Git worktrees,
   container previews and explicitly associated VMs. Configure `projects_dir` in the host
   config to discover projects before anything runs. Expand/collapse projects or filter by
   name, path, branch or VM; expansion is preserved on refresh. Signed-in users can launch
-  containers and control configured VMs directly here. Folders needing recipes stay visible.
+  containers, control configured VMs, and fetch/sync/push each Git checkout directly here.
+  Sync only fast-forwards a clean branch tracking origin; Push is a separate action.
+  Git, VM and container icons distinguish the resources while retaining text labels. Folders needing recipes stay visible.
   The read-only `/api/projects` catalog remains available with a warning if Docker fails;
   VM inventory and controls work independently. Paths and Git metadata are readable just
   like the Worktrees tab; recipe commands and VM disk paths are never returned.
@@ -26,6 +28,14 @@ Below it are five tabs, remembered per browser and linkable (`#projects`, `#prev
   networks, mounts, environment with secret-looking values masked, labels) and logs
   (recent lines, or followed live). Previews whose worktree is gone (what `devkit gc`
   would remove) are marked, with a notice above the list.
+- **Containers**: all running and stopped Docker containers on this host, including
+  containers outside devkit. Filter by name, project, image, ID or status. Rows show
+  state, image, project and configured host-to-container port mappings (mappings may
+  be inactive while stopped). Managed preview containers retain Details/Logs links;
+  other containers are read-only. `/api/containers` exposes only this inventory metadata,
+  never raw labels, environment, mount paths or commands. Probes are bounded to five
+  seconds, 512 containers and 2 MiB per batch. Errors retain the last result with a
+  visible warning and Refresh button. The tab refreshes while visible.
 - **Virtual machines**: active standalone QEMU and libvirt VMs grouped by project, with display/headless icons,
   allocated RAM/vCPUs, disk capacity, graphics and host CPU/resident-memory usage. Expand
   **Connect privately** for SSH tunnels and remote-viewer or guest SSH commands. See below.

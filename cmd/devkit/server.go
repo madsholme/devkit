@@ -146,6 +146,11 @@ func newHandler() (http.Handler, error) {
 		query := r.URL.Query()
 		var err error
 		switch r.URL.Path {
+		case "/api/containers":
+			var data containersData
+			if data, err = containersOverview(r.Context()); err == nil {
+				sendJSON(w, data)
+			}
 		case "/api/projects":
 			var data projectsData
 			if data, err = projectsOverview(); err == nil {

@@ -49,6 +49,36 @@ Associated VMs show their existing **Start**, **Stop** and **Restart** controls;
 Each VM still needs an explicit mapping and lifecycle adapter below. Launching
 containers never implicitly starts VMs, and launching a VM never starts containers.
 
+## Syncing a project with origin
+
+Each Git checkout in Projects has signed-in controls for **Fetch origin**,
+**Sync from origin**, and **Push to origin**. They run the same CLI commands:
+
+```sh
+devkit git fetch   # update origin tracking refs; keep working files as they are
+devkit git sync    # fetch, then fast-forward the current branch from its origin upstream
+devkit git push    # fetch/check, then push this commit to that exact origin upstream branch
+```
+
+Sync and Push require an existing commit, an attached branch tracking one branch on
+`origin`, and a clean checkout (including staged, untracked and submodule changes).
+Finish any merge, rebase, cherry-pick, revert or bisect first. If the branch is only
+ahead, Sync retains those commits; use the separate Push action to publish them.
+Diverged history is refused. Ignored local files are also protected from overwrite
+when origin introduces a conflicting path. A behind branch must Sync before Push. No stashing,
+rebasing, resetting, automatic commits, force pushes or upstream creation occurs.
+Fetch remains available with local changes. Branch counts describe the last fetch;
+opening/refreshing the dashboard never contacts Git remotes.
+
+Configure credentials and the origin/upstream using Git on the host. Git controls
+use existing Git/SSH configuration and hooks, do not prompt for passwords, and time
+out after two minutes. Errors deliberately omit remote diagnostics that may contain
+credentials. Commands serialize across a repository's linked worktrees; avoid
+simultaneous manual Git edits while an action runs. Dashboard jobs revalidate that
+the checkout still belongs to a discovered repository. Git actions for registered
+projects remain available if Docker is unavailable. Successful actions and failures
+appear in History. Syncing source does not rebuild or restart its containers or VMs.
+
 ## Virtual machines
 
 Use the same `project` slug as your Docker previews, and list the VMs that belong

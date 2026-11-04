@@ -39,13 +39,14 @@ type projectPreview struct {
 	URL    string `json:"url"`
 }
 type projectCheckout struct {
-	Path     string           `json:"path"`
-	Branch   string           `json:"branch"`
-	Project  string           `json:"project"`
-	Git      bool             `json:"git"`
-	Docker   bool             `json:"docker"`
-	Note     string           `json:"note"`
-	Previews []projectPreview `json:"previews"`
+	Path        string           `json:"path"`
+	Branch      string           `json:"branch"`
+	Project     string           `json:"project"`
+	Git         bool             `json:"git"`
+	GitControls gitControls      `json:"git_controls"`
+	Docker      bool             `json:"docker"`
+	Note        string           `json:"note"`
+	Previews    []projectPreview `json:"previews"`
 	worktreeInfo
 }
 type projectRow struct {
@@ -66,6 +67,7 @@ func checkoutProject(tree worktree, containers []container) projectCheckout {
 	if _, err := os.Stat(filepath.Join(tree.Path, ".git")); err == nil {
 		row.Git = true
 		row.worktreeInfo = worktreeState(tree.Path)
+		row.GitControls = checkoutGitControls(tree.Path)
 	}
 	cfg, err := loadConfig(tree.Path)
 	switch {

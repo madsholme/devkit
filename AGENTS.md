@@ -25,6 +25,10 @@ old names are dropped on purpose.
   `projects.go` discovers direct project folders from host `projects_dir`, groups Git checkouts
   by common directory, and serves the independent `/api/projects` tree with launch capabilities.
   Discovery never runs hooks; authenticated `up` actions revalidate Git membership and recipe.
+  `git_control.go` provides authenticated, CLI-backed origin fetch/sync/push with
+  checkout revalidation, clean-state checks, bounded commands and per-repository locking.
+  `container_inventory.go` provides read-only all-host Docker inventory with allowlisted
+  metadata; unrelated containers gain no lifecycle or detail/log authority.
   `vm_control.go` provides opt-in launcher/libvirt lifecycle adapters, stopped managed inventory,
   exact control resolution and a host-wide lifecycle lock. Plain mappings never authorize actions.
   `pair.go` issues T3 Code pairing links (`devkit pair`, `/api/pair`) and `qr.go` draws them as QR
@@ -90,7 +94,9 @@ old names are dropped on purpose.
 - A command that changes something records it with `happened(...)` once it succeeded;
   `noted(...)` in `dispatch` records failures. Tests write history to a temporary
   directory (`TestMain` sets `DEVKIT_STATE_DIR`).
-- devkit never creates or deletes worktrees, and never commits, pushes or merges.
+- devkit never creates/deletes worktrees, commits, stashes, rebases or force-pushes.
+  Explicit `git fetch|sync|push` actions may fetch origin, fast-forward a clean tracked
+  branch or push to its exact origin upstream. Never make these discovery side effects.
 - Update the docs when you change commands or behaviour: README.md is the front page (pitch,
   quick start, command table), `docs/` has the details (setup, previews, projects, dashboard,
   shares, testing). `docs/images/` holds the README screenshots, taken from the real page with

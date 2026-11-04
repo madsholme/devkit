@@ -26,6 +26,22 @@ ports and restart persistence through the tailnet IP, and cleans them up.
 Project discovery and QEMU regression tests run with `go test ./...`. They cover
 shallow directory discovery, external linked worktrees, recipe validation, Docker
 failure and rejection of arbitrary or removed launch paths.
+Git control tests use disposable local bare origins and clones, without contacting
+project remotes. They cover fetch-only, fast-forward sync, separate exact-target push,
+dirty/detached/diverged branches, ignored-file preservation, upstream validation, in-progress operations, repository
+locks, pre-push hook rejection, discovery revalidation and anonymous action denial.
+Build `bin/devkit`, then run `python3 tests/git_runtime_acceptance.py` for the actual
+authenticated dashboard job → CLI → local Git round trip (or set `DEVKIT_GIT_BINARY`
+to an alternate build). It uses temporary credentials and stubbed Docker housekeeping,
+and removes its server and disposable repositories afterward.
+Container inventory tests cover managed/unmanaged metadata, stopped/paused status, secret
+omission and Docker failures. These run in `go test ./...`.
+
+For UI changes, exercise the Projects Git controls and Containers tab using synthetic
+fixtures: signed-in/out states, action targets, text/status filters, empty/error/recovery,
+Details/Logs availability, tab deep links and narrow viewports. Never test Git actions
+against a user's project merely to validate the UI.
+
 Installer behavior is
 checked without sudo, package installation, or host changes by
 `python3 tests/bootstrap_acceptance.py` (mocked Ubuntu/Fedora commands, architecture

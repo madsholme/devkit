@@ -185,6 +185,15 @@ dialog.wide { width: min(1200px, calc(100vw - 32px)); }
   color: var(--accent); border: 1px solid var(--line); border-radius: 6px; background: none;
 }
 .icon-btn:hover { border-color: var(--accent); text-decoration: none; }
+.resource-icon { width: 17px; height: 17px; display: inline-block; vertical-align: -3px; flex-shrink: 0; margin-right: 5px; }
+.resource-icon svg { width: 100%; height: 100%; }
+.git-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.container-row { display: grid; grid-template-columns: minmax(160px, 1.4fr) 110px minmax(110px, 1fr) minmax(140px, 1fr) auto; gap: 16px; padding: 16px; align-items: start; border-bottom: 1px solid var(--line); }
+.container-row:last-child { border-bottom: 0; }
+.container-row > div { min-width: 0; overflow-wrap: anywhere; }
+.container-row .container-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.container-row .path { margin-top: 4px; font-size: 12px; }
+@media (max-width: 900px) { .container-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; } .container-row .container-ports { grid-column: 1 / -1; } }
 .icon-btn svg { width: 15px; height: 15px; }
 .icon-btn .done { display: none; }
 .icon-btn.copied { color: var(--ok); border-color: var(--ok); }
@@ -357,10 +366,11 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
   </button>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" id="tab-btn-projects" data-tab="projects" aria-controls="tab-projects">Projects <span class="count" id="project-count"></span></button>
-    <button role="tab" id="tab-btn-previews" data-tab="previews" aria-controls="tab-previews">Previews <span class="count" id="preview-count"></span></button>
-    <button role="tab" id="tab-btn-vms" data-tab="vms" aria-controls="tab-vms">Virtual machines <span class="count" id="vm-count"></span></button>
-    <button role="tab" id="tab-btn-worktrees" data-tab="worktrees" aria-controls="tab-worktrees">Worktrees <span class="count" id="worktree-count"></span></button>
+    <button role="tab" id="tab-btn-projects" data-tab="projects" aria-controls="tab-projects"><span class="resource-icon" data-icon="git"></span>Projects <span class="count" id="project-count"></span></button>
+    <button role="tab" id="tab-btn-previews" data-tab="previews" aria-controls="tab-previews"><span class="resource-icon" data-icon="container"></span>Previews <span class="count" id="preview-count"></span></button>
+    <button role="tab" id="tab-btn-containers" data-tab="containers" aria-controls="tab-containers"><span class="resource-icon" data-icon="container"></span>Containers <span class="count" id="container-count"></span></button>
+    <button role="tab" id="tab-btn-vms" data-tab="vms" aria-controls="tab-vms"><span class="resource-icon" data-icon="vm"></span>Virtual machines <span class="count" id="vm-count"></span></button>
+    <button role="tab" id="tab-btn-worktrees" data-tab="worktrees" aria-controls="tab-worktrees"><span class="resource-icon" data-icon="git"></span>Worktrees <span class="count" id="worktree-count"></span></button>
     <button role="tab" id="tab-btn-history" data-tab="history" aria-controls="tab-history">History <span class="count" id="history-count"></span></button>
   </nav>
 
@@ -387,6 +397,13 @@ button.primary.danger { background: var(--bad); border-color: var(--bad); color:
     <thead><tr><th>Preview</th><th>Status</th><th class="hide-sm">Branch · commit</th><th class="hide-sm">Up</th><th></th></tr></thead>
     <tbody id="previews"></tbody>
   </table></div>
+  </section>
+
+  <section id="tab-containers" role="tabpanel" aria-labelledby="tab-btn-containers" hidden>
+    <div class="filters"><input type="search" id="container-filter" aria-label="Filter containers" placeholder="Filter containers, projects or images…" autocomplete="off"><select id="container-status" aria-label="Container status"><option value="">Any status</option><option value="up">Running</option><option value="down">Not running</option></select><button id="container-refresh">Refresh containers</button></div>
+    <p class="note">All Docker containers on this host, including stopped containers. Devkit-managed containers link to their preview details and logs.</p>
+    <div class="error" id="container-error" role="status" hidden></div>
+    <div class="panel" id="container-list"><div class="empty">Loading containers…</div></div>
   </section>
 
   <section id="tab-vms" role="tabpanel" aria-labelledby="tab-btn-vms" hidden>
@@ -534,7 +551,7 @@ function containerRows(p) {
   return `<tr class="containers"><td colspan="5"><table>
     <thead><tr><th>Container</th><th>Status</th><th>Ports</th><th class="hide-sm">Image</th><th class="hide-sm">ID</th><th class="hide-sm">Up</th><th></th></tr></thead>
     <tbody>${p.services.map(c => `<tr>
-      <td class="mono">${esc(c.name)}${c.web ? ' <span class="tag">web</span>' : ""}</td>
+      <td class="mono"><span class="resource-icon">${ICON.container}</span>${esc(c.name)}${c.web ? ' <span class="tag">web</span>' : ""}</td>
       <td>${status(c.status)}</td>
       <td class="mono">${c.ports.length ? c.ports.map(x => `<span${x.routed ? ' class="routed" title="Traefik routes the preview\'s traffic here"' : ""}>${x.port}${x.protocol === "tcp" ? "" : "/" + esc(x.protocol)}${x.routed ? " ← " + routeLinks(c, p) : ""}</span>`).join(", ") : '<span class="muted">—</span>'}</td>
       <td class="hide-sm mono path">${esc(c.image.startsWith("sha256:") ? c.image.slice(0, 19) : c.image)}</td>
@@ -566,10 +583,15 @@ setTheme(document.documentElement.dataset.theme);
 const UP = new Set(["healthy", "running", "starting"]);
 const svg = (cls, d) => `<svg class="${cls}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 const ICON = {
+  git: svg("", '<circle cx="4" cy="3" r="1.5"/><circle cx="4" cy="13" r="1.5"/><circle cx="12" cy="4" r="1.5"/><path d="M4 4.5v7M12 5.5v1A3.5 3.5 0 0 1 8.5 10H4"/>'),
+  container: svg("", '<path d="m8 1.5 6 3.3v6.4l-6 3.3-6-3.3V4.8zM2 4.8 8 8l6-3.2M8 8v6.5M5 3.2l6 3.2"/>'),
+  vm: svg("", '<rect x="1.5" y="2" width="13" height="9" rx="1"/><path d="M8 11v3m-3 0h6"/>'),
   open: svg("", '<path d="M9 2.5h4.5V7"/><path d="M13.5 2.5 7 9"/><path d="M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3"/>'),
   copy: svg("idle", '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/>'),
   check: svg("done", '<path d="M3 8.5 6.5 12 13 4.5"/>'),
 };
+
+document.querySelectorAll("[data-icon]").forEach(el => { el.innerHTML = ICON[el.dataset.icon] || ""; });
 
 function matches(p) {
   const mode = $("filter-mode").value, state = $("filter-status").value;
@@ -967,6 +989,7 @@ function renderHost(h) {
 }
 
 async function load() {
+  loadContainers();
   loadHistory();
   loadProjects();
   try {
@@ -1382,18 +1405,62 @@ $("vm-refresh").onclick = loadVMs;
 $("vm-filter").oninput = renderVMs;
 setInterval(() => { if (!document.hidden && (!$("tab-vms").hidden || !$("tab-projects").hidden) && !document.activeElement?.closest("#vm-list, #project-list") && !document.querySelector("dialog[open]")) loadVMs(); }, 10000);
 
+// Host container inventory remains independent of preview and VM discovery.
+let containerData = null, containersBusy = false;
+function renderContainers() {
+  if (!containerData) return;
+  const query = $("container-filter").value.trim().toLowerCase(), state = $("container-status").value;
+  const rows = containerData.containers.filter(c => [c.name, c.project, c.preview, c.image, c.id, c.status].join(" ").toLowerCase().includes(query)
+    && (!state || (state === "up" ? ["running", "healthy", "unhealthy", "starting"].includes(c.status) : !["running", "healthy", "unhealthy", "starting"].includes(c.status))));
+  $("container-count").textContent = containerData.containers.length;
+  $("container-list").innerHTML = rows.map(c => `<article class="container-row">
+    <div><strong><span class="resource-icon">${ICON.container}</span>${esc(c.name)}</strong><div class="mono path">${esc(c.image)}</div></div>
+    <div>${status(c.status)}<div class="mono path" title="${esc(c.id)}">${esc(short(c.id))}</div></div>
+    <div><span class="container-label">${c.managed ? 'Devkit project' : 'Compose project'}</span>${esc(c.project || 'Unassigned')}<div class="path">${esc(c.preview || (c.managed ? 'Managed by devkit' : 'Outside devkit'))}</div></div>
+    <div class="container-ports"><span class="container-label">Host → container ports</span><span class="mono path">${c.ports.length ? c.ports.map(esc).join('<br>') : 'No published ports'}</span></div>
+    <div class="actions">${c.managed && c.preview && c.service ? `<button data-details="${esc(c.preview)}" data-service="${esc(c.service)}">Details</button><button data-logs="${esc(c.preview)}" data-service="${esc(c.service)}">Logs</button>` : ''}</div>
+  </article>`).join('') || `<div class="empty">${containerData.containers.length ? 'No containers match these filters.' : 'No Docker containers found. Launch a configured project from Projects to create a preview.'}</div>`;
+}
+async function loadContainers() {
+  if (containersBusy || $("tab-containers").hidden) return;
+  containersBusy = true;
+  $("container-refresh").disabled = true;
+  try {
+    const res = await fetch("api/containers");
+    if (!res.ok) throw new Error(await res.text());
+    containerData = await res.json();
+    renderContainers();
+    $("container-error").hidden = true;
+  } catch (e) {
+    $("container-error").hidden = false;
+    $("container-error").textContent = "Could not refresh containers. " + e.message + (containerData ? " Showing previous results." : " Try Refresh containers.");
+    if (!containerData) $("container-list").innerHTML = '<div class="empty">Container inventory unavailable.</div>';
+  } finally { containersBusy = false; $("container-refresh").disabled = false; }
+}
+$("container-filter").oninput = renderContainers;
+$("container-status").onchange = renderContainers;
+$("container-refresh").onclick = loadContainers;
+
 // Projects are discoverable before their first preview or VM starts.
 let projectsData = null, projectsBusy = false;
 const closedProjects = new Set();
+function projectGitControls(w) {
+  const controls = w.git_controls;
+  if (!controls) return "";
+  const buttons = session.signed_in ? (controls.actions || []).map(a => act("git-" + a,
+    {fetch: "Fetch origin", sync: "Sync from origin", push: "Push to origin"}[a], {worktree: w.path})).join("") : "";
+  return `${buttons ? `<div class="git-controls" role="group" aria-label="Git controls for ${esc(w.branch || 'checkout')}">${buttons}</div>` : ""}
+    ${controls.note ? `<p class="note">${esc(controls.note)}</p>` : !session.signed_in ? '<p class="note">Sign in to sync this checkout with origin.</p>' : ''}`;
+}
 function projectCheckoutHTML(w, label) {
   const live = w.previews.find(p => p.mode === "live");
   const launch = session.signed_in && w.docker && !live ? act("up", "Launch containers", {worktree: w.path}) : "";
-  return `<div class="project-line"><div><strong>${esc(label)}</strong>${w.git && label !== w.branch ? ` <span class="mono muted">${esc(w.branch || "detached")}</span>` : ""}</div><div class="actions">${launch}</div></div>
+  return `<div class="project-line"><div>${w.git ? `<span class="resource-icon">${ICON.git}</span>` : ""}<strong>${esc(label)}</strong>${w.git && label !== w.branch ? ` <span class="mono muted">${esc(w.branch || "detached")}</span>` : ""}</div><div class="actions">${launch}</div></div>
     <div class="mono path">${esc(home(w.path))}</div>
-    ${w.git ? gitLine(w) : ""}
+    ${w.git ? gitLine(w) + projectGitControls(w) : ""}
     ${w.note ? `<p class="note">${esc(w.note)}</p>` : ""}
     ${w.docker && !live && !session.signed_in ? '<p class="note">Sign in to launch containers.</p>' : ""}
-    ${w.previews.map(p => `<div class="project-line services"><div><span class="tag">${esc(p.mode)}</span> ${esc(p.name)} · ${status(p.status)}</div>
+    ${w.previews.map(p => `<div class="project-line services"><div><span class="resource-icon">${ICON.container}</span><span class="tag">${esc(p.mode)}</span> ${esc(p.name)} · ${status(p.status)}</div>
       <div class="actions">${UP.has(p.status) && p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">Open app</a>` : ""}
       ${session.signed_in ? act(UP.has(p.status) ? "stop" : "start", UP.has(p.status) ? "Stop containers" : "Start containers", {preview:p.name}) : ""}</div></div>`).join("")}`;
 }
@@ -1413,10 +1480,10 @@ function renderProjects() {
   $("project-warning").hidden = !warnings.length;
   $("project-warning").textContent = warnings.join(" ");
   $("project-list").innerHTML = rows.map(p => `<details class="panel project-tree" data-project="${esc(p.path)}"${closedProjects.has(p.path) ? "" : " open"}>
-    <summary><strong>${esc(p.name)}</strong><span class="muted">${plural(p.worktrees.length,"worktree")}${p.vms.length ? " · " + plural(p.vms.length,"VM") : ""}</span><span class="mono path">${esc(home(p.path))}</span></summary>
+    <summary><strong>${p.main.git ? `<span class="resource-icon">${ICON.git}</span>` : ""}${esc(p.name)}</strong><span class="muted">${plural(p.worktrees.length,"worktree")}${p.vms.length ? " · " + plural(p.vms.length,"VM") : ""}</span><span class="mono path">${esc(home(p.path))}</span></summary>
     <div class="project-content"><ul><li>${projectCheckoutHTML(p.main, p.main.git ? "Main checkout" : "Project folder")}</li>
-      ${p.vms.length ? `<li><strong>Virtual machines</strong><ul>${p.vms.map(v => `<li><div class="project-line"><div><strong>${esc(v.name)}</strong> · ${esc(v.state)}</div><div class="actions">${vmControls(v)}<button data-project-vm="${esc(v.name)}">Details &amp; connect</button></div></div>${v.control_note ? `<p class="note">${esc(v.control_note)}</p>` : ""}</li>`).join("")}</ul></li>` : ""}
-      ${p.worktrees.length ? `<li><strong>Worktrees</strong><ul>${p.worktrees.map(w => `<li>${projectCheckoutHTML(w, w.branch || "Detached worktree")}</li>`).join("")}</ul></li>` : ""}
+      ${p.vms.length ? `<li><strong><span class="resource-icon">${ICON.vm}</span>Virtual machines</strong><ul>${p.vms.map(v => `<li><div class="project-line"><div><span class="resource-icon" title="${esc(v.display === "headless" ? "Headless VM" : v.display === "unknown" ? "Display unknown" : "Graphical VM")}">${vmIcon(v.display)}</span><strong>${esc(v.name)}</strong> · ${esc(v.state)}</div><div class="actions">${vmControls(v)}<button data-project-vm="${esc(v.name)}">Details &amp; connect</button></div></div>${v.control_note ? `<p class="note">${esc(v.control_note)}</p>` : ""}</li>`).join("")}</ul></li>` : ""}
+      ${p.worktrees.length ? `<li><strong><span class="resource-icon">${ICON.git}</span>Worktrees</strong><ul>${p.worktrees.map(w => `<li>${projectCheckoutHTML(w, w.branch || "Detached worktree")}</li>`).join("")}</ul></li>` : ""}
     </ul></div></details>`).join("") || `<div class="panel empty">${query ? "No projects match this filter." : "No projects discovered. Set projects_dir in the host configuration to the folder containing your projects, then refresh."}</div>`;
 }
 async function loadProjects() {
@@ -1447,7 +1514,7 @@ $("project-list").addEventListener("click", e => {
 });
 
 // Tabs: the choice is kept in the address (#worktrees) and in the browser.
-const TABS = ["projects", "previews", "vms", "worktrees", "history"];
+const TABS = ["projects", "previews", "containers", "vms", "worktrees", "history"];
 function showTab(name) {
   if (!TABS.includes(name)) name = "projects";
   for (const t of TABS) {
@@ -1456,6 +1523,7 @@ function showTab(name) {
   }
   if (name === "vms" || name === "projects") loadVMs();
   if (name === "projects") loadProjects();
+  if (name === "containers") loadContainers();
   store.set("tab", name);
   history.replaceState(null, "", name === "projects" ? location.pathname : "#" + name);
 }
@@ -1470,7 +1538,7 @@ $("system-close").onclick = () => $("system").close();
 load();
 loadSession();
 // Refreshing redraws the rows, so it waits while a dialog or an actions menu is open.
-setInterval(() => { if (!document.hidden && !tipFor && !document.activeElement?.closest("#project-list") && !document.querySelector("dialog[open], details.menu[open]")) load(); }, 10000);
+setInterval(() => { if (!document.hidden && !tipFor && !document.activeElement?.closest("#project-list, #container-list") && !document.querySelector("dialog[open], details.menu[open]")) load(); }, 10000);
 </script>
 </body>
 </html>

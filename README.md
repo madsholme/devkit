@@ -73,8 +73,9 @@ Docker labels know the previews.
   the previews, and the host is assumed to be yours. Apps on it are not isolated from each other.
 - **Not a CI or deployment system.** Deploying for team review goes through a `publish` hook you
   write (see [Publishing](docs/publishing.md)).
-- **Not in charge of your Git.** devkit never creates or deletes worktrees, commits, pushes or
-  merges; your agent tool and Git do that.
+- **Explicit Git controls only.** Fetch origin, fast-forward a clean branch from its origin
+  upstream, or push separately. devkit never creates/deletes worktrees, commits, stashes,
+  rebases or force-pushes. Resolve dirty or diverged branches with your own Git tools.
 
 ## Quick start
 
@@ -130,6 +131,7 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
 | `devkit logs [-s service] [-f]` | Show (or follow) this worktree's live web log (or another service's) |
 | `devkit web` | Serve the dashboard (see [Dashboard](docs/dashboard.md)); `devkit web password` enables its actions |
+| `devkit git fetch / sync / push` | Fetch origin, safely fast-forward from its upstream, or push explicitly |
 | `devkit vms [--json]` | QEMU/libvirt VMs, including stopped managed guests, sizing and private connections |
 | `devkit ls` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devkit stop [preview]` | Stop containers; retain data |
