@@ -18,14 +18,15 @@ import (
 // devkit manages, or a worktree of a repository devkit knows.
 
 type actionRequest struct {
-	VM       string `json:"vm"`
-	Action   string `json:"action"`
-	Preview  string `json:"preview"`
-	Worktree string `json:"worktree"`
-	Repo     string `json:"repo"`
-	Host     string `json:"host"`
-	Hours    int    `json:"hours"`
-	Confirm  string `json:"confirm"`
+	VM        string `json:"vm"`
+	Container string `json:"container"`
+	Action    string `json:"action"`
+	Preview   string `json:"preview"`
+	Worktree  string `json:"worktree"`
+	Repo      string `json:"repo"`
+	Host      string `json:"host"`
+	Hours     int    `json:"hours"`
+	Confirm   string `json:"confirm"`
 }
 
 // plannedAction is a checked request: the devkit arguments, where to run them and what they lock.
@@ -66,6 +67,9 @@ func repoDir(trees []worktree, preferred string) string {
 }
 
 func planAction(req actionRequest) (plannedAction, error) {
+	if req.Action == "container-stop" {
+		return planContainerStop(req)
+	}
 	if strings.HasPrefix(req.Action, "git-") {
 		return planGitAction(req)
 	}
@@ -243,6 +247,9 @@ func (s *jobs) get(id string) *job {
 
 // VM targets are opaque server-discovered IDs, never caller-provided scripts/paths.
 func planVMAction(req actionRequest) (plannedAction, error) {
+	if strings.HasPrefix(req.VM, "live-") {
+		return planLiveVMAction(req)
+	}
 	action := strings.TrimPrefix(req.Action, "vm-")
 	if action != "start" && action != "stop" && action != "restart" {
 		return plannedAction{}, fail("Unsupported VM action.")

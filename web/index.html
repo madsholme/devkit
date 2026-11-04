@@ -717,6 +717,7 @@ async function loadSession() {
   renderAuth();
   renderVMs();
   renderProjects();
+  renderContainers();
   if (lastData) { renderPreviews(lastData.previews); renderRepos(lastData.repositories, lastData.previews); renderOrphans(lastData.repositories); renderHost(lastData.host); }
 }
 
@@ -792,6 +793,12 @@ function shareForm(preview) {
 
 async function handleAct(button) {
   const action = button.dataset.act, target = JSON.parse(button.dataset.target);
+  const name = target.name;
+  delete target.name;
+  if (action === "vm-stop" || action === "container-stop") return ask({
+    title: `Turn off ${name || target.vm || target.container}`, ok: "Turn off", danger: true,
+    body: `<p class="note">Requests a graceful shutdown of this ${action === "vm-stop" ? "VM" : "container"}. Its services will become unavailable. Disks and saved data are retained.</p><p class="note">${action === "container-stop" ? "Stopping a proxy or dashboard dependency can disconnect this page. " : ""}If it does not shut down, the job reports a timeout without forcing it off.</p>`,
+    submit: () => run({action, ...target, confirm: target.vm || target.container})});
   for (const m of document.querySelectorAll("details.menu[open]")) m.open = false;
   if (action === "destroy") return ask({title: `Destroy ${target.preview}`, ok: "Destroy", danger: true,
     body: `<p class="note">Removes its containers, networks and volumes. The code stays in the worktree and devkit live
@@ -841,13 +848,14 @@ async function followJob(id, title) {
       $("job-state").className = "job-state " + (j.ok ? "ok" : "bad");
       load();
       loadVMs();
+      loadContainers();
       break;
     }
     await new Promise(r => setTimeout(r, 700));
   }
   $("job-live").classList.remove("on");
 }
-$("job-close").onclick = () => { currentJob = null; $("job").close(); load(); loadVMs(); };
+$("job-close").onclick = () => { currentJob = null; $("job").close(); load(); loadVMs(); loadContainers(); };
 $("act-cancel").onclick = () => $("act").close();
 $("signin-cancel").onclick = () => $("signin").close();
 $("signin-form").onsubmit = async e => {
@@ -1347,8 +1355,8 @@ const vmCommand = (text, label) => text ? `<div class="vm-command"><code>${esc(t
 function vmControls(v) {
   if (!v.control_id || !(v.actions || []).length) return "";
   return session.signed_in
-    ? `<div class="vm-actions" role="group" aria-label="${esc(v.name)} controls">${v.actions.map(a => act("vm-" + a, {start: "Start", stop: "Stop", restart: "Restart"}[a], {vm: v.control_id})).join("")}</div>`
-    : '<p class="vm-help">Sign in to start, stop or restart this VM.</p>';
+    ? `<div class="vm-actions" role="group" aria-label="${esc(v.name)} controls">${v.actions.map(a => act("vm-" + a, {start: "Start", stop: "Turn off", restart: "Restart"}[a], {vm: v.control_id, name: v.name})).join("")}</div>`
+    : '<p class="vm-help">Sign in to control this VM.</p>';
 }
 function renderVMs() {
   if (!vmData) return;
@@ -1360,7 +1368,7 @@ function renderVMs() {
   for (const v of rows) counts.set(v.project || "", (counts.get(v.project || "") || 0) + 1);
   $("vm-count").textContent = vmData.vms.length;
   $("vm-list").innerHTML = rows.length ? rows.map((v, i) => {
-    const label = v.display === "headless" ? "Headless" : v.display === "unknown" ? "Display unknown" : v.display === "local" ? "Local display" : v.display.toUpperCase() + " display";
+    const label = v.display === "headless" ? "Headless" : v.display === "unknown" ? "Display unknown" : v.display === "local" ? "Local display" : v.display.toUpperCase().replace("+", " + ") + " display";
     const source = v.source === "qemu" ? "Standalone QEMU" : v.source === "qemu:///session" ? "libvirt · session" : "libvirt · system";
     const connections = v.connections.filter(c => c.command);
     const heading = i === 0 || (rows[i - 1].project || "") !== (v.project || "")
@@ -1373,7 +1381,7 @@ function renderVMs() {
       </div>${connections.length ? `<details class="vm-connect" data-vm-connect="${esc(v.id)}"${open.has(v.id) ? " open" : ""}><summary>Connect privately</summary>
       <p>Run these commands on your computer. Keep the tunnel terminal open, then connect from a second terminal.</p>
       ${connections.map(c => `<h3>${c.kind === "ssh" ? "Guest SSH" : c.kind === "console" ? "Serial console" : esc(c.kind.toUpperCase())}</h3>${c.tunnel ? "<div>1. Open the SSH tunnel</div>" + vmCommand(c.tunnel, "Copy SSH tunnel") + "<div>2. Connect to the VM</div>" : ""}${vmCommand(c.command, "Copy connection command")}${c.kind === "console" ? '<p class="vm-help">Requires a configured guest serial console and libvirt console permission. Press Ctrl+] to leave.</p>' : ""}`).join("")}
-      <p class="vm-help">SSH access to the devkit host is required. Install virt-viewer on your computer for SPICE/VNC. If the local port is busy, change it in both commands. Use your existing guest key with SSH if required.</p></details>` : ""}
+      <p class="vm-help">SSH access to the devkit host is required. Install virt-viewer on your computer for SPICE/VNC. Only protocols enabled by this VM are listed; enabling SPICE requires configuring its launcher. If the local port is busy, change it in both commands. Use your existing guest key with SSH if required.</p></details>` : ""}
       ${vmControls(v)}
       ${v.control_note ? `<p class="vm-help">${esc(v.control_note)}</p>` : ""}
       ${v.project_note ? `<p class="vm-help">${esc(v.project_note)}</p>` : ""}
@@ -1418,7 +1426,7 @@ function renderContainers() {
     <div>${status(c.status)}<div class="mono path" title="${esc(c.id)}">${esc(short(c.id))}</div></div>
     <div><span class="container-label">${c.managed ? 'Devkit project' : 'Compose project'}</span>${esc(c.project || 'Unassigned')}<div class="path">${esc(c.preview || (c.managed ? 'Managed by devkit' : 'Outside devkit'))}</div></div>
     <div class="container-ports"><span class="container-label">Host → container ports</span><span class="mono path">${c.ports.length ? c.ports.map(esc).join('<br>') : 'No published ports'}</span></div>
-    <div class="actions">${c.managed && c.preview && c.service ? `<button data-details="${esc(c.preview)}" data-service="${esc(c.service)}">Details</button><button data-logs="${esc(c.preview)}" data-service="${esc(c.service)}">Logs</button>` : ''}</div>
+    <div class="actions">${(c.actions || []).includes('stop') ? (session.signed_in ? act('container-stop', 'Turn off', {container:c.id, name:c.name}) : '<span class="note">Sign in to turn off</span>') : ''}${c.control_note ? `<span class="note">${esc(c.control_note)}</span>` : ''}${c.managed && c.preview && c.service ? `<button data-details="${esc(c.preview)}" data-service="${esc(c.service)}">Details</button><button data-logs="${esc(c.preview)}" data-service="${esc(c.service)}">Logs</button>` : ''}</div>
   </article>`).join('') || `<div class="empty">${containerData.containers.length ? 'No containers match these filters.' : 'No Docker containers found. Launch a configured project from Projects to create a preview.'}</div>`;
 }
 async function loadContainers() {

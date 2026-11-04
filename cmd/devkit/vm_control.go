@@ -387,6 +387,12 @@ func controlVM(action, target string) error {
 		return err
 	}
 	defer unlock()
+	if strings.HasPrefix(target, "live-") {
+		if action != "stop" {
+			return fail("Live VM controls only support stop.")
+		}
+		return stopLiveVM(target)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	t, err := resolveVMControl(ctx, target)
 	cancel()

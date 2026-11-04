@@ -32,7 +32,7 @@ Below it are six tabs, remembered per browser and linkable (`#projects`, `#previ
   containers outside devkit. Filter by name, project, image, ID or status. Rows show
   state, image, project and configured host-to-container port mappings (mappings may
   be inactive while stopped). Managed preview containers retain Details/Logs links;
-  other containers are read-only. `/api/containers` exposes only this inventory metadata,
+  other containers offer confirmed Turn off where safe, while details/logs remain restricted to managed previews. `/api/containers` exposes only this inventory metadata,
   never raw labels, environment, mount paths or commands. Probes are bounded to five
   seconds, 512 containers and 2 MiB per batch. Errors retain the last result with a
   visible warning and Refresh button. The tab refreshes while visible.
@@ -154,11 +154,11 @@ this sanitized inventory; connecting still requires SSH and guest authentication
 ### VM lifecycle controls
 
 VMs with [project lifecycle settings](projects.md#start-stop-and-restart-vms) show
-Start when stopped, and Stop/Restart when running, after you sign in. Plain VM
-mappings remain read-only. The page lists stopped managed guests too; register
+Start when stopped, and Turn off/Restart when running, after you sign in. Plain VM
+mappings do not authorize adapters; discovered native QMP/libvirt instances may separately offer stop-only Turn off. The page lists stopped managed guests too; register
 VM-only projects through host `projects_dir` or `vm_projects` so their recipes remain discoverable.
 Unavailable providers or conflicting definitions show an explanation instead of
-action buttons. Paused guests offer Stop; resume with their existing manager
+action buttons. Paused adapter-managed guests offer Turn off; resume with their existing manager
 before restarting.
 
 Buttons run the same CLI commands through the dashboard's authenticated job
@@ -169,3 +169,13 @@ unregister guests by name or project, retaining files unless an explicit purge a
 is requested. Removed registrations disappear on the next inventory refresh.
 The API adds `control_id`, supported `actions`, and optional `control_note` to
 managed rows, without exposing recipe paths or launcher command text.
+
+
+Turn off is available to signed-in users for individual active containers and VMs
+with an existing adapter or verified native shutdown capability. Each action confirms
+the resource and uses the CLI job flow; VM/project and container inventory refresh
+when the job finishes. Anonymous users see a sign-in hint. Unsupported/paused resources
+show their reason. This does not grant container log/detail access outside managed
+previews or introduce deletion/force-off controls. See [projects](projects.md#turn-off-an-individual-vm-or-container).
+VNC and SPICE can both appear under Connect privately, each with its own tunnel and
+remote-viewer URI; the VM must actually expose the selected protocol.

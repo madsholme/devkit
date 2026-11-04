@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// This host inventory is read-only; mutation and detail/log APIs still require
-// devkit's existing managed-preview identity checks.
+// Host inventory grants only explicit stop capabilities. Detail/log APIs still
+// require devkit's existing managed-preview identity checks.
 var hostContainers = func(ctx context.Context) ([]container, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -50,15 +50,17 @@ var hostContainers = func(ctx context.Context) ([]container, error) {
 }
 
 type containerRow struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	Image   string   `json:"image"`
-	Status  string   `json:"status"`
-	Project string   `json:"project"`
-	Preview string   `json:"preview"`
-	Service string   `json:"service"`
-	Managed bool     `json:"managed"`
-	Ports   []string `json:"ports"`
+	Actions     []string `json:"actions,omitempty"`
+	ControlNote string   `json:"control_note,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Image       string   `json:"image"`
+	Status      string   `json:"status"`
+	Project     string   `json:"project"`
+	Preview     string   `json:"preview"`
+	Service     string   `json:"service"`
+	Managed     bool     `json:"managed"`
+	Ports       []string `json:"ports"`
 }
 type containersData struct {
 	Containers []containerRow `json:"containers"`
@@ -74,6 +76,10 @@ func containersOverview(ctx context.Context) (containersData, error) {
 		labels := c.Config.Labels
 		managed := labels[managedLabel] == "true"
 		r := containerRow{ID: c.ID, Name: strings.TrimPrefix(c.Name, "/"), Image: c.Config.Image, Status: containerStatus(c.State), Managed: managed, Project: labels["com.docker.compose.project"], Ports: []string{}}
+		r.ControlNote = containerStopNote(c)
+		if c.State.Running && r.ControlNote == "" && fullContainerID.MatchString(c.ID) {
+			r.Actions = []string{"stop"}
+		}
 		if c.State.Status == "paused" {
 			r.Status = "paused"
 		}

@@ -27,10 +27,10 @@ old names are dropped on purpose.
   Discovery never runs hooks; authenticated `up` actions revalidate Git membership and recipe.
   `git_control.go` provides authenticated, CLI-backed origin fetch/sync/push with
   checkout revalidation, clean-state checks, bounded commands and per-repository locking.
-  `container_inventory.go` provides read-only all-host Docker inventory with allowlisted
-  metadata; unrelated containers gain no lifecycle or detail/log authority.
+  `container_inventory.go` provides all-host Docker inventory with allowlisted
+  metadata; `container_control.go` adds confirmed stop-only actions by full ID; unrelated containers gain no detail/log authority.
   `vm_control.go` provides opt-in launcher/libvirt lifecycle adapters, stopped managed inventory,
-  exact control resolution and a host-wide lifecycle lock. Plain mappings never authorize guest control.
+  exact control resolution and a host-wide lifecycle lock. Plain mappings do not authorize adapters. `vm_shutdown.go` separately grants verified native stop-only capabilities to discovered QMP/libvirt instances.
   `vm_cleanup.go` implements CLI-only exact-name/project QEMU cleanup, dry-run by default;
   stop adapters precede recipe removal, and opt-in `control.purge` owns data deletion.
   Stopped plain registrations may be removed; running plain mappings block cleanup.
