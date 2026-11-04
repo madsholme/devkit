@@ -16,6 +16,7 @@ type container struct {
 	Created      string
 	RestartCount int
 	Config       struct {
+		StopSignal   string
 		Image        string
 		Labels       map[string]string
 		Env          []string
@@ -27,6 +28,7 @@ type container struct {
 		Cmd          []string
 	}
 	HostConfig struct {
+		AutoRemove    bool
 		RestartPolicy struct{ Name string }
 		PortBindings  map[string][]struct {
 			HostIP   string `json:"HostIp"`

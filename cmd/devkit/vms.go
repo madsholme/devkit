@@ -53,6 +53,7 @@ type virtualMachine struct {
 	RSSBytes       uint64         `json:"rss_bytes,omitempty"`
 	Connections    []vmConnection `json:"connections"`
 	ConnectionNote string         `json:"connection_note,omitempty"`
+	qmp            string
 	cwd            string
 	diskTargets    []string
 	disks          []vmDisk
@@ -175,6 +176,18 @@ func addVMEndpoint(vm *virtualMachine, kind, host, port string) {
 	}
 }
 
+func setVMDisplay(vm *virtualMachine, kind string) {
+	if kind == "vnc" || kind == "spice" {
+		if vm.Display == "vnc+spice" || (vm.Display == "vnc" && kind == "spice") || (vm.Display == "spice" && kind == "vnc") {
+			vm.Display = "vnc+spice"
+		} else {
+			vm.Display = kind
+		}
+	} else if vm.Display == "unknown" || vm.Display == "headless" {
+		vm.Display = kind
+	}
+}
+
 func parseQEMU(pid int, args []string) virtualMachine {
 	vm := virtualMachine{ID: fmt.Sprintf("pid-%d", pid), PID: pid, Name: fmt.Sprintf("QEMU %d", pid), Source: "qemu", State: "running", Display: "unknown", Graphics: []string{}, Connections: []vmConnection{}}
 	headless := false
@@ -217,10 +230,15 @@ func parseQEMU(pid int, args []string) virtualMachine {
 			if v == "none" {
 				headless = true
 			} else {
-				vm.Display = "local"
+				setVMDisplay(&vm, "local")
+			}
+		case "-qmp":
+			address := strings.Split(v, ",")[0]
+			if strings.HasPrefix(address, "unix:/") && (o["server"] == "on" || strings.Contains(v, ",server,") || strings.HasSuffix(v, ",server")) {
+				vm.qmp = strings.TrimPrefix(address, "unix:")
 			}
 		case "-spice":
-			vm.Display = "spice"
+			setVMDisplay(&vm, "spice")
 			if vmPort(o["tls-port"]) != 0 {
 				vm.ConnectionNote = "SPICE uses TLS; use its existing viewer and certificate configuration."
 			} else if o["unix"] == "on" {
@@ -232,7 +250,7 @@ func parseQEMU(pid int, args []string) virtualMachine {
 			if v == "none" {
 				continue
 			}
-			vm.Display = "vnc"
+			setVMDisplay(&vm, "vnc")
 			address := strings.Split(v, ",")[0]
 			host, display, ok := strings.Cut(address, ":")
 			if strings.HasPrefix(address, "[") {
@@ -321,6 +339,15 @@ func processVMs() ([]virtualMachine, []string) {
 		dir := filepath.Join(vmProcRoot, e.Name())
 		exe, err := os.Readlink(filepath.Join(dir, "exe"))
 		if err != nil {
+			// Exited children lose /proc/PID/exe before their parent reaps them.
+			// They must not make a completed shutdown look like unreadable inventory.
+			if stat, e := os.ReadFile(filepath.Join(dir, "stat")); e == nil {
+				if end := strings.LastIndex(string(stat), ")"); end >= 0 {
+					if fields := strings.Fields(string(stat)[end+1:]); len(fields) > 0 && fields[0] == "Z" {
+						continue
+					}
+				}
+			}
 			if comm, e := os.ReadFile(filepath.Join(dir, "comm")); e == nil && (strings.HasPrefix(string(comm), "qemu-system-") || strings.TrimSpace(string(comm)) == "qemu-kvm") {
 				if len(warnings) == 0 {
 					warnings = append(warnings, "Some QEMU process metadata is unreadable; inventory may be incomplete.")
@@ -476,9 +503,9 @@ func parseDomain(raw, uri string) (virtualMachine, error) {
 		vm.VCPUs = d.VCPU.Current
 	}
 	for _, g := range d.Devices.Graphics {
-		vm.Display = "local"
+		setVMDisplay(&vm, "local")
 		if g.Type == "spice" || g.Type == "vnc" {
-			vm.Display = g.Type
+			setVMDisplay(&vm, g.Type)
 			listen := g.Listen
 			unsupported := g.Socket != "" || vmPort(g.TLSPort) != 0
 			for _, l := range g.Listeners {
@@ -770,6 +797,11 @@ func (v *vmInventory) snapshot(ctx context.Context) vmSnapshot {
 		}
 	}
 	rows = appendManagedVMs(rows, targets)
+	if len(warnings) == 0 {
+		for i := range rows {
+			addLiveVMControls(&rows[i])
+		}
+	}
 	host := cfg.TailscaleIP
 	if host == "" {
 		if ip, err := vmProbe(ctx, "tailscale", "ip", "-4"); err == nil && net.ParseIP(strings.TrimSpace(ip)) != nil {

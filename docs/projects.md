@@ -131,7 +131,7 @@ Neither project discovery paths nor disk paths are returned in VM API metadata.
 
 ### Start, stop and restart VMs
 
-Mappings are read-only by default. To enable lifecycle control, add `control` to
+Mappings do not authorize launcher commands. Native stop-only controls may be discovered independently. To enable start/restart and adapter lifecycle control, add `control` to
 one unique VM definition. For standalone QEMU or a native engine, wrap your
 existing launcher with start and stop commands:
 
@@ -235,7 +235,7 @@ it includes stopped registrations. No name prefixes, arbitrary PIDs or guessed d
 paths are accepted. An unregistered guest must first have an explicit project mapping.
 
 A stopped plain mapping can be removed without lifecycle commands. A running guest
-needs its own configured stop adapter; read-only mappings never permit devkit to
+needs its own configured stop adapter; plain mappings alone never permit cleanup to
 terminate it. If any selected guest has missing authority, conflicting definitions,
 unreadable inventory or an unsafe recipe, the whole batch is blocked before changes.
 Libvirt-controlled/observed guests are not supported by cleanup; use their existing manager.
@@ -391,3 +391,50 @@ harness created them. The harness stays on localhost behind Traefik at
 Tailscale Serve on 443 before, remove that mapping only after the new HTTPS endpoint
 is ready; clients then reconnect using the new address. Do not enable it again: it
 would conflict with Traefik. No unverified automatic worktree hook is required.
+
+
+### Turn off an individual VM or container
+
+Signed-in dashboard users can choose **Turn off** in Virtual Machines, in a project's
+VM list, or in Containers. The confirmation identifies the resource. Existing VM
+adapters still take precedence; other discovered VMs get stop-only native controls:
+local libvirt shutdown by UUID, or QMP `system_powerdown` for standalone QEMU with
+an absolute local Unix server socket (`-qmp unix:/path/to/qmp,server=on,wait=off`).
+QMP must belong to the current user and the observed process. The guest must handle
+its virtual power button. PID/start-time checks reject stale instances; devkit never
+sends `quit`, `destroy`, or a kill signal to an observed VM. A VM without QMP or an
+adapter explains why Turn off is unavailable. Resume paused resources first.
+
+```sh
+devkit vms --json                  # obtain the current control_id
+devkit stop --vm live-...          # exact observed instance, stop only
+devkit stop --container api        # exact name, resolved to a full Docker ID
+devkit stop --container FULL_ID
+```
+
+Container stops address only that container, including containers outside devkit
+projects. They use Docker's configured stop signal and `--timeout -1` to disable
+the daemon's forced-kill fallback. Devkit reports a timeout after two minutes;
+Docker may still be awaiting a later graceful exit. Auto-remove containers are
+refused because stopping them could remove their data. A configured SIGKILL stop signal is also refused. VM disks, recipes, container
+filesystems and volumes are retained. No native restart/start or cleanup authority
+is implied by a discovered stop capability. Stopping a proxy/dependency may disconnect
+the dashboard. Stopped plain-mapped VMs disappear from live inventory; configured
+managed VMs remain listed and can use their existing start adapter.
+
+### VNC and SPICE viewers
+
+Both protocols are supported, independently or together. **Connect privately** shows
+only the listeners actually discovered on that VM, with a separate SSH tunnel and
+viewer command for each. A dual-protocol VM is labeled **VNC + SPICE** regardless of
+argument order. For example, after opening its displayed tunnel:
+
+```sh
+remote-viewer spice://127.0.0.1:5931
+remote-viewer vnc://127.0.0.1:5944
+```
+
+These are examples, not interchangeable endpoints. A VNC-only VM needs SPICE enabled
+in its existing launcher before a SPICE connection can appear. Devkit does not add
+listeners or restart guests to change their display protocol. Existing TLS/socket
+configurations keep their documented client-configuration fallback.

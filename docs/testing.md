@@ -77,3 +77,24 @@ lifecycle locking and partial-success history. The lifecycle acceptance runner a
 starts its disposable guest for named and project cleanup, checks retained disk hashes,
 and verifies --purge removes only its explicitly configured fixture files. No real
 user guest or disk is used.
+
+
+### Native resource shutdown
+
+Build the binary, then run:
+
+```sh
+DEVKIT_SHUTDOWN_RUNTIME_TEST=1 DEVKIT_TEST_IMAGE=YOUR_LOCAL_IMAGE \
+  python3 tests/resource_shutdown_acceptance.py
+```
+
+Choose an existing image with `/bin/sh` and `sleep`; the test never pulls images.
+`DEVKIT_VM_BINARY` can point at an alternate build. This creates one isolated Docker
+container/volume and a small disposable ACPI-aware QEMU/TCG boot guest. The guest
+handles the virtual power button and exits itself. The test checks both VNC/SPICE,
+authenticated actions, missing confirmation, actual graceful exit, unchanged disk and
+recipe hashes, retained container data/volume, history and inventory refresh. Docker
+visibility and mutation are restricted to the exact fixture ID; optional providers are
+stubbed. Cleanup removes only test-created resources. Set `DEVKIT_SHUTDOWN_UI_READY`
+to a temporary descriptor path to pause for browser testing; create that path plus
+`.continue` afterward. Its generated password is test-only; do not publish descriptors.

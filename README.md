@@ -136,6 +136,7 @@ software; `devkit setup` configures the rest of the host from your answers.
 | `devkit cleanup --vm NAME [--purge] [--yes]` | Stop/unregister one configured QEMU VM; dry run by default, retain files unless an explicit purge adapter is requested |
 | `devkit cleanup --project SLUG [--purge] [--yes]` | Clean all registered QEMU VMs in that exact project; preflight the whole batch first |
 | `devkit ls` | Preview IDs, modes, web health/status, source commits and URLs |
+| `devkit stop --container NAME_OR_FULL_ID` | Gracefully stop one Docker container; retain data |
 | `devkit stop [preview]` | Stop containers; retain data |
 | `devkit start [preview]` | Resume saved configuration; retain data |
 | `devkit destroy [preview]` | Remove containers/networks and disposable named volumes |

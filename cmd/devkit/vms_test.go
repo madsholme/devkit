@@ -213,3 +213,46 @@ func TestLibvirtTLSDoesNotOfferPlaintextViewer(t *testing.T) {
 		t.Fatalf("TLS lost: %+v", vm)
 	}
 }
+
+func TestVMBothViewerProtocolsAndArgumentOrder(t *testing.T) {
+	for _, args := range [][]string{
+		{"-spice", "addr=127.0.0.1,port=5931", "-vnc", "127.0.0.1:44", "-display", "gtk"},
+		{"-vnc", "127.0.0.1:44", "-spice", "addr=127.0.0.1,port=5931"},
+	} {
+		vm := parseQEMU(42, append([]string{"qemu-system-x86_64"}, args...))
+		assertBothViewers(t, vm)
+	}
+	vm, err := parseDomain(`<domain><name>desktop</name><uuid>11111111-1111-1111-1111-111111111111</uuid><devices><graphics type="spice" port="5931" listen="127.0.0.1"/><graphics type="vnc" port="5944" listen="127.0.0.1"/><graphics type="sdl"/></devices></domain>`, "qemu:///session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertBothViewers(t, vm)
+}
+
+func assertBothViewers(t *testing.T, vm virtualMachine) {
+	t.Helper()
+	if vm.Display != "vnc+spice" {
+		t.Errorf("both protocols must be visible, got %q", vm.Display)
+	}
+	addVMCommands(&vm, "operator", "100.64.0.1")
+	commands := map[string]string{}
+	for _, c := range vm.Connections {
+		commands[c.Kind] = c.Command
+	}
+	if commands["vnc"] != "remote-viewer vnc://127.0.0.1:5944" || commands["spice"] != "remote-viewer spice://127.0.0.1:5931" {
+		t.Fatalf("missing viewer commands: %+v", vm.Connections)
+	}
+}
+
+func TestExitedQEMUZombieDoesNotBlockInventory(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "42")
+	os.Mkdir(dir, 0700)
+	os.WriteFile(filepath.Join(dir, "comm"), []byte("qemu-system-x86\n"), 0600)
+	os.WriteFile(filepath.Join(dir, "stat"), []byte("42 (qemu-system-x86) Z 1 2 3\n"), 0600)
+	swap(t, &vmProcRoot, root)
+	rows, warnings := processVMs()
+	if len(rows) != 0 || len(warnings) != 0 {
+		t.Fatalf("exited guest treated as unreadable: %v %v", rows, warnings)
+	}
+}

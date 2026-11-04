@@ -1,6 +1,6 @@
 # QEMU cleanup — implementation plan, version 7
 
-Supersedes [v6](archive/2026-11-04-devbox-vm-visibility-v6.md) as the current work plan.
+Supersedes [v6](2026-11-04-devbox-vm-visibility-v6.md) as the current work plan.
 V6 is complete; its host repair and evidence remain intact. Work as one agent in the
 existing codex/projects-qemu worktree. User requested a cleanup command by exact VM
 name or all VMs in a project and chose: preserve disks, optional --purge.
