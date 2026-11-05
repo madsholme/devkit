@@ -424,7 +424,7 @@ async function save() {
 }
 .documents-layout {
   display: grid;
-  grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
+  grid-template-columns: minmax(13rem, 20rem) minmax(0, 1fr);
   gap: 1.25rem;
   align-items: start;
 }
