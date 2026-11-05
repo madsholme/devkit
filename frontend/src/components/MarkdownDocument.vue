@@ -47,8 +47,7 @@ defineExpose({ scrollTo })
 </template>
 <style>
 .document-reading {
-  max-width: 78ch;
-  margin: 0 auto;
+  width: 100%;
   min-width: 0;
 }
 .document-outline {
