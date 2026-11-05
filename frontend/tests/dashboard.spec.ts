@@ -15,8 +15,14 @@ test('six views, filters, details, safe anonymous controls and legacy hash links
   await expect(page.getByRole('button', { name: 'Fetch origin' })).toHaveCount(0)
   await page.getByLabel('Filter projects').fill('beacon')
   await expect(page.locator('.project-directory-row')).toHaveCount(1)
+  await expect(
+    page.locator('.site-header').getByRole('link', { name: 'Containers (5)', exact: true })
+  ).toBeVisible()
+  await expect(
+    page.locator('.site-header').getByRole('link', { name: 'Virtual machines (3)', exact: true })
+  ).toBeVisible()
   await page.getByLabel('Filter projects').fill('')
-  await page.getByRole('link', { name: 'Containers', exact: true }).click()
+  await page.getByRole('link', { name: /^Containers \(/ }).click()
   await expect(page.getByRole('heading', { name: 'Containers', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(3)
   await page
@@ -28,7 +34,7 @@ test('six views, filters, details, safe anonymous controls and legacy hash links
   await page.getByRole('dialog').getByLabel('Filter container details').fill('PGDATA')
   await expect(page.getByRole('dialog')).not.toContainText('POSTGRES_PASSWORD')
   await page.keyboard.press('Escape')
-  await page.getByRole('link', { name: 'Virtual machines', exact: true }).click()
+  await page.getByRole('link', { name: /^Virtual machines \(/ }).click()
   await page.getByText('Connect privately', { exact: true }).click()
   await expect(
     page.getByText('remote-viewer spice://127.0.0.1:5931', { exact: true })
@@ -55,6 +61,9 @@ test('sign-in, cancel/confirm exact container and VM targets, preview destroy an
     if (req.url().endsWith('/api/action')) actions.push(req.postDataJSON())
   })
   await page.goto('/#/containers')
+  await expect(
+    page.locator('.site-header').getByRole('link', { name: 'Virtual machines (3)', exact: true })
+  ).toBeVisible()
   await signIn(page)
   const row = page.getByRole('row').filter({ hasText: 'atlas-db' })
   await row.getByRole('button', { name: 'Turn off', exact: true }).click()
@@ -69,7 +78,7 @@ test('sign-in, cancel/confirm exact container and VM targets, preview destroy an
     confirm: 'a'.repeat(64),
   })
   await page.keyboard.press('Escape')
-  await page.getByRole('link', { name: 'Virtual machines', exact: true }).click()
+  await page.getByRole('link', { name: /^Virtual machines \(/ }).click()
   await page.getByRole('button', { name: 'Turn off', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Turn off', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('Completed synthetic action')
@@ -172,7 +181,7 @@ test('desktop/mobile themes and navigation render without horizontal page overfl
   await page.screenshot({ path: '/tmp/devkit-swift-mobile.png', fullPage: true })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.getByRole('button', { name: /navigation/i }).click()
-  await page.getByRole('menuitem', { name: 'Containers', exact: true }).click()
+  await page.getByRole('menuitem', { name: /^Containers \(/ }).click()
   await expect(page.getByRole('heading', { name: 'Containers', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })

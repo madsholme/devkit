@@ -10,7 +10,10 @@ are sampled only while it is open.
 
 The SwiftDesign navigation offers six views, remembered per browser. New links use `#/projects`,
 `#/previews`, `#/containers`, `#/vms`, `#/worktrees` and `#/history`; existing links without
-the slash continue to work. On narrow screens, use the navigation menu beside the logo:
+the slash continue to work. Containers and Virtual machines show host-wide inventory totals
+in the global menu, including stopped and unassigned resources. Counts refresh independently
+of the selected project or local filters; a dash means the initial inventory has not loaded.
+On narrow screens, use the navigation menu beside the logo:
 
 - **Projects** (default for new browsers): a searchable directory of repositories and project
   folders, following SwiftConfig's host list/detail flow. Configure `projects_dir` in the host

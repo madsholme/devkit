@@ -129,13 +129,9 @@ export async function refresh() {
   await Promise.all([
     loadInventory('overview'),
     loadInventory('history'),
-    ...(state.tab === 'projects'
-      ? [loadInventory('projects'), loadInventory('vms'), loadInventory('containers')]
-      : state.tab === 'vms'
-      ? [loadInventory('vms')]
-      : state.tab === 'containers'
-      ? [loadInventory('containers')]
-      : []),
+    loadInventory('containers'),
+    loadInventory('vms'),
+    ...(state.tab === 'projects' ? [loadInventory('projects')] : []),
   ])
 }
 export async function loadResources() {

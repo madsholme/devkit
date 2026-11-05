@@ -98,6 +98,11 @@ const navigation = computed<NavGroup[]>(() =>
     id,
     label:
       pages[id].title +
+      (id === 'containers'
+        ? ` (${state.containers?.containers.length ?? '—'})`
+        : id === 'vms'
+        ? ` (${state.vms?.vms.length ?? '—'})`
+        : '') +
       (id === 'history' && failureCount.value
         ? ` · ${failureCount.value} ${failureCount.value === 1 ? 'failure' : 'failures'}`
         : ''),

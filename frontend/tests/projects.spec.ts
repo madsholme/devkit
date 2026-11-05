@@ -43,7 +43,10 @@ test('project directory, local resource tabs and worktree drill-down preserve gl
   await expect(shared.getByRole('link')).toHaveCount(0)
   await page.getByRole('link', { name: 'Back to Projects', exact: true }).click()
   await expect(page.getByLabel('Filter projects')).toHaveValue('atlas')
-  await page.locator('.site-header').getByRole('link', { name: 'Containers', exact: true }).click()
+  await page
+    .locator('.site-header')
+    .getByRole('link', { name: /^Containers \(/ })
+    .click()
   await expect(page.getByRole('heading', { name: 'Containers', exact: true })).toBeVisible()
   await expect(page.getByText('standalone-worker', { exact: true })).toBeVisible()
   expect(errors).toEqual([])
