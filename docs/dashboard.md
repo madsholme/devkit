@@ -123,7 +123,11 @@ Open **Projects → a project → Documents** to read plans, specs and other Mar
 under `docs/`, including nested folders. Choose the main checkout or a linked worktree
 from the checkout selector. The file list also exposes root `AGENTS.md` or `AGENT.md`
 (case-insensitive names) as read-only guidance. File and checkout choices are deep-linked
-in the URL. Expand folder rows in the file tree, or use **Expand all** / **Collapse all** above it.
+in the URL. The sidebar's **View** selector offers **Folder tree**, **Files only** (filenames without
+folders or paths), and **Flat paths** (full relative paths). The choice is remembered in
+this browser. Search works in every mode; hover a file to see its full path when names
+repeat. Switching views keeps the selected document, draft and tree expansion state.
+Expand folder rows in the file tree, or use **Expand all** / **Collapse all** above it.
 Search matches full paths and automatically expands matching folders; clear search to
 restore your previous expansion state. Arrow keys navigate and expand/collapse the tree.
 The selected document’s parent folders open automatically. Use **On this page** to

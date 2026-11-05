@@ -77,6 +77,10 @@ test('document editing preserves drafts on conflicts and sign-in expiry, guards 
   await page.getByRole('dialog').getByRole('button', { name: 'Sign in', exact: true }).click()
   await page.getByRole('button', { name: 'Edit', exact: true }).click()
   await page.getByLabel('Markdown source').fill('# Revised plan\n\nKeep my draft.')
+  await page.getByRole('combobox', { name: 'Document selector view' }).click()
+  await page.getByRole('option', { name: 'Files only', exact: true }).click()
+  await expect(page.getByLabel('Markdown source')).toHaveValue(/Keep my draft/)
+
   await page.getByRole('button', { name: 'Preview Markdown' }).click()
   await expect(page.getByRole('heading', { name: 'Revised plan', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Save document', exact: true }).click()
@@ -163,6 +167,58 @@ test('document tree expands folders, reveals search matches and restores collaps
   await expect(page.getByText('No matching documents.')).toBeVisible()
   await page.getByLabel('Filter documents').fill('')
   await page.screenshot({ path: '/tmp/devkit-document-tree.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
+test('document selector switches between tree, filenames and paths while preserving search and selection', async ({
+  page,
+}) => {
+  await page.route('**/api/documents?*', async (route) => {
+    const response = await route.fetch()
+    const data = await response.json()
+    data.files.push({ path: 'docs/archive/design.md', editable: true })
+    return route.fulfill({ json: data })
+  })
+  await page.goto(url)
+  const chooseView = async (name: string) => {
+    await page.getByRole('combobox', { name: 'Document selector view' }).click()
+    await page.getByRole('option', { name, exact: true }).click()
+  }
+  await page.getByRole('button', { name: 'Collapse all', exact: true }).click()
+  await chooseView('Files only')
+  const list = page.getByRole('navigation', { name: 'Markdown files' })
+  await expect(page.getByRole('tree', { name: 'Markdown files' })).toBeHidden()
+  const file = list.getByRole('button', { name: 'docs/specs/design.md', exact: true })
+  await expect(file).toHaveText('design.md')
+  await expect(list.getByText('design.md', { exact: true })).toHaveCount(2)
+  await expect(file).toHaveAttribute('title', 'docs/specs/design.md')
+  await page.getByLabel('Filter documents').fill('specs/')
+  await expect(list.getByRole('button')).toHaveCount(1)
+  await chooseView('Flat paths')
+  await expect(file).toHaveText('docs/specs/design.md')
+  await file.click()
+  await expect(
+    page.getByRole('heading', { name: 'Design specification', exact: true })
+  ).toBeVisible()
+  await expect(file).toHaveAttribute('aria-current', 'page')
+  await page.getByLabel('Filter documents').fill('')
+  await page.reload()
+  await expect(page.getByRole('combobox', { name: 'Document selector view' })).toContainText(
+    'Flat paths'
+  )
+  await expect(file).toHaveAttribute('aria-current', 'page')
+  await chooseView('Folder tree')
+  await expect(page.getByRole('treeitem', { name: 'design.md', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Collapse all', exact: true }).click()
+  await chooseView('Files only')
+  await page.screenshot({ path: '/tmp/devkit-documents-files-only.png', fullPage: true })
+  await chooseView('Folder tree')
+  await expect(page.getByRole('treeitem', { name: 'docs', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  )
+  await chooseView('Flat paths')
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })

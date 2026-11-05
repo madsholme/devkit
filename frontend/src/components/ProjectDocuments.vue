@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
-import { BookOpen, Plus, Pencil, Save, RefreshCw } from 'lucide-vue-next'
+import { BookOpen, FileText, Plus, Pencil, Save, RefreshCw } from 'lucide-vue-next'
 import { Button } from '@madsholme/ui/button'
 import { Input } from '@madsholme/ui/input'
 import { Textarea } from '@madsholme/ui/textarea'
 import { Badge } from '@madsholme/ui/badge'
 import { request, post, APIError } from '../api'
+import { store } from '../format'
 import { state, openDialog, refresh } from '../dashboard'
 import type { Checkout } from '../types'
 import FilterSelect from './FilterSelect.vue'
@@ -38,8 +39,26 @@ const options = computed(() =>
 const files = ref<Entry[]>([])
 const warnings = ref<string[]>([])
 const filter = ref('')
+const documentViews = [
+  { value: 'tree', label: 'Folder tree' },
+  { value: 'files', label: 'Files only' },
+  { value: 'paths', label: 'Flat paths' },
+]
+const savedView = store.get('document-view')
+const documentView = ref(
+  documentViews.some((view) => view.value === savedView) ? savedView! : 'tree'
+)
+watch(documentView, (value) => store.set('document-view', value))
+const fileName = (path: string) => path.split('/').pop() || path
 const filtered = computed(() =>
   files.value.filter((f) => f.path.toLowerCase().includes(filter.value.trim().toLowerCase()))
+)
+const flatFiles = computed(() =>
+  [...filtered.value].sort((a, b) => {
+    const first = documentView.value === 'files' ? fileName(a.path) : a.path
+    const second = documentView.value === 'files' ? fileName(b.path) : b.path
+    return first.localeCompare(second, undefined, { numeric: true }) || a.path.localeCompare(b.path)
+  })
 )
 const document = ref<Document | null>(null)
 const error = ref('')
@@ -267,6 +286,14 @@ async function save() {
           <h2>Documents</h2>
           <span class="note">{{ files.length }}</span>
         </div>
+        <div class="document-view-options">
+          <span class="note">View</span>
+          <FilterSelect
+            v-model="documentView"
+            label="Document selector view"
+            :options="documentViews"
+          />
+        </div>
         <div class="document-filter">
           <Input
             v-model="filter"
@@ -274,14 +301,32 @@ async function save() {
             aria-label="Filter documents"
           />
         </div>
-        <DocumentTree
-          :files="filtered"
-          :selected="!creating ? document?.path : undefined"
-          :scope="checkout"
-          :searching="Boolean(filter.trim())"
-          :disabled="saving"
-          @navigate="navigate"
-        />
+        <div v-show="documentView === 'tree'">
+          <DocumentTree
+            :files="filtered"
+            :selected="!creating ? document?.path : undefined"
+            :scope="checkout"
+            :searching="Boolean(filter.trim())"
+            :disabled="saving"
+            @navigate="navigate"
+          />
+        </div>
+        <nav v-if="documentView !== 'tree'" class="document-file-list" aria-label="Markdown files">
+          <button
+            v-for="file in flatFiles"
+            :key="file.path"
+            type="button"
+            :disabled="saving"
+            :title="file.path"
+            :aria-label="file.path"
+            :aria-current="!creating && document?.path === file.path ? 'page' : undefined"
+            @click="navigate(file.path)"
+          >
+            <FileText :size="15" />
+            <span>{{ documentView === 'files' ? fileName(file.path) : file.path }}</span>
+            <span v-if="!file.editable" class="sr-only">Read-only agent guidance</span>
+          </button>
+        </nav>
         <p v-if="!filtered.length && !loading" class="document-empty note">
           {{
             files.length
@@ -431,6 +476,49 @@ async function save() {
 .document-sidebar {
   overflow: hidden;
 }
+.document-view-options {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0.75rem 0.75rem;
+}
+.document-view-options :deep(button) {
+  flex: 1;
+  min-width: 0;
+}
+.document-file-list {
+  display: grid;
+  padding: 0 0.5rem 0.5rem;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+.document-file-list button {
+  display: flex;
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.65rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.document-file-list svg {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+.document-file-list button:hover {
+  background: var(--muted);
+}
+.document-file-list button[aria-current] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-weight: 600;
+}
+.document-file-list button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
 .document-filter {
   padding: 0 0.75rem 0.75rem;
 }
@@ -484,6 +572,9 @@ async function save() {
   margin-bottom: 1rem;
 }
 @media (max-width: 760px) {
+  .document-file-list {
+    max-height: 16rem;
+  }
   .documents-layout {
     grid-template-columns: minmax(0, 1fr);
   }
