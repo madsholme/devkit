@@ -9,7 +9,9 @@ import ActionButton from './ActionButton.vue'
 import GitSummary from './GitSummary.vue'
 import StatusBadge from './StatusBadge.vue'
 import ContainerControls from './ContainerControls.vue'
-defineProps<{ tree: Checkout; label: string }>()
+withDefaults(defineProps<{ tree: Checkout; label: string; showContainers?: boolean }>(), {
+  showContainers: true,
+})
 </script>
 <template>
   <article class="checkout-row">
@@ -72,10 +74,14 @@ defineProps<{ tree: Checkout; label: string }>()
         />
       </div>
     </div>
-    <p v-if="tree.containers?.length" class="section-label">
+    <p v-if="showContainers && tree.containers?.length" class="section-label">
       Existing containers · original storage and endpoints retained
     </p>
-    <div v-for="container in tree.containers || []" :key="container.id" class="resource-line">
+    <div
+      v-for="container in showContainers ? tree.containers || [] : []"
+      :key="container.id"
+      class="resource-line"
+    >
       <div>
         <div class="resource-identity">
           <ContainerIcon :size="16" /><strong>{{ container.service || container.name }}</strong

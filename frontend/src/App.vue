@@ -108,7 +108,7 @@ const navigation = computed<NavGroup[]>(() =>
 watch(
   () => route.path,
   (path) => {
-    const tab = path.slice(1) as Tab
+    const tab = path.split('/')[1] as Tab
     if (tabs.includes(tab)) {
       state.tab = tab
       store.set('tab', tab)
@@ -350,7 +350,7 @@ onBeforeUnmount(() => {
         <p v-if="reclaimable >= 5e9" class="note">
           {{ (reclaimable / 1e9).toFixed(1) }} GB of Docker data reclaimable
         </p>
-        <header class="workspace-heading">
+        <header v-if="route.name !== 'project'" class="workspace-heading">
           <div>
             <h1>
               <component :is="page.icon" :size="25" />{{ page.title

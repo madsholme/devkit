@@ -12,16 +12,52 @@ The SwiftDesign navigation offers six views, remembered per browser. New links u
 `#/previews`, `#/containers`, `#/vms`, `#/worktrees` and `#/history`; existing links without
 the slash continue to work. On narrow screens, use the navigation menu beside the logo:
 
-- **Projects** (default for new browsers): each main checkout with its linked Git worktrees,
-  container previews and explicitly associated VMs. Configure `projects_dir` in the host
-  config to discover projects before anything runs. Expand/collapse projects or filter by
-  name, path, branch or VM; expansion is preserved on refresh. Signed-in users can launch
-  containers, control configured VMs, and fetch/sync/push each Git checkout directly here.
-  Sync only fast-forwards a clean branch tracking origin; Push is a separate action.
-  Git, VM and container icons distinguish the resources while retaining text labels. Folders needing recipes stay visible.
-  The read-only `/api/projects` catalog remains available with a warning if Docker fails;
-  VM inventory and controls work independently. Paths and Git metadata are readable just
-  like the Worktrees tab; recipe commands and VM disk paths are never returned.
+- **Projects** (default for new browsers): a searchable directory of repositories and project
+  folders, following SwiftConfig's host list/detail flow. Configure `projects_dir` in the host
+  config to discover projects before anything runs. Open a project for **Overview**, **Worktrees**,
+  **Containers** and **Virtual machines**. The top menu always remains global.
+  Overview shows project information and the main checkout. Worktrees includes the main and
+  linked checkouts; selecting one opens **Information**, **Containers** and **Virtual machines**
+  scoped to that checkout. Project-wide runtime tables show worktree/branch links. Search is
+  preserved when returning to the directory, including after a reload.
+  Signed-in users can launch containers, control configured VMs, and fetch/sync/push each Git
+  checkout. Sync only fast-forwards a clean branch tracking origin; Push stays a separate action.
+  Folders needing recipes remain visible. Project, container and VM discovery fail independently;
+  errors retain previous inventory with a visible warning. Paths and Git metadata are readable
+  just like the global Worktrees view; recipe commands and VM disk paths are never returned.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/project-overview-dark.png">
+  <img alt="A project overview with local worktree, container and virtual machine tabs" src="images/project-overview-light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/project-worktree-dark.png">
+  <img alt="A selected feature worktree showing only its containers, with branch links and runtime controls" src="images/project-worktree-light.png">
+</picture>
+
+### Project resource ownership
+
+Registered containers use their existing checkout mapping. Managed preview containers join to
+an exact preview worktree and a unique service container ID. An unrelated Compose project with
+a similar name is not added to the project. Resources with a known project but an unavailable
+or conflicting checkout are labeled **Unassigned worktree** at project level.
+
+The VM inventory supplies an opaque `worktree_key` when one discovered recipe claims the guest;
+`/api/projects` checkout rows supply the corresponding key. UUID selectors take precedence over
+names. Shared worktree claims stay project-level with an explanation, and conflicting project
+claims stay in the global VM inventory. Stopped configured VMs follow the same rule. No raw VM
+recipe/discovery paths or lifecycle commands are added to the public VM response. These keys
+are presentation metadata, never action authorization. A VM without an exact worktree key is
+not assigned to a branch by matching its name. If multiple repositories use the same recipe
+project name and no exact checkout is known, the VM remains in the global inventory.
+
+Project detail links encode the discovered project path as `#/projects/<encoded-path>/overview`.
+Other sections are `worktrees`, `containers` and `vms`; a selected checkout uses the `tree` query
+parameter and its local tab uses `resource`. Reload and browser back/forward retain this scope.
+Missing projects or worktrees show a return link instead of selecting another target.
+
+The remaining global views are:
 
 - **Previews**: mode, health, branch/commit, uptime and URL. A live preview shows its
   worktree's current commit and uncommitted changes, a review how far its worktree has

@@ -35,7 +35,7 @@ const preview = {
       name: 'web',
       status: 'healthy',
       web: true,
-      id: 'abc123def456',
+      id: 'e'.repeat(12),
       image: 'atlas:web',
       ports: [{ port: 3000, protocol: 'tcp', routed: true }],
       urls: ['https://atlas.example.test', 'https://atlas.example.test/api'],
@@ -56,8 +56,35 @@ const registered = {
   ports: ['127.0.0.1:5432 → 5432/tcp'],
   actions: ['stop'],
 }
+const featurePreview = {
+  ...preview,
+  name: 'atlas-search',
+  branch: 'feature/search',
+  worktree: '/home/demo/Work/atlas-review',
+  url: 'https://atlas-search.example.test',
+  services: [{ ...preview.services[0], id: 'd'.repeat(12), image: 'atlas:search' }],
+}
+const mainContainer = {
+  ...registered,
+  id: 'e'.repeat(64),
+  name: 'atlas-web',
+  image: 'atlas:web',
+  registered: false,
+  managed: true,
+  preview: preview.name,
+  service: 'web',
+  ports: ['127.0.0.1:3000 → 3000/tcp'],
+}
+const featureContainer = {
+  ...mainContainer,
+  id: 'd'.repeat(64),
+  name: 'atlas-search-web',
+  image: 'atlas:search',
+  preview: featurePreview.name,
+}
 const checkout = {
   ...git,
+  worktree_key: 'checkout-main',
   path: '/home/demo/Work/atlas',
   branch: 'main',
   project: 'atlas',
@@ -70,6 +97,7 @@ const checkout = {
 }
 const vm = {
   id: 'vm-demo',
+  worktree_key: 'checkout-main',
   name: 'atlas-lab',
   project: 'atlas',
   state: 'running',
@@ -106,7 +134,7 @@ const sample = {
 }
 const fixtures = {
   overview: {
-    previews: [preview],
+    previews: [preview, featurePreview],
     repositories: [
       {
         path: checkout.path + '/.git',
@@ -115,6 +143,7 @@ const fixtures = {
           {
             ...git,
             path: '/home/demo/Work/atlas-review',
+            worktree_key: 'checkout-search',
             branch: 'feature/search',
             changes: 3,
             previews: [],
@@ -155,9 +184,10 @@ const fixtures = {
           {
             ...checkout,
             path: '/home/demo/Work/atlas-review',
+            worktree_key: 'checkout-search',
             branch: 'feature/search',
             changes: 3,
-            previews: [],
+            previews: [featurePreview],
             containers: [],
           },
         ],
@@ -168,6 +198,7 @@ const fixtures = {
         main: {
           ...checkout,
           path: '/home/demo/Work/beacon',
+          worktree_key: 'checkout-beacon',
           project: 'beacon',
           branch: 'main',
           subject: 'Update the worker schedule',
@@ -181,6 +212,8 @@ const fixtures = {
   containers: {
     containers: [
       registered,
+      mainContainer,
+      featureContainer,
       {
         ...registered,
         id: 'b'.repeat(64),
@@ -205,7 +238,32 @@ const fixtures = {
     ],
     warnings: [],
   },
-  vms: { vms: [vm], warnings: [] },
+  vms: {
+    vms: [
+      vm,
+      {
+        ...vm,
+        id: 'vm-search',
+        name: 'atlas-search-lab',
+        worktree_key: 'checkout-search',
+        state: 'stopped',
+        actions: ['start'],
+        connections: [],
+        control_id: 'vm-search',
+      },
+      {
+        ...vm,
+        id: 'vm-shared',
+        name: 'atlas-shared',
+        worktree_key: undefined,
+        worktree_note: 'Mapped by multiple worktrees',
+        actions: [],
+        connections: [],
+        control_id: undefined,
+      },
+    ],
+    warnings: [],
+  },
   history: {
     events: [
       {
@@ -287,7 +345,41 @@ const fixtures = {
     labels: { 'com.docker.compose.project': 'atlas' },
   },
   pair: {
-    qr: ["111111100110001010011001001111111", "100000100100100110101110101000001", "101110101010101010001110101011101", "101110101110000000100011101011101", "101110101110101110001101101011101", "100000101100101001110100001000001", "111111101010101010101010101111111", "000000001000000010011111100000000", "101111100110111011010010001111100", "001000011001010001011001001101101", "100100110110011101000010010010110", "111011011001010001101110000011110", "011111111011001110001010110011010", "000011010111010100100001001001011", "001110101011010110001110011110010", "110001000001101100100110111010100", "011100101111100111101011110111001", "001001010111101010111011011101101", "101100111111111110100010101110110", "001010010000001100011101000111111", "011111100111010000110011110111001", "100110011010011111001101001001001", "101111111010111001010100110001110", "101000000101000010011100000111110", "101000101110001001010010111111000", "000000001011000011010000100010101", "111111100111100111001111101010110", "100000101010010101101100100011111", "101110101100110110000010111111011", "101110101000101100100011000010111", "101110101011101110101110111101000", "100000100111011100100101010011100", "111111101101100101010011110101010"],
+    qr: [
+      '111111100110001010011001001111111',
+      '100000100100100110101110101000001',
+      '101110101010101010001110101011101',
+      '101110101110000000100011101011101',
+      '101110101110101110001101101011101',
+      '100000101100101001110100001000001',
+      '111111101010101010101010101111111',
+      '000000001000000010011111100000000',
+      '101111100110111011010010001111100',
+      '001000011001010001011001001101101',
+      '100100110110011101000010010010110',
+      '111011011001010001101110000011110',
+      '011111111011001110001010110011010',
+      '000011010111010100100001001001011',
+      '001110101011010110001110011110010',
+      '110001000001101100100110111010100',
+      '011100101111100111101011110111001',
+      '001001010111101010111011011101101',
+      '101100111111111110100010101110110',
+      '001010010000001100011101000111111',
+      '011111100111010000110011110111001',
+      '100110011010011111001101001001001',
+      '101111111010111001010100110001110',
+      '101000000101000010011100000111110',
+      '101000101110001001010010111111000',
+      '000000001011000011010000100010101',
+      '111111100111100111001111101010110',
+      '100000101010010101101100100011111',
+      '101110101100110110000010111111011',
+      '101110101000101100100011000010111',
+      '101110101011101110101110111101000',
+      '100000100111011100100101010011100',
+      '111111101101100101010011110101010',
+    ],
     url: 'https://t3.example.test/pair?token=synthetic-only',
     code: '123-456',
     expires: new Date(Date.now() + 600000).toISOString(),

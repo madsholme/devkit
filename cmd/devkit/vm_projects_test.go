@@ -158,3 +158,32 @@ func TestVMProjectsHostRootsValidate(t *testing.T) {
 		t.Fatal("relative project root accepted")
 	}
 }
+
+func TestVMWorktreeIdentityRequiresUniqueRecipeAndUsesUUIDPrecedence(t *testing.T) {
+	const uuid = "aaaaaaaa-1111-1111-1111-111111111111"
+	rows := []virtualMachine{{Name: "guest", UUID: uuid}}
+	projects := []projectConfig{
+		{root: "/private/main", Project: "atlas", VMs: []vmSelector{{Name: "guest"}}},
+		{root: "/private/feature", Project: "atlas", VMs: []vmSelector{{UUID: uuid}}},
+	}
+	assignVMProjects(rows, projects)
+	if rows[0].WorktreeKey != digest("/private/feature") || rows[0].Project != "atlas" {
+		t.Fatalf("UUID mapping: %+v", rows[0])
+	}
+	projects = append(projects, projectConfig{root: "/private/outside-catalog", Project: "atlas", VMs: []vmSelector{{UUID: uuid}}})
+	assignVMProjects(rows, projects)
+	if rows[0].WorktreeKey != "" || rows[0].WorktreeNote == "" || rows[0].Project != "atlas" {
+		t.Fatalf("ambiguous worktree: %+v", rows[0])
+	}
+	data, _ := json.Marshal(rows)
+	if strings.Contains(string(data), "/private") {
+		t.Fatalf("private discovery path leaked: %s", data)
+	}
+	rows = append(rows, virtualMachine{Name: "another", UUID: uuid})
+	assignVMProjects(rows, projects[:2])
+	for _, row := range rows {
+		if row.WorktreeKey != "" || row.Project != "" {
+			t.Fatalf("duplicate VM assigned: %+v", row)
+		}
+	}
+}

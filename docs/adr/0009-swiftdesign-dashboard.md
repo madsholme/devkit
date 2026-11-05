@@ -15,3 +15,10 @@ production files, with immutable caching for fingerprinted assets and no-store H
 A cosmetic CSS port would not use the requested components. A separately deployed
 frontend would complicate host setup and the current same-origin authentication contract.
 Neither is used. Shared presentation packages do not grant permissions or own host data.
+
+Project detail navigation follows SwiftConfig's host flow while the global menu stays global.
+Resource grouping is a read-only join over existing inventories. For VM worktree grouping,
+the backend emits a hash of the resolved recipe root only for a unique mapping; the checkout
+catalog emits the same key. This avoids exposing VM discovery paths or treating an incomplete
+browser catalog as proof of unique ownership. Shared/ambiguous claims remain unassigned at
+worktree level. The key grants no lifecycle capabilities and is never an action target.

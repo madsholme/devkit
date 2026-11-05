@@ -54,7 +54,9 @@ old names are dropped on purpose.
   `go build -o bin/devkit ./cmd/devkit`; the Go version is pinned in `mise.toml`.
 - `frontend/`: Vue 3 dashboard using SwiftDesign components and themes; SwiftConfig is
   the layout reference. `src/dashboard.ts` owns API/state/action orchestration; `src/views/`
-  holds the six views and `src/components/` shared controls/dialogs.
+  holds the six global views plus project detail and `src/components/` shared controls/dialogs.
+  `src/project-inventory.ts` joins exact container/worktree identities and server-provided VM
+  worktree keys for project detail tabs. These read-only associations never grant action authority.
   `pnpm --dir frontend build` type-checks and generates committed `web/dist/` assets.
   `web/web.go` embeds those assets and icons; Go-only builds use the checked-in output.
   `frontend/vendor/README.md` records the pinned SwiftDesign package provenance.

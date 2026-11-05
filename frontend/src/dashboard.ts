@@ -17,7 +17,7 @@ import type {
 export const tabs = ['projects', 'previews', 'containers', 'vms', 'worktrees', 'history'] as const
 export type Tab = (typeof tabs)[number]
 export const filters = reactive({
-  projects: '',
+  projects: store.get('projects-text') || '',
   containers: '',
   containerStatus: '',
   vms: '',
@@ -29,6 +29,7 @@ export const filters = reactive({
 })
 watch(filters, () => {
   for (const [key, value] of Object.entries({
+    'projects-text': filters.projects,
     'filter-text': filters.previews,
     'filter-mode': filters.mode,
     'filter-status': filters.status,
@@ -129,7 +130,7 @@ export async function refresh() {
     loadInventory('overview'),
     loadInventory('history'),
     ...(state.tab === 'projects'
-      ? [loadInventory('projects'), loadInventory('vms')]
+      ? [loadInventory('projects'), loadInventory('vms'), loadInventory('containers')]
       : state.tab === 'vms'
       ? [loadInventory('vms')]
       : state.tab === 'containers'

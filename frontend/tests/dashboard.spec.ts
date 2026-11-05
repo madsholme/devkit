@@ -14,12 +14,16 @@ test('six views, filters, details, safe anonymous controls and legacy hash links
   await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Fetch origin' })).toHaveCount(0)
   await page.getByLabel('Filter projects').fill('beacon')
-  await expect(page.locator('.project-trigger')).toHaveCount(1)
+  await expect(page.locator('.project-directory-row')).toHaveCount(1)
   await page.getByLabel('Filter projects').fill('')
   await page.getByRole('link', { name: 'Containers', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Containers', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(1)
-  await page.getByRole('button', { name: 'Details', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Details', exact: true })).toHaveCount(3)
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'atlas-db' })
+    .getByRole('button', { name: 'Details', exact: true })
+    .click()
   await expect(page.getByRole('dialog')).toContainText('POSTGRES_PASSWORD')
   await page.getByRole('dialog').getByLabel('Filter container details').fill('PGDATA')
   await expect(page.getByRole('dialog')).not.toContainText('POSTGRES_PASSWORD')
@@ -101,7 +105,11 @@ test('log follow stops on close, pairing clears, system uses full sampling only 
   page,
 }) => {
   await page.goto('/#/containers')
-  await page.getByRole('button', { name: 'Logs', exact: true }).click()
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'atlas-db' })
+    .getByRole('button', { name: 'Logs', exact: true })
+    .click()
   await expect(page.locator('.log-output')).toContainText('application connected')
   await expect(page.locator('.log-output')).not.toContainText('healthcheck')
   await page.getByLabel('Hide health checks', { exact: true }).click()
@@ -127,13 +135,14 @@ test('independent failure retains data and expired actions require fresh sign-in
   page,
 }) => {
   await page.goto('/#/projects')
-  await expect(page.getByText('atlas-lab', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'atlas', exact: true })).toBeVisible()
   await page.route('**/api/overview', (route) =>
     route.fulfill({ status: 503, body: 'Docker unavailable' })
   )
   await page.getByRole('button', { name: 'Refresh', exact: true }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Docker unavailable' })).toBeVisible()
-  await expect(page.getByText('atlas-lab', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'atlas', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: 'atlas', exact: true }).click()
   await signIn(page)
   let count = 0
   await page.route('**/api/action', (route) => {
@@ -152,7 +161,7 @@ test('desktop/mobile themes and navigation render without horizontal page overfl
 }) => {
   await page.addInitScript(() => localStorage.setItem('devkit.swift-theme', 'rn-light'))
   await page.goto('/#/projects')
-  await expect(page.getByText('atlas-lab', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'atlas', exact: true })).toBeVisible()
   await page.screenshot({ path: '/tmp/devkit-swift-desktop-light.png', fullPage: true })
   await page.getByRole('button', { name: 'Settings', exact: true }).click()
   await page.getByRole('menuitem', { name: 'Theme', exact: true }).hover()

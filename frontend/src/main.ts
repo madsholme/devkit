@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import App from './App.vue'
 import ProjectsView from './views/ProjectsView.vue'
+import ProjectDetailView from './views/ProjectDetailView.vue'
 import PreviewsView from './views/PreviewsView.vue'
 import ContainersView from './views/ContainersView.vue'
 import VMsView from './views/VMsView.vue'
@@ -25,6 +26,7 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: `/${initial}` },
     { path: '/projects', component: ProjectsView },
+    { path: '/projects/:project/:section?', name: 'project', component: ProjectDetailView },
     { path: '/previews', component: PreviewsView },
     { path: '/containers', component: ContainersView },
     { path: '/vms', component: VMsView },

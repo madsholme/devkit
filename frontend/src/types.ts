@@ -14,6 +14,7 @@ export interface ProjectPreview {
   url: string
 }
 export interface Container {
+  worktree?: string
   id: string
   name: string
   image: string
@@ -28,6 +29,7 @@ export interface Container {
   control_note?: string
 }
 export interface Checkout extends GitState {
+  worktree_key?: string
   path: string
   branch: string
   project: string
@@ -45,6 +47,9 @@ export interface Project {
   worktrees: Checkout[]
 }
 export interface VM {
+  worktree_key?: string
+  worktree_note?: string
+  uuid?: string
   id: string
   name: string
   project: string

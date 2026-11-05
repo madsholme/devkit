@@ -152,10 +152,14 @@ func managedVMs(ctx context.Context, rows []virtualMachine, projects []projectCo
 			}
 			switch {
 			case conflict:
+				t.vm.WorktreeKey = ""
+				t.vm.WorktreeNote = "Multiple recipes or VMs claim this target"
 				t.vm.ControlNote = "Multiple recipes or VMs claim this target; give each controlled VM one unique definition."
 			case len(matches) == 1 && t.vm.Source != firstOf(s.Control.LibvirtURI, "qemu"):
 				t.vm.ControlNote = "The observed VM provider does not match its configured control provider."
 			default:
+				t.vm.WorktreeKey = digest(cfg.root)
+				t.vm.WorktreeNote = ""
 				var state string
 				var err error
 				if s.Control.LibvirtURI != "" {

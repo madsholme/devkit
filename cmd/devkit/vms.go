@@ -32,6 +32,8 @@ type vmConnection struct {
 type vmDisk struct{ path, format string }
 
 type virtualMachine struct {
+	WorktreeKey    string         `json:"worktree_key,omitempty"`
+	WorktreeNote   string         `json:"worktree_note,omitempty"`
 	ControlID      string         `json:"control_id,omitempty"`
 	Actions        []string       `json:"actions,omitempty"`
 	ControlNote    string         `json:"control_note,omitempty"`

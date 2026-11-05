@@ -38,6 +38,9 @@ func TestVMControlStoppedInventoryAndPrivacy(t *testing.T) {
 	if len(targets) != 1 || targets[0].vm.State != "stopped" || strings.Join(targets[0].vm.Actions, ",") != "start" {
 		t.Fatalf("stopped VM lost: %+v", targets)
 	}
+	if targets[0].vm.WorktreeKey != digest(cfg.root) {
+		t.Fatal("stopped VM missing worktree identity")
+	}
 	raw, _ := json.Marshal(targets[0].vm)
 	if strings.Contains(string(raw), "secret") || strings.Contains(string(raw), "/private") {
 		t.Fatalf("leaked: %s", raw)
@@ -47,7 +50,7 @@ func TestVMControlStoppedInventoryAndPrivacy(t *testing.T) {
 	other.root = "/other/worktree"
 	targets = managedVMs(context.Background(), nil, []projectConfig{cfg, other}, nil)
 	for _, target := range targets {
-		if len(target.vm.Actions) != 0 || target.vm.ControlNote == "" {
+		if len(target.vm.Actions) != 0 || target.vm.ControlNote == "" || target.vm.WorktreeKey != "" || target.vm.WorktreeNote == "" {
 			t.Fatal("conflicting launchers actionable")
 		}
 	}

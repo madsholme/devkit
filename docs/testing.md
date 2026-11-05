@@ -132,7 +132,11 @@ To use installed Chromium, set `CHROMIUM_PATH=/usr/bin/chromium-browser` for `te
 The browser suite starts an isolated server on `127.0.0.1:4178` with invented host data.
 It covers all six views, anonymous/signed-in controls, exact confirmation targets,
 sharing, details, log follow, pairing, system sampling, failed discovery, expired
-sessions, theme selection and mobile navigation. It executes no host actions.
+sessions, theme selection and mobile navigation. Project checks cover list/detail navigation,
+worktree resource isolation, project-wide branch links, ambiguous VM assignments, deep links,
+reload/back behavior and missing selections. Unit tests pin exact container association and
+opaque VM worktree mapping; Go tests retain UUID precedence, duplicate-claim handling and
+private-path/command exclusion. It executes no host actions.
 Screenshots are written to `/tmp/devkit-swift-*.png`; test artifacts stay gitignored.
 
 For an interactive synthetic preview, run `node frontend/tests/fixture-server.mjs`
