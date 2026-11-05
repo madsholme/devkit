@@ -158,3 +158,11 @@ retained partial failures and authenticated action planning. `tests/git_runtime_
 also exercises real HTTP job → CLI stdin → template/Git creation and duplicate rejection using
 temporary directories. `DEVKIT_GIT_BINARY` selects the binary. Frontend `test:ui` covers the
 Create Project modal, cancel, preserved guidance, duplicate errors, retained input and catalog refresh.
+
+Document tests cover registered main/linked checkouts, empty catalogs, root agent aliases,
+read-only guidance, nested creation, preserved modes, stale/concurrent writes, traversal,
+links, special/oversized/non-text files and private stdin action plans. The real Git HTTP
+acceptance test includes document creation above the old 64 KiB request limit, read/edit,
+stale rejection and unchanged Git HEAD. Frontend tests cover Markdown escaping and safe
+links; browser tests cover reading, checkout selection, relative links, create/edit preview,
+authentication expiry, conflict retention and accepted/cancelled unsaved navigation.

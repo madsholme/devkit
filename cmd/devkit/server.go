@@ -177,6 +177,16 @@ func newHandler() (http.Handler, error) {
 			if data, err = containersOverview(r.Context()); err == nil {
 				sendJSON(w, data)
 			}
+		case "/api/documents":
+			var data documentList
+			if data, err = listDocuments(query.Get("worktree")); err == nil {
+				sendJSON(w, data)
+			}
+		case "/api/document":
+			var data documentData
+			if data, err = readDocument(query.Get("worktree"), query.Get("path")); err == nil {
+				sendJSON(w, data)
+			}
 		case "/api/projects":
 			var data projectsData
 			if data, err = projectsOverview(); err == nil {
@@ -335,7 +345,7 @@ func (h *actionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		actionRequest
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil && r.URL.Path != "/api/logout" {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&body); err != nil && r.URL.Path != "/api/logout" {
 		sendError(w, http.StatusBadRequest, "Send JSON.")
 		return
 	}

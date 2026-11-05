@@ -19,6 +19,9 @@ import (
 // instead reserves a new child of the configured projects directory.
 
 type actionRequest struct {
+	Path       string `json:"path"`
+	Expected   string `json:"expected"`
+	Content    string `json:"content"`
 	Name       string `json:"name"`
 	Remote     string `json:"remote"`
 	AgentNotes string `json:"agent_notes"`
@@ -72,6 +75,9 @@ func repoDir(trees []worktree, preferred string) string {
 }
 
 func planAction(req actionRequest) (plannedAction, error) {
+	if req.Action == "document-save" {
+		return planDocumentSave(req)
+	}
 	if req.Action == "project-create" {
 		return planProjectCreate(req)
 	}

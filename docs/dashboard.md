@@ -18,7 +18,7 @@ On narrow screens, use the navigation menu beside the logo:
 
 - **Projects** (default for new browsers): a searchable directory of repositories and project
   folders, following SwiftConfig's host list/detail flow. Configure `projects_dir` in the host
-  config to discover projects before anything runs. Open a project for **Overview**, **Worktrees**,
+  config to discover projects before anything runs. Open a project for **Overview**, **Documents**, **Worktrees**,
   **Containers** and **Virtual machines**. The top menu always remains global.
   Overview shows project information and the main checkout. Worktrees includes the main and
   linked checkouts; selecting one opens **Information**, **Containers** and **Virtual machines**
@@ -116,6 +116,36 @@ complete starter template, initializes `main`, and makes one initial commit. An 
 remote only sets origin locally. Existing destinations are refused; validation errors
 keep your entries in the form. Successful jobs refresh the project catalog and global
 counts. See [project creation](projects.md#create-a-project) for CLI usage and failure handling.
+
+## Project documents
+
+Open **Projects → a project → Documents** to read plans, specs and other Markdown
+under `docs/`, including nested folders. Choose the main checkout or a linked worktree
+from the checkout selector. The file list also exposes root `AGENTS.md` or `AGENT.md`
+(case-insensitive names) as read-only guidance. File and checkout choices are deep-linked
+in the URL. Search the file list or use **On this page** to navigate longer plans.
+
+The reader formats headings, lists, tables, quotes and code blocks. Relative Markdown
+links open another supported document in the same checkout. Raw HTML displays as text;
+images display their labels instead of loading external resources. External HTTP(S) links
+open separately. Non-Markdown source files and arbitrary project assets are not served.
+
+**New document** and **Edit** require sign-in. Enter a path inside docs/ (for example
+`plans/release.md`), write Markdown and use **Preview Markdown** before saving. New parent
+folders are created as needed. Saves leave ordinary uncommitted changes in the selected
+checkout; no Git commit or hook is run. Root agent guidance cannot be edited here.
+
+A stale version, an existing new-file destination, or a failed save leaves the editor's
+draft intact. If another tool changed a plan, copy your draft before reloading and reconcile
+it with the new disk version. There is no force-overwrite button. Unsaved navigation asks
+before discarding your draft; refresh/close uses the browser's unsaved-change prompt.
+Drafts live in the current page, not persistent browser storage.
+
+As with other dashboard reads, these files are visible to anyone who can reach the
+private dashboard. Use docs/ for material suitable for that audience. Files must be
+regular UTF-8 Markdown up to 256 KiB; hidden paths, symlinks, hardlinks and special files
+are excluded. The listing stops at 1000 documents, 5000 scanned entries or 16 nested
+levels and reports omissions. See [document CLI](projects.md#read-and-edit-documents).
 
 ## History
 

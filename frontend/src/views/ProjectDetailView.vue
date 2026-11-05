@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   Container,
   Monitor,
   Info,
+  BookOpen,
   RefreshCw,
   ChevronRight,
 } from 'lucide-vue-next'
@@ -20,6 +21,7 @@ import { projectLocation } from '../project-inventory'
 import { home, short, up } from '../format'
 import CheckoutRow from '../components/CheckoutRow.vue'
 import ProjectContainers from '../components/ProjectContainers.vue'
+const ProjectDocuments = defineAsyncComponent(() => import('../components/ProjectDocuments.vue'))
 import ProjectVMs from '../components/ProjectVMs.vue'
 import InventoryNotice from '../components/InventoryNotice.vue'
 import type { Checkout } from '../types'
@@ -30,6 +32,7 @@ const inventory = computed(() =>
 const project = computed(() => inventory.value?.project)
 const sections = [
   { id: 'overview', label: 'Overview', icon: Info },
+  { id: 'documents', label: 'Documents', icon: BookOpen },
   { id: 'worktrees', label: 'Worktrees', icon: GitBranch },
   { id: 'containers', label: 'Containers', icon: Container },
   { id: 'vms', label: 'Virtual machines', icon: Monitor },
@@ -366,6 +369,11 @@ const summary = computed(() =>
           </p>
         </div>
       </template>
+      <ProjectDocuments
+        v-else-if="section === 'documents'"
+        :checkouts="inventory.checkouts"
+        :main="project.main.path"
+      />
       <ProjectContainers
         v-else-if="section === 'containers'"
         :rows="inventory.containers"

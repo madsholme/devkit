@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -142,7 +143,33 @@ def main():
             history = (parent/'state/history.jsonl').read_text()
             assert notes not in history
             assert any(e['action'] == 'project-create' and e['ok'] for e in map(json.loads, history.splitlines()))
-            print('PASS: authenticated HTTP jobs -> CLI -> real local Git fetch/sync/push, project creation with stdin notes/initial commit/origin, duplicate refusal, history, anonymous denial')
+            # Exercise bounded Markdown writes over the real CLI stdin transport.
+            doc_payload = {'action': 'document-save', 'worktree': str(created),
+                           'path': 'docs/plans/first.md', 'expected': 'new',
+                           'content': '# Project plan\n\n' + ('Detailed requirement.\n' * 4000)}
+            result = action('document', payload=doc_payload)
+            assert doc_payload['content'] not in result['output']
+            query = urllib.parse.urlencode({'worktree': str(created), 'path': doc_payload['path']})
+            doc = request('/api/document?' + query)
+            assert doc['content'] == doc_payload['content'] and doc['editable']
+            listing = request('/api/documents?' + urllib.parse.urlencode({'worktree': str(created)}))
+            assert any(f['path'] == doc_payload['path'] for f in listing['files'])
+            agent = request('/api/document?' + urllib.parse.urlencode({'worktree': str(created), 'path': 'AGENTS.md'}))
+            assert not agent['editable']
+            doc_payload.update(expected=doc['version'], content='# Revised plan\n\nUpdated from the dashboard.')
+            action('document', payload=doc_payload)
+            assert (created/'docs/plans/first.md').read_text() == doc_payload['content']
+            try:
+                request('/api/action', doc_payload)
+                raise AssertionError('Stale document overwrite accepted')
+            except urllib.error.HTTPError as error:
+                assert error.code == 400
+            assert git(created, 'rev-parse', 'HEAD') == before, 'Document save committed changes'
+            assert git(created, 'status', '--porcelain'), 'Document changes were not visible to Git'
+            history = (parent/'state/history.jsonl').read_text()
+            assert doc_payload['content'] not in history
+            assert any(e['action'] == 'document-save' and e['ok'] for e in map(json.loads, history.splitlines()))
+            print('PASS: authenticated HTTP jobs -> CLI -> real local Git fetch/sync/push, project creation with stdin notes/initial commit/origin, document create/read/edit and stale refusal, history, anonymous denial')
         finally:
             server.terminate()
             try:

@@ -397,6 +397,14 @@ const session = (signed) => ({
     default_hours: 4,
   },
 })
+const demoDocuments = {
+  'AGENTS.md':
+    '# Agent guidance\n\nUse devkit for previews. Keep project conventions alongside these instructions.\n',
+  'docs/plans/redesign.md':
+    '# Project redesign\n\nMake project plans easy to find and read.\n\n## Scope\n\n- Browse the project documentation\n- Read plans from each worktree\n- Keep changes in Git\n\n## Delivery plan\n\n| Step | Status |\n| --- | --- |\n| Discover | Complete |\n| Build | In progress |\n| Review | Next |\n\n```sh\ndevkit docs list\n```\n\n## Acceptance criteria\n\n- [x] Preserve existing guidance\n- [ ] Review the final plan\n\nSee the [design spec](../specs/design.md).\n',
+  'docs/specs/design.md':
+    '# Design specification\n\n## Reading experience\n\nUse a comfortable line length, clear headings and a checkout selector.\n\n> Changes stay in the selected worktree.\n',
+}
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1')
   const endpoint = url.pathname.slice(5)
@@ -405,6 +413,27 @@ createServer(async (req, res) => {
     res.end(JSON.stringify(value))
   }
   if (url.pathname.startsWith('/api/')) {
+    if (endpoint === 'documents')
+      return json({
+        files: Object.keys(demoDocuments).map((path) => ({
+          path,
+          editable: path.startsWith('docs/'),
+        })),
+        warnings: [],
+      })
+    if (endpoint === 'document') {
+      const path = url.searchParams.get('path')
+      if (!(path in demoDocuments)) {
+        res.writeHead(404)
+        return res.end('Document not found.')
+      }
+      return json({
+        path,
+        editable: path.startsWith('docs/'),
+        content: demoDocuments[path],
+        version: 'a'.repeat(64),
+      })
+    }
     if (endpoint === 'session') return json(session(req.headers.cookie?.includes('fixture=signed')))
     if (endpoint === 'login') {
       let body = ''

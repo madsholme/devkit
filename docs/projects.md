@@ -90,6 +90,37 @@ Associated VMs show their existing **Start**, **Stop** and **Restart** controls;
 Each VM still needs an explicit mapping and lifecycle adapter below. Launching
 containers never implicitly starts VMs, and launching a VM never starts containers.
 
+## Read and edit documents
+
+The dashboard's **Documents** tab reads Markdown from the selected project's main
+checkout or linked worktree. Root `AGENTS.md`/`AGENT.md` is view-only; Markdown under
+`docs/` can be created or edited after sign-in. To use the same behavior from the CLI,
+run in the root of a registered project checkout:
+
+```sh
+devkit docs list
+devkit docs read docs/plans/release.md
+cat plan.md | devkit docs save docs/plans/release.md --expected new --file -
+```
+
+List and read produce JSON. `read` includes the exact content and its SHA-256 `version`.
+For an edit, pass that version to `--expected VERSION` with the updated content supplied
+through `--file FILE` or `--file -` (stdin). `new` only creates a nonexistent destination.
+Paths must be non-hidden `.md` files under docs/; nested folders are created for new files.
+The current folder must still be registered through project discovery when the save runs.
+
+Saves preserve existing permission bits, use a sibling temporary file and atomic
+publication, and serialize devkit saves per checkout. Version checks reject stale edits
+and observed external changes. External editors do not share the lock: avoid editing the
+same document simultaneously because a change after the final check can still race the
+atomic replacement. No existing file is removed on failure, and failed drafts remain in
+the dashboard editor. No commits, hooks, fetches or pushes occur. New files and edited
+plans appear as ordinary Git working-tree changes.
+
+The individual file limit is 256 KiB of UTF-8 text without NUL bytes. Symbolic/hard links
+and special files are refused. Document contents travel to CLI jobs over stdin and are
+excluded from job output/history; successful saves record the document path only.
+
 ## Existing Compose stacks
 
 To show an existing stack under its project without recreating containers or moving
