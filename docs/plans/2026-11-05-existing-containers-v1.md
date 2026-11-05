@@ -57,4 +57,23 @@ it does not modify the milestone roadmap or its accepted security requirements.
   cancel/confirm stop, start, status refresh, Details/Logs and both inventory views;
   no JavaScript errors or mobile horizontal overflow. The isolated fixture has no
   Traefik certificate, so its certificate warning is expected.
-- Live deployment and unchanged-runtime verification remain pending.
+- Deployed source commit `43dea08` as `existing-compose-20261105` on devbox.
+  The three healthy restored PlayWarden containers now appear under the project;
+  existing VM entries and unrelated stopped M5 database remain unchanged.
+- Private before/after evidence matches all PlayWarden IDs, start times, images,
+  configuration hashes, mounts, published ports, networks and secret-file hashes.
+  Only devkit-web restarted; no live PlayWarden or VM action was invoked.
+- Read-only browser verification confirms the deployed project grouping, original
+  UI/device endpoints, VM section and Details/Logs/sign-in hints. Its first check
+  ran before the independently loaded VM inventory arrived; waiting for that
+  existing asynchronous load passed. No application repair was needed.
+- The isolated runtime fixture was signaled to clean up. Previous dashboard binary
+  and exact host recipe are retained in the host's private devkit integration
+  backup, alongside matching before/after snapshots and the verified receipt.
+
+## Delivered scope
+
+Existing-stack registration is complete. It does not add public sharing or a new
+preview URL. Endpoint migration remains deferred per the user's active-M5 constraint.
+Use the existing project controls only when intentionally operating that runtime;
+future preview conversion must be coordinated with M5 and preserve its retained data.
