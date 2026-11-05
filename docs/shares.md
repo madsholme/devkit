@@ -36,6 +36,16 @@ It also removes this machine's leftover tunnels and DNS records, e.g. after a cr
 mid-share. Tunnels are named `devkit-<machine>-<preview>` and DNS records carry the
 comment `devkit share <machine>`; devkit never touches anything else in the account.
 
+## Checking shares
+
+`devkit doctor` checks shares without changing anything. It fails when the token cannot reach the
+share domain, list the account's tunnels (Account / Cloudflare Tunnel) or read its DNS records, when
+a share's `cloudflared` container is not running, or when Cloudflare reports its tunnel down. It
+warns about a share past its expiry that is still public (a sign `devkit-web` is not running) and
+about this machine's leftover tunnels and DNS records older than ten minutes. `devkit unshare
+--expired` removes both. Whether the token may also create tunnels and DNS records only shows when
+you share.
+
 While shared, the preview's web service gets `DEVKIT_PUBLIC_URL` (the web container is
 recreated to pick it up, and again when the share ends). Let the app accept that host,
 e.g. Django's `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`, and build absolute URLs

@@ -63,7 +63,8 @@ again at any time to change something or repair the host. It:
 set them) and fails where there is none, e.g. a credential that is not configured yet.
 `devkit doctor` checks the same things at any time: config, Docker, Tailscale, DNS, the proxy
 network, where Traefik listens, Traefik, the certificate (trusted, days left), the dashboard service, lingering, the
-harness and the Cloudflare tokens. Each line ends with how to fix it; it exits non-zero when a
+harness, the Cloudflare tokens and public shares (see [Public shares](shares.md#checking-shares)).
+Each line ends with how to fix it; it exits non-zero when a
 check fails.
 
 Rebuild after pulling changes; replacing the binary is safe while `devkit web` runs, which
