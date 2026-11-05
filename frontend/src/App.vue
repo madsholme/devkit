@@ -93,16 +93,19 @@ const pages = {
   },
 }
 const page = computed(() => pages[state.tab])
+const inventoryCounts = computed(() => ({
+  projects: state.projects?.projects.length,
+  previews: state.overview?.previews.length,
+  containers: state.containers?.containers.length,
+  vms: state.vms?.vms.length,
+  worktrees: state.overview?.repositories.reduce((total, repo) => total + repo.worktrees.length, 0),
+}))
 const navigation = computed<NavGroup[]>(() =>
   tabs.map((id) => ({
     id,
     label:
       pages[id].title +
-      (id === 'containers'
-        ? ` (${state.containers?.containers.length ?? '—'})`
-        : id === 'vms'
-        ? ` (${state.vms?.vms.length ?? '—'})`
-        : '') +
+      (id !== 'history' ? ` (${inventoryCounts.value[id] ?? '—'})` : '') +
       (id === 'history' && failureCount.value
         ? ` · ${failureCount.value} ${failureCount.value === 1 ? 'failure' : 'failures'}`
         : ''),

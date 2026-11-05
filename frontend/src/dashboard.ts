@@ -131,7 +131,7 @@ export async function refresh() {
     loadInventory('history'),
     loadInventory('containers'),
     loadInventory('vms'),
-    ...(state.tab === 'projects' ? [loadInventory('projects')] : []),
+    loadInventory('projects'),
   ])
 }
 export async function loadResources() {

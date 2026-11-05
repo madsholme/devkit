@@ -15,6 +15,11 @@ test('six views, filters, details, safe anonymous controls and legacy hash links
   await expect(page.getByRole('button', { name: 'Fetch origin' })).toHaveCount(0)
   await page.getByLabel('Filter projects').fill('beacon')
   await expect(page.locator('.project-directory-row')).toHaveCount(1)
+  for (const label of ['Projects (2)', 'Previews (2)', 'Worktrees (2)']) {
+    await expect(
+      page.locator('.site-header').getByRole('link', { name: label, exact: true })
+    ).toBeVisible()
+  }
   await expect(
     page.locator('.site-header').getByRole('link', { name: 'Containers (5)', exact: true })
   ).toBeVisible()
@@ -39,12 +44,12 @@ test('six views, filters, details, safe anonymous controls and legacy hash links
   await expect(
     page.getByText('remote-viewer spice://127.0.0.1:5931', { exact: true })
   ).toBeVisible()
-  await page.getByRole('link', { name: 'Worktrees', exact: true }).click()
+  await page.getByRole('link', { name: /^Worktrees \(/ }).click()
   await expect(page.getByRole('heading', { name: 'Worktrees', exact: true })).toBeVisible()
   await page.getByRole('link', { name: /^History/ }).click()
   await page.getByLabel('Filter history').fill('failed')
   await expect(page.getByText('Build check failed', { exact: true })).toBeVisible()
-  await page.getByRole('link', { name: 'Previews', exact: true }).click()
+  await page.getByRole('link', { name: /^Previews \(/ }).click()
   await page.getByRole('button', { name: 'Show containers for atlas-main' }).click()
   await expect(page.getByRole('button', { name: 'Details', exact: true })).toBeVisible()
   await page.getByLabel('Filter previews').fill('missing')
@@ -61,6 +66,9 @@ test('sign-in, cancel/confirm exact container and VM targets, preview destroy an
     if (req.url().endsWith('/api/action')) actions.push(req.postDataJSON())
   })
   await page.goto('/#/containers')
+  await expect(
+    page.locator('.site-header').getByRole('link', { name: 'Projects (2)', exact: true })
+  ).toBeVisible()
   await expect(
     page.locator('.site-header').getByRole('link', { name: 'Virtual machines (3)', exact: true })
   ).toBeVisible()
@@ -88,7 +96,7 @@ test('sign-in, cancel/confirm exact container and VM targets, preview destroy an
     confirm: 'qmp:atlas-lab',
   })
   await page.keyboard.press('Escape')
-  await page.getByRole('link', { name: 'Previews', exact: true }).click()
+  await page.getByRole('link', { name: /^Previews \(/ }).click()
   await page.getByRole('button', { name: 'Actions for atlas-main' }).click()
   await page.getByRole('menuitem', { name: 'Destroy…' }).click()
   await expect(page.getByRole('dialog')).toContainText('including its database')
