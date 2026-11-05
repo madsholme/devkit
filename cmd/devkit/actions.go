@@ -67,6 +67,9 @@ func repoDir(trees []worktree, preferred string) string {
 }
 
 func planAction(req actionRequest) (plannedAction, error) {
+	if req.Action == "container-start" {
+		return planContainerStart(req)
+	}
 	if req.Action == "container-stop" {
 		return planContainerStop(req)
 	}

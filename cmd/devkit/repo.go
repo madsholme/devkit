@@ -14,15 +14,16 @@ import (
 const managedLabel = "devkit.managed"
 
 type projectConfig struct {
-	root       string
-	VMs        []vmSelector      `json:"vms,omitempty"`
-	Project    string            `json:"project"`
-	WebService string            `json:"web_service"`
-	WebPort    any               `json:"web_port"`
-	Compose    map[string]string `json:"compose"`
-	Hooks      map[string]string `json:"hooks"`
-	Routes     []route           `json:"routes"`
-	MediaPorts []mediaPort       `json:"media_ports"`
+	ExistingCompose []existingCompose `json:"existing_compose,omitempty"`
+	root            string
+	VMs             []vmSelector      `json:"vms,omitempty"`
+	Project         string            `json:"project"`
+	WebService      string            `json:"web_service"`
+	WebPort         any               `json:"web_port"`
+	Compose         map[string]string `json:"compose"`
+	Hooks           map[string]string `json:"hooks"`
+	Routes          []route           `json:"routes"`
+	MediaPorts      []mediaPort       `json:"media_ports"`
 	// WaitTimeout is how many seconds live, review and start wait for the preview to become healthy.
 	WaitTimeout any `json:"wait_timeout"`
 }
@@ -73,6 +74,9 @@ func loadConfig(root string) (projectConfig, error) {
 	}
 	if !projectSlug.MatchString(cfg.Project) {
 		return cfg, fail("devkit.json project must be a unique lowercase project slug (1–32 characters).")
+	}
+	if err := validateExistingCompose(cfg.root, cfg.ExistingCompose); err != nil {
+		return cfg, err
 	}
 	if err := validateVMSelectors(cfg.VMs); err != nil {
 		return cfg, err

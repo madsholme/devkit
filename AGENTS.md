@@ -28,7 +28,10 @@ old names are dropped on purpose.
   `git_control.go` provides authenticated, CLI-backed origin fetch/sync/push with
   checkout revalidation, clean-state checks, bounded commands and per-repository locking.
   `container_inventory.go` provides all-host Docker inventory with allowlisted
-  metadata; `container_control.go` adds confirmed stop-only actions by full ID; unrelated containers gain no detail/log authority.
+  metadata; `container_control.go` adds confirmed graceful stop and registered start by full ID.
+  `container_projects.go` maps explicit `existing_compose` project/directory pairs, with fresh
+  unique ownership checks for start/details/logs. Registration never recreates containers;
+  unrelated containers retain stop-only authority.
   `vm_control.go` provides opt-in launcher/libvirt lifecycle adapters, stopped managed inventory,
   exact control resolution and a host-wide lifecycle lock. Plain mappings do not authorize adapters. `vm_shutdown.go` separately grants verified native stop-only capabilities to discovered QMP/libvirt instances.
   `vm_cleanup.go` implements CLI-only exact-name/project QEMU cleanup, dry-run by default;

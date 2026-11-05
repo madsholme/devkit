@@ -1035,11 +1035,11 @@ const kv = rows => `<table class="kv">${rows.map(([k, v]) =>
   `<tr data-k="${esc(String(k).toLowerCase() + " " + String(v).toLowerCase())}"><td>${esc(k)}</td><td>${esc(v === "" || v == null ? "—" : v)}</td></tr>`).join("")}</table>`;
 const cmd = a => (a || []).map(x => /\s/.test(x) ? JSON.stringify(x) : x).join(" ");
 
-async function showDetails(preview, service) {
+async function showDetails(preview, service, container = "") {
   $("details-title").textContent = preview + " · " + service;
   $("details-body").innerHTML = '<p class="muted">loading…</p>';
   if (!$("details").open) $("details").showModal();
-  const res = await fetch(`api/container?preview=${encodeURIComponent(preview)}&service=${encodeURIComponent(service)}`);
+  const res = await fetch(container ? `api/container?container=${encodeURIComponent(container)}` : `api/container?preview=${encodeURIComponent(preview)}&service=${encodeURIComponent(service)}`);
   if (!res.ok) { $("details-body").innerHTML = `<p class="error">${esc(await res.text())}</p>`; return; }
   const d = await res.json(), h = d.health;
   const section = (title, body, filter) => `<h4>${esc(title)}${filter ? `<input type="search" data-filter placeholder="Filter…">` : ""}</h4>${body}`;
@@ -1188,6 +1188,7 @@ function stopFollow() {
 }
 
 function logsUrl(extra = "") {
+  if (logsFor.container) return `api/logs?container=${encodeURIComponent(logsFor.container)}` + extra;
   return `api/logs?preview=${encodeURIComponent(logsFor.preview)}` +
     (logsFor.service ? `&service=${encodeURIComponent(logsFor.service)}` : "") + extra;
 }
@@ -1227,8 +1228,8 @@ async function follow() {
   }
 }
 
-function showLogs(preview, service) {
-  logsFor = {preview, service};
+function showLogs(preview, service, container = "") {
+  logsFor = {preview, service, container};
   $("logs-title").textContent = preview + " · " + (service || "web");
   if (!$("logs").open) $("logs").showModal();
   $("logs-body").scrollTop = 0;
@@ -1242,11 +1243,11 @@ document.addEventListener("click", e => {
   if (e.target.closest("#signin-open")) { closeMenus(); $("signin").showModal(); $("signin-password").focus(); return; }
   if (e.target.closest("#signout")) { closeMenus(); return post("api/logout").then(loadSession); }
   const det = e.target.closest("[data-details]");
-  if (det) return showDetails(det.dataset.details, det.dataset.service);
+  if (det) return showDetails(det.dataset.details, det.dataset.service, det.dataset.container);
   const c = e.target.closest("[data-copy]");
   if (c) return copyText(c.dataset.copy, c);
   const b = e.target.closest("[data-logs]");
-  if (b) return showLogs(b.dataset.logs, b.dataset.service);
+  if (b) return showLogs(b.dataset.logs, b.dataset.service, b.dataset.container);
   // Clicking anywhere on a preview row toggles it, except its link.
   const x = e.target.closest("[data-expand]") || (!e.target.closest("a, .menu") && e.target.closest("[data-row]"));
   if (x) {
@@ -1424,9 +1425,9 @@ function renderContainers() {
   $("container-list").innerHTML = rows.map(c => `<article class="container-row">
     <div><strong><span class="resource-icon">${ICON.container}</span>${esc(c.name)}</strong><div class="mono path">${esc(c.image)}</div></div>
     <div>${status(c.status)}<div class="mono path" title="${esc(c.id)}">${esc(short(c.id))}</div></div>
-    <div><span class="container-label">${c.managed ? 'Devkit project' : 'Compose project'}</span>${esc(c.project || 'Unassigned')}<div class="path">${esc(c.preview || (c.managed ? 'Managed by devkit' : 'Outside devkit'))}</div></div>
+    <div><span class="container-label">${c.managed || c.registered ? 'Devkit project' : 'Compose project'}</span>${esc(c.project || 'Unassigned')}<div class="path">${esc(c.preview || (c.registered ? 'Registered existing stack' : c.managed ? 'Managed by devkit' : 'Outside devkit'))}</div></div>
     <div class="container-ports"><span class="container-label">Host → container ports</span><span class="mono path">${c.ports.length ? c.ports.map(esc).join('<br>') : 'No published ports'}</span></div>
-    <div class="actions">${(c.actions || []).includes('stop') ? (session.signed_in ? act('container-stop', 'Turn off', {container:c.id, name:c.name}) : '<span class="note">Sign in to turn off</span>') : ''}${c.control_note ? `<span class="note">${esc(c.control_note)}</span>` : ''}${c.managed && c.preview && c.service ? `<button data-details="${esc(c.preview)}" data-service="${esc(c.service)}">Details</button><button data-logs="${esc(c.preview)}" data-service="${esc(c.service)}">Logs</button>` : ''}</div>
+    <div class="actions">${containerControls(c)}</div>
   </article>`).join('') || `<div class="empty">${containerData.containers.length ? 'No containers match these filters.' : 'No Docker containers found. Launch a configured project from Projects to create a preview.'}</div>`;
 }
 async function loadContainers() {
@@ -1438,7 +1439,8 @@ async function loadContainers() {
     if (!res.ok) throw new Error(await res.text());
     containerData = await res.json();
     renderContainers();
-    $("container-error").hidden = true;
+    $("container-error").hidden = !(containerData.warnings || []).length;
+    $("container-error").textContent = (containerData.warnings || []).join(" ");
   } catch (e) {
     $("container-error").hidden = false;
     $("container-error").textContent = "Could not refresh containers. " + e.message + (containerData ? " Showing previous results." : " Try Refresh containers.");
@@ -1460,6 +1462,22 @@ function projectGitControls(w) {
   return `${buttons ? `<div class="git-controls" role="group" aria-label="Git controls for ${esc(w.branch || 'checkout')}">${buttons}</div>` : ""}
     ${controls.note ? `<p class="note">${esc(controls.note)}</p>` : !session.signed_in ? '<p class="note">Sign in to sync this checkout with origin.</p>' : ''}`;
 }
+function containerControls(c) {
+  const actions = (c.actions || []).map(a => session.signed_in
+    ? act(`container-${a}`, a === "start" ? "Start" : "Turn off", {container:c.id, name:c.name})
+    : '<span class="note">Sign in to manage</span>').join("");
+  const details = c.registered
+    ? `<button data-details="${esc(c.name)}" data-service="${esc(c.service || 'container')}" data-container="${esc(c.id)}">Details</button><button data-logs="${esc(c.name)}" data-service="${esc(c.service || 'container')}" data-container="${esc(c.id)}">Logs</button>`
+    : c.managed && c.preview && c.service
+      ? `<button data-details="${esc(c.preview)}" data-service="${esc(c.service)}">Details</button><button data-logs="${esc(c.preview)}" data-service="${esc(c.service)}">Logs</button>` : "";
+  return actions + details + (c.control_note ? `<span class="note">${esc(c.control_note)}</span>` : "");
+}
+function registeredContainersHTML(w) {
+  const rows = w.containers || [];
+  if (!rows.length) return "";
+  return `<p class="note">Existing containers · original storage and endpoints retained</p><ul>${rows.map(c => `<li><div class="project-line"><div><span class="resource-icon">${ICON.container}</span><strong>${esc(c.service || c.name)}</strong> · ${status(c.status)}<div class="mono path">${esc(c.name)}</div></div><div class="actions">${containerControls(c)}</div></div>${c.ports.length ? `<div class="mono path">${c.ports.map(esc).join(" · ")}</div>` : ""}</li>`).join("")}</ul>`;
+}
+
 function projectCheckoutHTML(w, label) {
   const live = w.previews.find(p => p.mode === "live");
   const launch = session.signed_in && w.docker && !live ? act("up", "Launch containers", {worktree: w.path}) : "";
@@ -1468,6 +1486,7 @@ function projectCheckoutHTML(w, label) {
     ${w.git ? gitLine(w) + projectGitControls(w) : ""}
     ${w.note ? `<p class="note">${esc(w.note)}</p>` : ""}
     ${w.docker && !live && !session.signed_in ? '<p class="note">Sign in to launch containers.</p>' : ""}
+    ${registeredContainersHTML(w)}
     ${w.previews.map(p => `<div class="project-line services"><div><span class="resource-icon">${ICON.container}</span><span class="tag">${esc(p.mode)}</span> ${esc(p.name)} · ${status(p.status)}</div>
       <div class="actions">${UP.has(p.status) && p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">Open app</a>` : ""}
       ${session.signed_in ? act(UP.has(p.status) ? "stop" : "start", UP.has(p.status) ? "Stop containers" : "Start containers", {preview:p.name}) : ""}</div></div>`).join("")}`;
@@ -1478,7 +1497,7 @@ function renderProjects() {
   const rows = projectsData.projects.map(p => {
     const slugs = new Set([p.main, ...p.worktrees].map(w => w.project).filter(Boolean));
     return {...p, vms: (vmData?.vms || []).filter(v => v.project && slugs.has(v.project))};
-  }).filter(p => [p.name, p.path, ...[p.main,...p.worktrees].flatMap(w => [w.branch,w.path,w.project]), ...p.vms.map(v => v.name)].join(" ").toLowerCase().includes(query));
+  }).filter(p => [p.name, p.path, ...[p.main,...p.worktrees].flatMap(w => [w.branch,w.path,w.project,...(w.containers || []).flatMap(c => [c.name,c.service])]), ...p.vms.map(v => v.name)].join(" ").toLowerCase().includes(query));
   $("project-count").textContent = projectsData.projects.length;
   $("project-directory").textContent = projectsData.directory
     ? `Projects in ${projectsData.directory} · plus repositories discovered from previews and worktrees`

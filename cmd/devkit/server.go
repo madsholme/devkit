@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -175,11 +176,50 @@ func newHandler() (http.Handler, error) {
 		case "/api/resources":
 			sendJSON(w, res.snapshot(query.Get("full") == "1"))
 		case "/api/container":
+			if target := query.Get("container"); target != "" {
+				var c container
+				if !fullContainerID.MatchString(target) {
+					err = fail("Use a full registered container ID.")
+				} else {
+					c, err = registeredContainer(r.Context(), target)
+				}
+				if err == nil {
+					sendJSON(w, containerDetailsView(c))
+				}
+				break
+			}
 			var details map[string]any
 			if details, err = containerDetails(query.Get("preview"), optional(query, "service")); err == nil {
 				sendJSON(w, details)
 			}
 		case "/api/logs":
+			if target := query.Get("container"); target != "" {
+				var c container
+				if !fullContainerID.MatchString(target) {
+					err = fail("Use a full registered container ID.")
+				} else {
+					c, err = registeredContainer(r.Context(), target)
+				}
+				if err == nil {
+					args := logsCommand(c.ID, query.Get("follow") == "1")
+					if query.Get("follow") == "1" {
+						stream(w, r, args)
+					} else {
+						ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+						cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+						cmd.WaitDelay = 250 * time.Millisecond
+						var out vmOutput
+						cmd.Stdout, cmd.Stderr = &out, &out
+						if runErr := cmd.Run(); runErr != nil {
+							err = fail("Cannot read registered container logs; refresh the inventory.")
+						} else {
+							send(w, http.StatusOK, []byte(out.String()), plain, "no-store")
+						}
+						cancel()
+					}
+				}
+				break
+			}
 			name, svc := query.Get("preview"), optional(query, "service")
 			if query.Get("follow") == "1" {
 				var id string

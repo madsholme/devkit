@@ -32,7 +32,7 @@ Below it are six tabs, remembered per browser and linkable (`#projects`, `#previ
   containers outside devkit. Filter by name, project, image, ID or status. Rows show
   state, image, project and configured host-to-container port mappings (mappings may
   be inactive while stopped). Managed preview containers retain Details/Logs links;
-  other containers offer confirmed Turn off where safe, while details/logs remain restricted to managed previews. `/api/containers` exposes only this inventory metadata,
+  registered existing stacks also offer Start, Details and Logs and appear in their owning project checkout. Registration preserves runtime and endpoints; see [existing Compose stacks](projects.md#existing-compose-stacks). Unregistered containers offer confirmed Turn off where safe and gain no detail/log access. `/api/containers` exposes only this inventory metadata,
   never raw labels, environment, mount paths or commands. Probes are bounded to five
   seconds, 512 containers and 2 MiB per batch. Errors retain the last result with a
   visible warning and Refresh button. The tab refreshes while visible.

@@ -490,7 +490,10 @@ func containerDetails(name string, svc *string) (map[string]any, error) {
 	if len(containers) == 0 {
 		return nil, fail("Container %s is gone.", id)
 	}
-	c := containers[0]
+	return containerDetailsView(containers[0]), nil
+}
+
+func containerDetailsView(c container) map[string]any {
 	env := []envVar{}
 	for _, item := range c.Config.Env {
 		key, value, _ := strings.Cut(item, "=")
@@ -547,7 +550,7 @@ func containerDetails(name string, svc *string) (map[string]any, error) {
 		"mounts":         mounts,
 		"env":            env,
 		"labels":         labels,
-	}, nil
+	}
 }
 
 func nonNil(values []string) []string {

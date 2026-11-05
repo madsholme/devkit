@@ -49,6 +49,47 @@ Associated VMs show their existing **Start**, **Stop** and **Restart** controls;
 Each VM still needs an explicit mapping and lifecycle adapter below. Launching
 containers never implicitly starts VMs, and launching a VM never starts containers.
 
+## Existing Compose stacks
+
+To show an existing stack under its project without recreating containers or moving
+its data, add explicit registrations to the project's `devkit.json` (preserving any
+existing VM entries):
+
+```json
+"existing_compose": [
+  {"project": "shop-restored", "working_dir": ".validation/restored"}
+]
+```
+
+Both values must match Docker's `com.docker.compose.project` and
+`com.docker.compose.project.working_dir` labels. The directory is relative to this
+recipe and must resolve within it. No container-name prefix matching is used.
+Discover the project through `projects_dir`, `vm_projects`, or the harness worktree
+glob; linked Git worktrees are included. Conflicting claims or incomplete discovery
+block registration authority and show a warning. Removing the entry revokes access
+on the next request. Registration itself makes no Docker changes.
+
+The Projects and Containers tabs offer Details, Logs, and signed-in Start or
+confirmed graceful Turn off. Start uses the existing full container ID: it does
+not build, pull, create containers, or run Compose hooks. Start dependencies first
+(for example PostgreSQL before an API); these are individual-container controls.
+The existing container, mounts, certificates, ports and image remain in place.
+
+```sh
+devkit start --container EXACT_NAME_OR_FULL_ID
+devkit stop --container EXACT_NAME_OR_FULL_ID
+```
+
+These are registered existing containers, not disposable devkit previews. They do
+not acquire destroy, GC, review, or public-share actions. Registration does not
+create a new URL or expose ports: use the original endpoints. Do not launch a
+second writer against the same database to turn an active stack into a preview.
+
+Only registered existing containers gain start/detail/log authority; unrelated
+containers retain the earlier stop-only behavior. Details use the same environment
+masking as previews. Logs and details become readable to dashboard viewers on the
+private network, as for previews; register only stacks intended for that audience.
+
 ## Syncing a project with origin
 
 Each Git checkout in Projects has signed-in controls for **Fetch origin**,

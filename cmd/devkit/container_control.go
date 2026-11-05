@@ -65,10 +65,16 @@ var containerStopRun = func(ctx context.Context, args []string) error {
 	return nil
 }
 
-func stopContainer(target string) error {
+func stopContainer(target string) error { return controlContainer("stop", target) }
+
+func controlContainer(action, target string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	c, err := resolveStopContainer(ctx, target)
+	resolve := resolveStopContainer
+	if action == "start" {
+		resolve = resolveStartContainer
+	}
+	c, err := resolve(ctx, target)
 	if err != nil {
 		return err
 	}
@@ -84,28 +90,33 @@ func stopContainer(target string) error {
 		return fail("This container has another lifecycle operation in progress.")
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	c, err = resolveStopContainer(ctx, c.ID)
+	c, err = resolve(ctx, c.ID)
 	if err != nil {
 		return err
 	}
-	if !c.State.Running {
-		fmt.Fprintln(stdout, "Container is already stopped.")
+	if (action == "stop" && !c.State.Running) || (action == "start" && c.State.Running) {
+		fmt.Fprintln(stdout, "Container is already in the requested state.")
 		return nil
 	}
 	// Docker -1 disables the daemon's timeout/SIGKILL fallback. Killing a timed-out
 	// CLI client does not force-kill the container; a late graceful exit is possible.
-	if err = containerStopRun(ctx, []string{"docker", "stop", "--timeout", "-1", c.ID}); err != nil {
-		return err
+	if action == "start" {
+		err = containerStartRun(ctx, []string{"docker", "start", c.ID})
+	} else {
+		err = containerStopRun(ctx, []string{"docker", "stop", "--timeout", "-1", c.ID})
 	}
-	after, err := resolveStopContainer(ctx, c.ID)
 	if err != nil {
 		return err
 	}
-	if after.State.Running {
-		return fail("Container is still running or restarted; refresh before retrying.")
+	after, err := resolve(ctx, c.ID)
+	if err != nil {
+		return err
 	}
-	happened("container-stop", c.ID, strings.TrimPrefix(c.Name, "/"))
-	fmt.Fprintln(stdout, "Container stopped; its data was retained.")
+	if after.State.Running != (action == "start") {
+		return fail("Container did not remain in the requested state; refresh before retrying.")
+	}
+	happened("container-"+action, c.ID, strings.TrimPrefix(c.Name, "/"))
+	fmt.Fprintln(stdout, "Container "+action+" completed; existing container and storage retained.")
 	return nil
 }
 
@@ -123,4 +134,43 @@ func planContainerStop(req actionRequest) (plannedAction, error) {
 		return plannedAction{}, fail("Container is already stopped; refresh the inventory.")
 	}
 	return plannedAction{args: []string{"stop", "--container", c.ID}, target: "container " + c.ID, title: "Turn off container " + strings.TrimPrefix(c.Name, "/")}, nil
+}
+
+func resolveStartContainer(ctx context.Context, target string) (container, error) {
+	c, err := registeredContainer(ctx, target)
+	if err != nil {
+		return c, err
+	}
+	if note := containerStopNote(c); note != "" {
+		return c, fail("%s", note)
+	}
+	if !c.State.Running && c.State.Status != "exited" && c.State.Status != "created" {
+		return c, fail("Container state does not allow start; refresh first.")
+	}
+	return c, nil
+}
+
+var containerStartRun = func(ctx context.Context, args []string) error {
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.WaitDelay = 250 * time.Millisecond
+	if err := cmd.Run(); err != nil {
+		return fail("Docker could not start this container; refresh its state and check Docker access.")
+	}
+	return nil
+}
+
+func planContainerStart(req actionRequest) (plannedAction, error) {
+	if !fullContainerID.MatchString(req.Container) {
+		return plannedAction{}, fail("Use an exact registered container ID.")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	c, err := resolveStartContainer(ctx, req.Container)
+	if err != nil {
+		return plannedAction{}, err
+	}
+	if c.State.Running {
+		return plannedAction{}, fail("Container is already running; refresh the inventory.")
+	}
+	return plannedAction{args: []string{"start", "--container", c.ID}, target: "container " + c.ID, title: "Start container " + strings.TrimPrefix(c.Name, "/")}, nil
 }
