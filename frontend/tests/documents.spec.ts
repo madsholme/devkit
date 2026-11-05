@@ -17,8 +17,8 @@ test('project docs read Markdown, follow links, show agent guidance and switch c
     page.getByRole('heading', { name: 'Design specification', exact: true })
   ).toBeVisible()
   await page
-    .getByRole('navigation', { name: 'Markdown files' })
-    .getByRole('button', { name: /AGENTS.md/ })
+    .getByRole('tree', { name: 'Markdown files' })
+    .getByRole('treeitem', { name: 'AGENTS.md' })
     .click()
   await expect(page.getByRole('heading', { name: 'Agent guidance', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0)
@@ -113,4 +113,56 @@ test('document editing preserves drafts on conflicts and sign-in expiry, guards 
   page.once('dialog', (dialog) => dialog.accept())
   await page.getByRole('link', { name: 'Back to Projects', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible()
+})
+
+test('document tree expands folders, reveals search matches and restores collapsed navigation', async ({
+  page,
+}) => {
+  await page.goto(url)
+  const tree = page.getByRole('tree', { name: 'Markdown files' })
+  await expect(tree.getByRole('treeitem', { name: 'redesign.md', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Collapse all', exact: true }).click()
+  await expect(tree.getByRole('treeitem', { name: 'docs', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  )
+  await expect(tree.getByRole('treeitem', { name: 'redesign.md', exact: true })).toHaveCount(0)
+  await expect(tree.getByRole('treeitem', { name: 'AGENTS.md', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Expand all', exact: true }).click()
+  await expect(tree.getByRole('treeitem', { name: 'redesign.md', exact: true })).toBeVisible()
+  await expect(tree.getByRole('treeitem', { name: 'design.md', exact: true })).toBeVisible()
+  await tree.getByRole('treeitem', { name: 'plans', exact: true }).click()
+  await expect(tree.getByRole('treeitem', { name: 'redesign.md', exact: true })).toHaveCount(0)
+  await tree.getByRole('treeitem', { name: 'plans', exact: true }).press('ArrowRight')
+  await expect(tree.getByRole('treeitem', { name: 'redesign.md', exact: true })).toBeVisible()
+  await tree.getByRole('treeitem', { name: 'plans', exact: true }).press('ArrowRight')
+  await expect(tree.getByRole('treeitem', { name: 'redesign.md', exact: true })).toBeFocused()
+  await page.getByRole('button', { name: 'Collapse all', exact: true }).click()
+  await page.getByLabel('Filter documents').fill('design.md')
+  await expect(tree.getByRole('treeitem', { name: 'docs', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'true'
+  )
+  await expect(tree.getByRole('treeitem', { name: 'design.md', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Collapse all', exact: true })).toBeDisabled()
+  await page.getByLabel('Filter documents').fill('')
+  await expect(tree.getByRole('treeitem', { name: 'docs', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  )
+  await page.getByRole('button', { name: 'Expand all', exact: true }).click()
+  await tree.getByRole('treeitem', { name: 'design.md', exact: true }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Design specification', exact: true })
+  ).toBeVisible()
+  await expect(tree.getByRole('treeitem', { name: 'design.md', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  )
+  await page.getByLabel('Filter documents').fill('nothing-matches')
+  await expect(page.getByText('No matching documents.')).toBeVisible()
+  await page.getByLabel('Filter documents').fill('')
+  await page.screenshot({ path: '/tmp/devkit-document-tree.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })

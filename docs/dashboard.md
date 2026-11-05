@@ -123,7 +123,11 @@ Open **Projects → a project → Documents** to read plans, specs and other Mar
 under `docs/`, including nested folders. Choose the main checkout or a linked worktree
 from the checkout selector. The file list also exposes root `AGENTS.md` or `AGENT.md`
 (case-insensitive names) as read-only guidance. File and checkout choices are deep-linked
-in the URL. Search the file list or use **On this page** to navigate longer plans.
+in the URL. Expand folder rows in the file tree, or use **Expand all** / **Collapse all** above it.
+Search matches full paths and automatically expands matching folders; clear search to
+restore your previous expansion state. Arrow keys navigate and expand/collapse the tree.
+The selected document’s parent folders open automatically. Use **On this page** to
+navigate longer plans.
 
 The reader formats headings, lists, tables, quotes and code blocks. Relative Markdown
 links open another supported document in the same checkout. Raw HTML displays as text;

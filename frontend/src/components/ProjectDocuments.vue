@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
-import { BookOpen, FileText, Plus, Pencil, Save, RefreshCw } from 'lucide-vue-next'
+import { BookOpen, Plus, Pencil, Save, RefreshCw } from 'lucide-vue-next'
 import { Button } from '@madsholme/ui/button'
 import { Input } from '@madsholme/ui/input'
 import { Textarea } from '@madsholme/ui/textarea'
@@ -12,6 +12,7 @@ import type { Checkout } from '../types'
 import FilterSelect from './FilterSelect.vue'
 import InventoryNotice from './InventoryNotice.vue'
 import MarkdownDocument from './MarkdownDocument.vue'
+import DocumentTree from './DocumentTree.vue'
 interface Entry {
   path: string
   editable: boolean
@@ -38,7 +39,7 @@ const files = ref<Entry[]>([])
 const warnings = ref<string[]>([])
 const filter = ref('')
 const filtered = computed(() =>
-  files.value.filter((f) => f.path.toLowerCase().includes(filter.value.toLowerCase()))
+  files.value.filter((f) => f.path.toLowerCase().includes(filter.value.trim().toLowerCase()))
 )
 const document = ref<Document | null>(null)
 const error = ref('')
@@ -273,19 +274,14 @@ async function save() {
             aria-label="Filter documents"
           />
         </div>
-        <nav aria-label="Markdown files">
-          <button
-            v-for="file in filtered"
-            :key="file.path"
-            type="button"
-            :disabled="saving"
-            :aria-current="!creating && document?.path === file.path ? 'page' : undefined"
-            @click="navigate(file.path)"
-          >
-            <FileText :size="15" /><span>{{ file.path }}</span
-            ><span v-if="!file.editable" class="sr-only">Read-only agent guidance</span>
-          </button>
-        </nav>
+        <DocumentTree
+          :files="filtered"
+          :selected="!creating ? document?.path : undefined"
+          :scope="checkout"
+          :searching="Boolean(filter.trim())"
+          :disabled="saving"
+          @navigate="navigate"
+        />
         <p v-if="!filtered.length && !loading" class="document-empty note">
           {{
             files.length
@@ -438,34 +434,6 @@ async function save() {
 .document-filter {
   padding: 0 0.75rem 0.75rem;
 }
-.document-sidebar nav {
-  display: grid;
-  padding: 0 0.5rem 0.5rem;
-  max-height: 65vh;
-  overflow-y: auto;
-}
-.document-sidebar nav button {
-  display: flex;
-  align-items: start;
-  gap: 0.5rem;
-  padding: 0.65rem 0.5rem;
-  border-radius: var(--radius);
-  font-size: 0.8125rem;
-  text-align: left;
-  overflow-wrap: anywhere;
-}
-.document-sidebar nav button svg {
-  flex-shrink: 0;
-  margin-top: 0.1rem;
-}
-.document-sidebar nav button:hover {
-  background: var(--muted);
-}
-.document-sidebar nav button[aria-current] {
-  background: var(--accent);
-  color: var(--accent-foreground);
-  font-weight: 600;
-}
 .document-empty {
   padding: 0.75rem 1rem 1rem;
 }
@@ -518,9 +486,6 @@ async function save() {
 @media (max-width: 760px) {
   .documents-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .document-sidebar nav {
-    max-height: 13rem;
   }
   .document-toolbar {
     align-items: stretch;
