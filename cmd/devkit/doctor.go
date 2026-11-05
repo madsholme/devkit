@@ -229,16 +229,7 @@ func doctorChecks() []check {
 		}
 	}
 
-	if share, configured, err := loadShareConfig(); err != nil {
-		checks = append(checks, bad("share", "%v", err))
-	} else if configured {
-		c := newCloudflare(share)
-		if _, err := c.zoneID(share.Domain); err != nil {
-			checks = append(checks, bad("share", "token from %s cannot reach %s: %v", share.Token, share.Domain, err))
-		} else {
-			checks = append(checks, ok("share", "public shares on %s", share.Domain))
-		}
-	}
+	checks = append(checks, shareChecks()...)
 
 	if err := os.MkdirAll(stateDir(), 0o700); err != nil {
 		checks = append(checks, bad("history", "%s is not writable: %v", stateDir(), err))
@@ -323,6 +314,77 @@ func proxyChecks(cfg hostConfig, dom, ip string) []check {
 		} else {
 			checks = append(checks, ok("certificate", "*.%s, %d days left", dom, days))
 		}
+	}
+	return checks
+}
+
+// shareChecks looks at public shares without changing anything: the token's access to the zone, the
+// account's tunnels and the DNS records, each share's cloudflared and tunnel, shares past their
+// expiry, and this machine's leftovers in Cloudflare.
+func shareChecks() []check {
+	cfg, configured, err := loadShareConfig()
+	if err != nil {
+		return []check{bad("share", "%v", err)}
+	}
+	if !configured {
+		return nil
+	}
+	cf := newCloudflare(cfg)
+	if _, err := cf.zoneID(cfg.Domain); err != nil {
+		return []check{bad("share", "token from %s cannot reach %s: %v", cfg.Token, cfg.Domain, err)}
+	}
+	tunnels, err := cf.listTunnels(tunnelPrefix())
+	if err != nil {
+		return []check{bad("share", "token from %s cannot list tunnels in account %s; it needs Account / Cloudflare Tunnel / Edit: %v", cfg.Token, cfg.AccountID, err)}
+	}
+	records, err := shareRecords(cf)
+	if err != nil {
+		return []check{bad("share", "token from %s cannot read DNS records of %s; it needs Zone / DNS / Edit: %v", cfg.Token, cfg.Domain, err)}
+	}
+	containers, err := dockerContainers()
+	if err != nil {
+		return []check{warn("share", "cannot list the share containers: %v", err)}
+	}
+	status := map[string]string{}
+	for _, t := range tunnels {
+		status[t.ID] = t.Status
+	}
+	var checks []check
+	var shares []share
+	for _, c := range containers {
+		s, isShare := shareOf(c)
+		if !isShare {
+			continue
+		}
+		shares = append(shares, s)
+		name := strings.TrimPrefix(c.Name, "/")
+		switch state := containerStatus(c.State); {
+		case state != "running" && state != "healthy":
+			checks = append(checks, bad("share", "%s: cloudflared is %s: docker logs %s", s.URL, state, name))
+		case status[s.Tunnel] == "degraded":
+			checks = append(checks, warn("share", "%s: Cloudflare reports its tunnel degraded: docker logs %s", s.URL, name))
+		case status[s.Tunnel] != "healthy":
+			checks = append(checks, bad("share", "%s: Cloudflare reports its tunnel %s: docker logs %s", s.URL, firstOf(status[s.Tunnel], "missing"), name))
+		}
+		if !s.Expires.IsZero() && time.Now().After(s.Expires) {
+			checks = append(checks, warn("share", "%s expired at %s but is still public; devkit-web ends shares when they expire: devkit unshare --expired", s.URL, localTime(s.Expires)))
+		}
+	}
+	lostTunnels, lostRecords := leftovers(tunnels, records, shares, 10*time.Minute)
+	if len(lostTunnels)+len(lostRecords) > 0 {
+		var names []string
+		for _, t := range lostTunnels {
+			names = append(names, "tunnel "+t.Name)
+		}
+		for _, r := range lostRecords {
+			names = append(names, "DNS record "+r.Name)
+		}
+		checks = append(checks, warn("share", "leftovers of this machine in Cloudflare (%s): devkit unshare --expired removes them", strings.Join(names, ", ")))
+	}
+	if len(checks) == 0 && len(shares) == 0 {
+		checks = append(checks, ok("share", "public shares on %s; none active", cfg.Domain))
+	} else if len(checks) == 0 {
+		checks = append(checks, ok("share", "public shares on %s; %d active, all connected", cfg.Domain, len(shares)))
 	}
 	return checks
 }

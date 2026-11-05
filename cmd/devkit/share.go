@@ -436,14 +436,15 @@ func reapExpired(now time.Time) ([]string, error) {
 	return removed, nil
 }
 
-// sweepOrphans deletes this machine's tunnels and DNS records that no share container uses any more,
-// e.g. after a crash halfway through share. Anything younger than grace is left alone, so a share
-// that is being created right now is never touched.
-func sweepOrphans(cfg shareConfig, grace time.Duration) ([]string, error) {
-	shares, err := allShares()
-	if err != nil {
-		return nil, err
-	}
+// shareRecords are this machine's share DNS records.
+func shareRecords(cf *cloudflare) ([]dnsRecord, error) {
+	return cf.dnsRecords(url.Values{"type": {"CNAME"}, "comment.exact": {dnsComment()}})
+}
+
+// leftovers are this machine's tunnels and DNS records that no share container uses any more, e.g.
+// after a crash halfway through share. Anything younger than grace is left out, so a share that is
+// being created right now is never one.
+func leftovers(tunnels []tunnel, records []dnsRecord, shares []share, grace time.Duration) ([]tunnel, []dnsRecord) {
 	live := map[string]bool{}
 	for _, s := range shares {
 		live[s.Tunnel] = true
@@ -452,34 +453,51 @@ func sweepOrphans(cfg shareConfig, grace time.Duration) ([]string, error) {
 		t, err := time.Parse(time.RFC3339, created)
 		return err == nil && time.Since(t) > grace
 	}
+	var lostTunnels []tunnel
+	for _, t := range tunnels {
+		if !live[t.ID] && strings.HasPrefix(t.Name, tunnelPrefix()) && t.DeletedAt == nil && old(t.CreatedAt) {
+			lostTunnels = append(lostTunnels, t)
+		}
+	}
+	var lostRecords []dnsRecord
+	for _, r := range records {
+		if r.Comment == dnsComment() && !live[strings.TrimSuffix(r.Content, ".cfargotunnel.com")] && old(r.CreatedOn) {
+			lostRecords = append(lostRecords, r)
+		}
+	}
+	return lostTunnels, lostRecords
+}
+
+// sweepOrphans deletes this machine's leftovers in Cloudflare.
+func sweepOrphans(cfg shareConfig, grace time.Duration) ([]string, error) {
+	shares, err := allShares()
+	if err != nil {
+		return nil, err
+	}
 	cf := newCloudflare(cfg)
 	if _, err := cf.zoneID(cfg.Domain); err != nil {
 		return nil, err
 	}
-	var removed []string
 	tunnels, err := cf.listTunnels(tunnelPrefix())
 	if err != nil {
 		return nil, err
 	}
-	for _, t := range tunnels {
-		if !live[t.ID] && strings.HasPrefix(t.Name, tunnelPrefix()) && t.DeletedAt == nil && old(t.CreatedAt) {
-			if err := cf.deleteTunnel(t.ID); err == nil {
-				removed = append(removed, "tunnel "+t.Name)
-				happened("sweep", "", "tunnel "+t.Name)
-			}
+	records, recordsErr := shareRecords(cf)
+	lostTunnels, lostRecords := leftovers(tunnels, records, shares, grace)
+	var removed []string
+	for _, t := range lostTunnels {
+		if err := cf.deleteTunnel(t.ID); err == nil {
+			removed = append(removed, "tunnel "+t.Name)
+			happened("sweep", "", "tunnel "+t.Name)
 		}
 	}
-	records, err := cf.dnsRecords(url.Values{"type": {"CNAME"}, "comment.exact": {dnsComment()}})
-	if err != nil {
-		return removed, err
+	if recordsErr != nil {
+		return removed, recordsErr
 	}
-	for _, r := range records {
-		tunnelID := strings.TrimSuffix(r.Content, ".cfargotunnel.com")
-		if r.Comment == dnsComment() && !live[tunnelID] && old(r.CreatedOn) {
-			if err := cf.deleteDNS(r.ID); err == nil {
-				removed = append(removed, "DNS "+r.Name)
-				happened("sweep", "", "DNS record "+r.Name)
-			}
+	for _, r := range lostRecords {
+		if err := cf.deleteDNS(r.ID); err == nil {
+			removed = append(removed, "DNS "+r.Name)
+			happened("sweep", "", "DNS record "+r.Name)
 		}
 	}
 	return removed, nil

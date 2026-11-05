@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +25,7 @@ type fakeCloudflare struct {
 	routes  map[string]any
 	records map[string]dnsRecord
 	next    int
+	refuse  string // a path part the token may not use, e.g. "cfd_tunnel"
 }
 
 func newFakeCloudflare(t *testing.T) *fakeCloudflare {
@@ -63,6 +65,9 @@ func (f *fakeCloudflare) serve(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(data, &body)
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	switch {
+	case f.refuse != "" && slices.Contains(parts, f.refuse):
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]any{"success": false, "errors": []map[string]any{{"code": 10000, "message": "Authentication error"}}})
 	case r.URL.Path == "/zones":
 		reply([]map[string]string{{"id": "zone-1"}})
 	case len(parts) == 3 && parts[2] == "cfd_tunnel" && r.Method == "POST":
@@ -516,5 +521,60 @@ func TestShareNamesFitADNSLabel(t *testing.T) {
 	a, b := shareName("preview-", long), shareName("preview-", long+"x")
 	if len(a) > 63 || len(b) > 63 || a == b || !domainLabel.MatchString(a) {
 		t.Errorf("long names %q %q", a, b)
+	}
+}
+
+func TestDoctorChecksSharesWithoutChangingThem(t *testing.T) {
+	shareHost(t)
+	cf := newFakeCloudflare(t)
+	old := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	cf.tunnels = map[string]tunnel{
+		"up":     {ID: "up", Name: "devkit-m5-demo-up", Status: "healthy", CreatedAt: old},
+		"down":   {ID: "down", Name: "devkit-m5-demo-down", Status: "down", CreatedAt: old},
+		"orphan": {ID: "orphan", Name: "devkit-m5-demo-crashed", Status: "inactive", CreatedAt: old},
+	}
+	cf.records = map[string]dnsRecord{
+		"r-orphan": {ID: "r-orphan", Type: "CNAME", Name: "preview-crashed.share.test", Content: "orphan.cfargotunnel.com", Comment: "devkit share m5", CreatedOn: old},
+	}
+	exited := shareContainer("demo-exited", "demo-exited.share.test", "up", "", time.Now().Add(time.Hour))
+	exited.State.Running, exited.State.Status = false, "exited"
+	swap(t, &dockerContainers, withContainers(
+		shareContainer("demo-up", "demo-up.share.test", "up", "", time.Now().Add(time.Hour)),
+		shareContainer("demo-down", "demo-down.share.test", "down", "", time.Now().Add(time.Hour)),
+		shareContainer("demo-late", "demo-late.share.test", "up", "", time.Now().Add(-time.Minute)),
+		exited))
+	var details []string
+	for _, c := range shareChecks() {
+		details = append(details, c.Status+" "+c.Detail)
+	}
+	report := strings.Join(details, "\n")
+	for _, want := range []string{
+		"fail https://demo-down.share.test: Cloudflare reports its tunnel down",
+		"fail https://demo-exited.share.test: cloudflared is exited",
+		"warn https://demo-late.share.test expired at",
+		"warn leftovers of this machine in Cloudflare (tunnel devkit-m5-demo-crashed, DNS record preview-crashed.share.test)",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("missing %q in\n%s", want, report)
+		}
+	}
+	if strings.Contains(report, "demo-up.share.test") || cf.called("DELETE") > 0 || cf.called("POST") > 0 {
+		t.Errorf("a healthy share was reported, or doctor changed something:\n%s\n%v", report, cf.calls)
+	}
+
+	swap(t, &dockerContainers, withContainers(shareContainer("demo-up", "demo-up.share.test", "up", "", time.Now().Add(time.Hour))))
+	delete(cf.tunnels, "orphan")
+	delete(cf.tunnels, "down")
+	delete(cf.records, "r-orphan")
+	if checks := shareChecks(); len(checks) != 1 || checks[0].Status != "ok" || !strings.Contains(checks[0].Detail, "1 active") {
+		t.Errorf("all well: %+v", checks)
+	}
+	cf.refuse = "cfd_tunnel"
+	if checks := shareChecks(); len(checks) != 1 || checks[0].Status != "fail" || !strings.Contains(checks[0].Detail, "Cloudflare Tunnel") {
+		t.Errorf("no tunnel access: %+v", checks)
+	}
+	cf.refuse = "dns_records"
+	if checks := shareChecks(); len(checks) != 1 || checks[0].Status != "fail" || !strings.Contains(checks[0].Detail, "DNS") {
+		t.Errorf("no DNS access: %+v", checks)
 	}
 }
