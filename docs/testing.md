@@ -98,3 +98,15 @@ visibility and mutation are restricted to the exact fixture ID; optional provide
 stubbed. Cleanup removes only test-created resources. Set `DEVKIT_SHUTDOWN_UI_READY`
 to a temporary descriptor path to pause for browser testing; create that path plus
 `.continue` afterward. Its generated password is test-only; do not publish descriptors.
+
+## Existing-container registration
+
+`DEVKIT_EXISTING_RUNTIME_TEST=1 DEVKIT_TEST_IMAGE=<existing-sh-image> python3 tests/existing_containers_acceptance.py`
+uses only its own network-isolated container and named volume. Build first, or set
+`DEVKIT_VM_BINARY` to the candidate binary. The test proves project grouping,
+registered details/logs with masked environment, revocation, authentication,
+confirmation, start/stop history, and unchanged container identity/image/mounts/data.
+A scoped Docker wrapper prevents the test server from mutating user resources.
+`DEVKIT_QA_HOLD=1` retains the fixture for up to 15 minutes for a browser check and
+prints the location of a private fixture login descriptor; create `finish` alongside
+that descriptor to clean up early. This flag never retains user credentials.

@@ -30,6 +30,8 @@ commands:
   logs [-s SERVICE] [-f]
                        show this worktree's live web log, or SERVICE's (-f, --follow to follow it)
   vms [--json]          list QEMU/libvirt VMs, including stopped managed guests
+  start --container NAME_OR_FULL_ID
+                       start one explicitly registered existing container
   stop --container NAME_OR_FULL_ID
                        gracefully stop one Docker container; retain data
   cleanup --vm NAME|--project SLUG [--purge] [--yes]
@@ -160,10 +162,10 @@ func dispatch(args []string) (int, error) {
 		}
 		if target, ok := values["--container"]; ok {
 			_, hasVM := values["--vm"]
-			if command != "stop" || target == "" || len(positional) != 0 || hasVM {
-				return 2, usageError("Use stop --container NAME_OR_FULL_ID by itself.")
+			if (command != "stop" && command != "start") || target == "" || len(positional) != 0 || hasVM {
+				return 2, usageError("Use start|stop --container NAME_OR_FULL_ID by itself.")
 			}
-			return 0, noted("container-stop", target, stopContainer(target))
+			return 0, noted("container-"+command, target, controlContainer(command, target))
 		}
 		if target, ok := values["--vm"]; ok {
 			if target == "" || len(positional) > 0 {

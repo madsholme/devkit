@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// Host inventory grants only explicit stop capabilities. Detail/log APIs still
-// require devkit's existing managed-preview identity checks.
+// Host inventory grants stop capabilities. Extra start/detail/log authority
+// requires a fresh, explicit existing_compose registration.
 var hostContainers = func(ctx context.Context) ([]container, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -50,6 +50,8 @@ var hostContainers = func(ctx context.Context) ([]container, error) {
 }
 
 type containerRow struct {
+	Registered  bool     `json:"registered"`
+	Worktree    string   `json:"worktree,omitempty"`
 	Actions     []string `json:"actions,omitempty"`
 	ControlNote string   `json:"control_note,omitempty"`
 	ID          string   `json:"id"`
@@ -63,6 +65,7 @@ type containerRow struct {
 	Ports       []string `json:"ports"`
 }
 type containersData struct {
+	Warnings   []string       `json:"warnings,omitempty"`
 	Containers []containerRow `json:"containers"`
 }
 
@@ -72,6 +75,10 @@ func containersOverview(ctx context.Context) (containersData, error) {
 	if err != nil {
 		return data, fail("Could not read Docker containers. Check Docker access on the host (maximum 512 containers), then refresh.")
 	}
+	owners, registrationErr := existingContainerProjects(rows)
+	if registrationErr != nil {
+		data.Warnings = append(data.Warnings, registrationErr.Error())
+	}
 	for _, c := range rows {
 		labels := c.Config.Labels
 		managed := labels[managedLabel] == "true"
@@ -79,6 +86,13 @@ func containersOverview(ctx context.Context) (containersData, error) {
 		r.ControlNote = containerStopNote(c)
 		if c.State.Running && r.ControlNote == "" && fullContainerID.MatchString(c.ID) {
 			r.Actions = []string{"stop"}
+		}
+		if owner := owners[c.ID]; owner.Root != "" {
+			r.Registered, r.Project, r.Worktree = true, owner.Project, owner.Root
+			r.Service = labels["com.docker.compose.service"]
+			if !c.State.Running && (c.State.Status == "exited" || c.State.Status == "created") && r.ControlNote == "" {
+				r.Actions = []string{"start"}
+			}
 		}
 		if c.State.Status == "paused" {
 			r.Status = "paused"

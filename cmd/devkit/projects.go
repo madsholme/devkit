@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -39,6 +40,7 @@ type projectPreview struct {
 	URL    string `json:"url"`
 }
 type projectCheckout struct {
+	Containers  []containerRow   `json:"containers,omitempty"`
 	Path        string           `json:"path"`
 	Branch      string           `json:"branch"`
 	Project     string           `json:"project"`
@@ -83,7 +85,7 @@ func checkoutProject(tree worktree, containers []container) projectCheckout {
 		row.Docker = row.Git && within(compose, resolve(tree.Path)) && isFile(compose)
 		if !row.Git && len(cfg.Compose) > 0 {
 			row.Note = "Container previews need a Git checkout."
-		} else if !row.Docker && len(cfg.VMs) == 0 {
+		} else if !row.Docker && len(cfg.VMs) == 0 && len(cfg.ExistingCompose) == 0 {
 			row.Note = "Setup needed: configure a live Compose file or VMs."
 		}
 	}
@@ -123,6 +125,19 @@ func projectsOverview() (projectsData, error) {
 		containers = nil
 		data.Warnings = append(data.Warnings, "Docker inventory unavailable; container status and launches may be unavailable.")
 	}
+	registered, registrationErr := containersOverview(context.Background())
+	if registrationErr != nil {
+		data.Warnings = append(data.Warnings, "Existing container inventory unavailable.")
+	}
+	data.Warnings = append(data.Warnings, registered.Warnings...)
+	attach := func(row projectCheckout) projectCheckout {
+		for _, c := range registered.Containers {
+			if c.Registered && c.Worktree == row.Path {
+				row.Containers = append(row.Containers, c)
+			}
+		}
+		return row
+	}
 	repos := knownRepos(containers)
 	roots = append(roots, cfg.VMProjects...)
 	for _, common := range sortedKeys(repos) {
@@ -157,9 +172,9 @@ func projectsOverview() (projectsData, error) {
 			main = trees[0]
 			trees = trees[1:]
 		}
-		row := projectRow{Name: filepath.Base(main.Path), Path: main.Path, Main: checkoutProject(main, containers), Worktrees: []projectCheckout{}}
+		row := projectRow{Name: filepath.Base(main.Path), Path: main.Path, Main: attach(checkoutProject(main, containers)), Worktrees: []projectCheckout{}}
 		for _, tree := range trees {
-			row.Worktrees = append(row.Worktrees, checkoutProject(tree, containers))
+			row.Worktrees = append(row.Worktrees, attach(checkoutProject(tree, containers)))
 		}
 		data.Projects = append(data.Projects, row)
 	}
