@@ -231,7 +231,8 @@ export async function runAction(action: ActionRequest) {
       await loadSession()
       openDialog('signin')
       state.dialogError = 'Your session expired. Sign in, then choose the action again.'
-    } else if (state.dialog === 'action') state.dialogError = errorMessage(error)
+    } else if (['action', 'create-project'].includes(state.dialog))
+      state.dialogError = errorMessage(error)
     else state.error = `${actionLabels[action.action] || action.action}: ${errorMessage(error)}`
   } finally {
     state.pending = false

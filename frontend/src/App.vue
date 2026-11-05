@@ -3,6 +3,7 @@ import { computed, onMounted, onBeforeUnmount, ref, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   FolderGit2,
+  FolderPlus,
   Container,
   Monitor,
   GitBranch,
@@ -369,6 +370,12 @@ onBeforeUnmount(() => {
             <p>{{ page.description }}</p>
           </div>
           <div class="heading-actions">
+            <Button
+              v-if="state.tab === 'projects'"
+              :disabled="state.pending || !state.projects?.directory"
+              @click="openDialog(state.session.signed_in ? 'create-project' : 'signin')"
+              ><FolderPlus :size="16" />Create Project</Button
+            >
             <span v-if="state.updated[state.tab] || state.updated.overview" class="updated"
               >Updated {{ state.updated[state.tab] || state.updated.overview }}</span
             ><Button variant="outline" :disabled="busy" @click="refresh"

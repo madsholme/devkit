@@ -71,6 +71,7 @@ export async function copyText(text: string) {
   }
 }
 export const actionLabels: Record<string, string> = {
+  'project-create': 'Create Project',
   up: 'Launch containers',
   live: 'Start live preview',
   review: 'Review HEAD',
@@ -99,6 +100,7 @@ export function day(iso: string) {
 }
 
 const historyVerbs: Record<string, string> = {
+  'project-create': 'Created project',
   live: 'Live preview',
   review: 'Review',
   publish: 'Published',

@@ -24,6 +24,8 @@ old names are dropped on purpose.
   from projects_dir/Docker/harness/cwd and host `vm_projects` roots, and leaves ambiguous claims unassigned.
   `projects.go` discovers direct project folders from host `projects_dir`, groups Git checkouts
   by common directory, and serves the independent `/api/projects` tree with launch capabilities.
+  `project_create.go` implements explicit new-project creation from the embedded template,
+  with exclusive destination reservation, optional origin, appended AGENTS.md notes and one initial commit.
   Discovery never runs hooks; authenticated `up` actions revalidate Git membership and recipe.
   `git_control.go` provides authenticated, CLI-backed origin fetch/sync/push with
   checkout revalidation, clean-state checks, bounded commands and per-repository locking.
@@ -101,7 +103,8 @@ old names are dropped on purpose.
 - Commit straight to `main` and push. No PRs. Short imperative commit subjects.
 - Reading the dashboard needs no sign-in; its actions do (`auth.go`, `actions.go`).
   Actions run the devkit binary itself, so add a CLI command first and a dashboard
-  action on top. `planAction` must only accept targets that exist on the host. The
+  action on top. `planAction` must only accept targets that exist on the host, except explicit project-create,
+  which only reserves a new child of the configured projects_dir. The
   web service also expires shares in the background. Mask secret-looking values when showing container environment.
 - Project hooks live in `devkit.json` under `"hooks"` (`prepare`, `check`,
   `build`, `publish`) and run with `sh -eu` in the project root. `build` is
@@ -110,7 +113,9 @@ old names are dropped on purpose.
 - A command that changes something records it with `happened(...)` once it succeeded;
   `noted(...)` in `dispatch` records failures. Tests write history to a temporary
   directory (`TestMain` sets `DEVKIT_STATE_DIR`).
-- devkit never creates/deletes worktrees, commits, stashes, rebases or force-pushes.
+- devkit never creates/deletes worktrees, stashes, rebases or force-pushes. Only explicit
+  `project create` initializes a new repository and makes its initial commit; existing
+  project changes are never committed by devkit.
   Explicit `git fetch|sync|push` actions may fetch origin, fast-forward a clean tracked
   branch or push to its exact origin upstream. Never make these discovery side effects.
 - Update the docs when you change commands or behaviour: README.md is the front page (pitch,

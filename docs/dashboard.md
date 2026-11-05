@@ -98,8 +98,8 @@ A browser that signs in can for 7 days start, stop, share, unshare and destroy p
 start a live preview or review HEAD for a worktree, and clean up previews of removed
 worktrees; changing the password signs every browser out. Each action runs the `devkit`
 binary itself, as the CLI would, and the page shows its output live. The server only
-accepts targets that exist on the host, requests from the dashboard's own page, and
-an explicit confirmation for destroy and clean-up; five wrong passwords lock an address out for five
+accepts known host targets (or a new child of projects_dir for explicit project creation),
+requests from the dashboard's own page, and an explicit confirmation for destroy and clean-up; five wrong passwords lock an address out for five
 minutes. `exec` stays in the CLI.
 
 With the T3 harness, a signed-in browser also gets **Pair device** beside the host services: it
@@ -107,9 +107,19 @@ shows a QR code, link and code from `devkit pair` that connect one phone or comp
 within 10 minutes. devkit asks the `t3` version the T3 service runs (`t3 auth pairing create`),
 returns the link to that page only, without keeping it, and records only that a pairing happened.
 
+## Create Project
+
+On the Projects directory page, **Create Project** opens a signed-in form for a name,
+optional Git remote and additional agent instructions. The form shows the destination
+under the configured `projects_dir` and the preserved devkit guidance. It copies the
+complete starter template, initializes `main`, and makes one initial commit. An optional
+remote only sets origin locally. Existing destinations are refused; validation errors
+keep your entries in the form. Successful jobs refresh the project catalog and global
+counts. See [project creation](projects.md#create-a-project) for CLI usage and failure handling.
+
 ## History
 
-Every command that changes something records an event: setup, proxy up, a DNS record
+Every command that changes something records an event: project creation, setup, proxy up, a DNS record
 setup created, live and review (created or resumed), start, stop, destroy (including `gc`), prune, publish, share, extend, unshare,
 shares that expired and leftover tunnels or DNS records removed. QEMU cleanup records
 successful stop, purge and registration removal separately so partial work remains visible. A failed command is

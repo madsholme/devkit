@@ -193,3 +193,78 @@ test('desktop/mobile themes and navigation render without horizontal page overfl
   await expect(page.getByRole('heading', { name: 'Containers', exact: true })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
+
+test('create project preserves instructions, rejects duplicates, cancels and refreshes the catalog', async ({
+  page,
+}) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('/#/projects')
+  await page.getByRole('button', { name: 'Create Project', exact: true }).click()
+  await expect(page.getByLabel('Dashboard password')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await signIn(page)
+  let created = false
+  const actions: Record<string, unknown>[] = []
+  await page.route('**/api/action', async (route) => {
+    const request = route.request().postDataJSON()
+    actions.push(request)
+    if (request.name === 'atlas')
+      return route.fulfill({
+        status: 400,
+        body: 'A file or folder named atlas already exists. Nothing was changed.',
+      })
+    created = true
+    return route.fulfill({ json: { id: 'fixture-job', title: 'Create project new-app' } })
+  })
+  await page.route('**/api/projects', async (route) => {
+    const response = await route.fetch()
+    const data = await response.json()
+    if (created)
+      data.projects.push({
+        ...data.projects[0],
+        name: 'new-app',
+        path: '/work/new-app',
+        repo: '/work/new-app/.git',
+        checkouts: [],
+      })
+    return route.fulfill({ json: data })
+  })
+  const open = () => page.getByRole('button', { name: 'Create Project', exact: true }).click()
+  await open()
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(actions).toHaveLength(0)
+  await open()
+  await page.getByLabel('Project name', { exact: true }).fill('atlas')
+  await page.getByLabel('Git remote URL').fill('git@example.test:team/new-app.git')
+  const notes = 'Use Go. <script>literal</script> $(do-not-run)'
+  await page.getByLabel('Additional agent instructions').fill(notes)
+  await page.getByText('View preserved devkit guidance', { exact: true }).click()
+  await expect(page.locator('.template-guidance')).toContainText('devkit')
+  await page.screenshot({ path: '/tmp/devkit-create-project-desktop.png', fullPage: true })
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Create Project', exact: true })
+    .click()
+  await expect(page.getByRole('dialog')).toContainText('already exists')
+  await expect(page.getByLabel('Additional agent instructions')).toHaveValue(notes)
+  await page.getByLabel('Project name', { exact: true }).fill('new-app')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByText('View preserved devkit guidance', { exact: true }).click()
+  await page.screenshot({ path: '/tmp/devkit-create-project-mobile.png', fullPage: true })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Create Project', exact: true })
+    .click()
+  await expect(page.getByRole('dialog')).toContainText('Completed synthetic action')
+  expect(actions[1]).toEqual({
+    action: 'project-create',
+    name: 'new-app',
+    remote: 'git@example.test:team/new-app.git',
+    agent_notes: notes,
+  })
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('link', { name: 'new-app', exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+})

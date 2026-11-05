@@ -1,6 +1,6 @@
 # Project recipe
 
-Copy/adapt `project-template` into ONE real project. Give `devkit.json` a unique
+Use `devkit project create` for a new project, or copy/adapt `project-template` into ONE existing project. Give `devkit.json` a unique
 project slug per clone on a host. It identifies the web service, its internal port,
 and separate live/review Compose files. Common configuration can be factored out
 later; the tiny sample deliberately keeps each file self-contained.
@@ -26,6 +26,47 @@ include host secrets in the Docker build context. The supplied `.dockerignore` i
 an allowlist for the sample. Rendered Compose config may contain environment secrets;
 it is stored privately at `<git-common-dir>/devkit/runs/<preview>/compose.json`.
 These are per-preview execution artifacts for restart/cleanup, not a task registry.
+
+## Create a project
+
+Configure `projects_dir` in the host config and create that parent directory first.
+Configure `git config --global user.name` and `git config --global user.email` for the
+host account running devkit. Then use **Projects → Create Project** after signing in,
+or run from any directory:
+
+```sh
+devkit project create my-app
+devkit project create another-app --remote git@github.com:you/another-app.git --agents-file notes.md
+# Read additional instructions from stdin:
+cat notes.md | devkit project create third-app --agents-file -
+```
+
+The name is 1–32 lowercase letters, digits or hyphens, starting with a letter or digit.
+Creation copies the built-in `project-template` into `projects_dir/NAME`: the sample Python
+app, message, Dockerfile, live/review Compose files, `devkit.json`, T3 actions, AGENTS.md,
+CLAUDE.md and both dotfiles. It sets the recipe's project slug, initializes Git on `main`
+and commits all starter files once. The template is embedded in the binary; it does not
+clone the devkit repository or its history. No files need to be removed during creation.
+Adapt the sample app, Dockerfile and recipes together afterward for your own stack.
+
+The optional remote accepts HTTPS or SSH (including `git@host:owner/repo.git`) without
+embedded credentials, query strings or fragments. It only sets `origin`: it does not
+create a hosted repository, verify remote access, fetch or push. Use an empty hosted
+repository when you later publish this new history; importing an existing repository
+is a separate workflow.
+
+Additional instructions are UTF-8 text up to 16 KiB, appended under **Project-specific
+instructions** in AGENTS.md. Existing devkit guidance stays intact; CLAUDE.md references
+AGENTS.md. The modal lets you review that guidance. Instructions travel to the CLI over
+stdin and are excluded from job output and history, but are committed in the new project:
+do not put secrets in them.
+
+Existing destinations are refused, including empty folders, files and symlinks. Concurrent
+attempts cannot overwrite one another. Missing Git identity is reported before creating
+anything. If copying or Git fails afterward, the partial folder is retained and its path
+is reported; inspect it before manually removing it or choosing another name. Creation
+runs no template hooks and starts no containers or VMs. The initial commit is the sole
+exception to devkit's rule against committing changes in an existing project.
 
 ## Discovering projects before launch
 

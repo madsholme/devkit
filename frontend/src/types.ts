@@ -211,6 +211,9 @@ export interface ContainerDetails {
   labels: Record<string, string>
 }
 export interface ActionRequest {
+  name?: string
+  remote?: string
+  agent_notes?: string
   action: string
   preview?: string
   worktree?: string

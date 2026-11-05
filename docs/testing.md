@@ -1,6 +1,6 @@
 # Acceptance check
 
-1. Create a Git repository from the sample and commit it.
+1. Run `devkit project create sample` in an isolated configured projects_dir; verify its initial commit.
 2. Create worktrees for branches `try/a` and `try-a` (e.g. `git worktree add -b try/a ../try-a`);
    verify distinct names/URLs.
 3. Start both live previews. Change each `message.txt`; verify different responses.
@@ -151,3 +151,10 @@ rejects stale assets, while Go asset tests check that HTML references (including
 boot) are actually served with the correct content type and caching. Release bundles
 continue to build directly with Go, using these checked-in assets. Do not hand-edit
 `web/dist/`. The standard-library-only backend and its auth/ownership tests remain intact.
+
+Project creation coverage in `go test ./...` checks complete template copying, notes preservation,
+origin and initial commit, duplicate paths/symlinks, concurrency, invalid input, missing identity,
+retained partial failures and authenticated action planning. `tests/git_runtime_acceptance.py`
+also exercises real HTTP job → CLI stdin → template/Git creation and duplicate rejection using
+temporary directories. `DEVKIT_GIT_BINARY` selects the binary. Frontend `test:ui` covers the
+Create Project modal, cancel, preserved guidance, duplicate errors, retained input and catalog refresh.

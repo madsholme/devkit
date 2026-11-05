@@ -12,6 +12,7 @@ import { Button } from '@madsholme/ui/button'
 import { Input } from '@madsholme/ui/input'
 import { Checkbox } from '@madsholme/ui/checkbox'
 import { state, confirmationInfo, runAction, signIn, loadLogs, visibleLogs } from '../dashboard'
+import CreateProjectForm from './CreateProjectForm.vue'
 import DetailsPanel from './DetailsPanel.vue'
 import SystemPanel from './SystemPanel.vue'
 import CopyButton from './CopyButton.vue'
@@ -27,6 +28,7 @@ const hours = ref(1)
 const host = ref('')
 const output = ref<HTMLElement>()
 const titles: Record<string, string> = {
+  'create-project': 'Create Project',
   signin: 'Sign in',
   action: 'Confirm action',
   job: 'Action output',
@@ -36,6 +38,7 @@ const titles: Record<string, string> = {
   system: 'System monitor',
 }
 const descriptions: Record<string, string> = {
+  'create-project': 'Start a new project from the devkit template.',
   signin: 'Sign in to manage this host. Your session lasts seven days.',
   action: 'Review this operation before continuing.',
   job: 'Live output from the devkit CLI. Closing this dialog does not cancel the job.',
@@ -135,6 +138,7 @@ const qrPath = computed(
           }}</Button></DialogFooter
         >
       </form>
+      <CreateProjectForm v-else-if="state.dialog === 'create-project'" />
       <form
         v-else-if="state.dialog === 'action'"
         class="dialog-form"
@@ -179,10 +183,7 @@ const qrPath = computed(
         ><p class="path">{{ state.logTitle }}</p>
         <div class="actions">
           <label class="checkbox-label"
-            ><Checkbox
-              :model-value="state.follow"
-              @update:model-value="setFollow"
-            />Follow</label
+            ><Checkbox :model-value="state.follow" @update:model-value="setFollow" />Follow</label
           ><label class="checkbox-label"
             ><Checkbox
               :model-value="state.hideHealth"
@@ -235,7 +236,7 @@ const qrPath = computed(
           Asking T3 Code for a pairing link…
         </p></template
       >
-      <DialogFooter v-if="!['signin', 'action'].includes(state.dialog)"
+      <DialogFooter v-if="!['signin', 'action', 'create-project'].includes(state.dialog)"
         ><Button variant="outline" @click="state.dialog = ''">Close</Button></DialogFooter
       ></DialogContent
     ></Dialog

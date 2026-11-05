@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise real dashboard -> CLI -> Git using disposable local origins only."""
+"""Exercise real dashboard -> CLI -> Git creation and sync using disposable projects only."""
 import base64
 import hashlib
 import http.cookiejar
@@ -31,8 +31,10 @@ def main():
             tool = fakebin / name
             tool.write_text('#!/bin/sh\nexit 0\n')
             tool.chmod(0o755)
+        global_config = parent / 'gitconfig'
+        global_config.write_text('[user]\n name = Devkit fixture\n email = fixture@example.invalid\n')
         env = dict(os.environ, DEVKIT_CONFIG_DIR=str(config), DEVKIT_STATE_DIR=str(parent/'state'),
-                   GIT_CONFIG_GLOBAL='/dev/null', GIT_CONFIG_NOSYSTEM='1', PATH=str(fakebin)+':'+os.environ['PATH'])
+                   GIT_CONFIG_GLOBAL=str(global_config), GIT_CONFIG_NOSYSTEM='1', PATH=str(fakebin)+':'+os.environ['PATH'])
         def git(root, *args):
             return subprocess.check_output(['git', '-C', str(root), *args], env=env, text=True, stderr=subprocess.PIPE).strip()
         def identity(root):
@@ -75,8 +77,8 @@ def main():
                                          headers={'Origin': origin, 'Content-Type': 'application/json'})
             with client.open(req, timeout=10) as response:
                 return json.load(response)
-        def action(name, ok=True):
-            job = request('/api/action', {'action': 'git-'+name, 'worktree': str(repo)})
+        def action(name, ok=True, payload=None):
+            job = request('/api/action', payload or {'action': 'git-'+name, 'worktree': str(repo)})
             for _ in range(100):
                 result = request('/api/job?id='+job['id'])
                 if result['done']:
@@ -114,7 +116,33 @@ def main():
             events = [json.loads(line) for line in (parent/'state/history.jsonl').read_text().splitlines()]
             assert any(e['action']=='git-push' and e['ok'] and e['worktree']==str(repo) for e in events)
             assert any(e['action']=='git-sync' and not e['ok'] for e in events)
-            print('PASS: authenticated HTTP jobs -> CLI -> real local Git fetch/sync/push, dirty refusal, history, anonymous denial')
+            notes = 'Build a small Go app.\nLiteral: $(touch NEVER) <script>text</script>'
+            payload = {'action': 'project-create', 'name': 'new-app',
+                       'remote': 'git@example.invalid:team/new-app.git', 'agent_notes': notes}
+            result = action('create', payload=payload)
+            created = projects / 'new-app'
+            assert notes not in result['output'], result
+            assert notes in (created/'AGENTS.md').read_text()
+            assert (created/'CLAUDE.md').read_text().strip() == '@AGENTS.md'
+            assert (created/'.dockerignore').exists() and (created/'.gitignore').exists()
+            assert not (created/'NEVER').exists() and not (created/'embed.go').exists()
+            assert json.loads((created/'devkit.json').read_text())['project'] == 'new-app'
+            assert git(created, 'branch', '--show-current') == 'main'
+            assert git(created, 'rev-list', '--count', 'HEAD') == '1'
+            assert git(created, 'status', '--porcelain') == ''
+            assert git(created, 'remote', 'get-url', 'origin') == payload['remote']
+            assert any(p['path'] == str(created) for p in request('/api/projects')['projects'])
+            before = git(created, 'rev-parse', 'HEAD')
+            try:
+                request('/api/action', payload)
+                raise AssertionError('Duplicate project accepted')
+            except urllib.error.HTTPError as error:
+                assert error.code == 400
+            assert git(created, 'rev-parse', 'HEAD') == before
+            history = (parent/'state/history.jsonl').read_text()
+            assert notes not in history
+            assert any(e['action'] == 'project-create' and e['ok'] for e in map(json.loads, history.splitlines()))
+            print('PASS: authenticated HTTP jobs -> CLI -> real local Git fetch/sync/push, project creation with stdin notes/initial commit/origin, duplicate refusal, history, anonymous denial')
         finally:
             server.terminate()
             try:
