@@ -2,13 +2,15 @@
 
 https://devkit.<domain> is titled with the host's name (its hostname, or `name` in the host config)
 and preview domain, and shows whether the harness (e.g. T3) and Traefik are up; the certificate
-appears there only when it expires within three weeks. The gear menu holds sign-in and the theme;
+appears there only when it expires within three weeks. The header offers sign-in, and the gear menu holds sign-out and the theme;
 the footer shows which devkit commit runs. Below is a CPU/memory/disk/containers summary bar (it
 also mentions reclaimable Docker data from 5 GB up) that opens a system monitor: 10-minute history, swap,
 per-container usage, top host processes and Docker disk use. Containers and processes
 are sampled only while it is open.
 
-Below it are six tabs, remembered per browser and linkable (`#projects`, `#previews`, `#containers`, `#vms`, `#worktrees`, `#history`):
+The SwiftDesign navigation offers six views, remembered per browser. New links use `#/projects`,
+`#/previews`, `#/containers`, `#/vms`, `#/worktrees` and `#/history`; existing links without
+the slash continue to work. On narrow screens, use the navigation menu beside the logo:
 
 - **Projects** (default for new browsers): each main checkout with its linked Git worktrees,
   container previews and explicitly associated VMs. Configure `projects_dir` in the host
@@ -44,9 +46,11 @@ Below it are six tabs, remembered per browser and linkable (`#projects`, `#previ
 - **History**: what devkit did, newest first and grouped by day (see below). The tab
   counts failures of the last 24 hours, and an expanded preview lists its last few events.
 
-Everything is read live from Docker labels, Git, QEMU processes and libvirt; there is no database. It is dark
-by default; the settings menu (gear icon) picks light or auto (follows the system),
-remembered per browser.
+Everything is read live from Docker labels, Git, QEMU processes and libvirt; there is no database.
+The interface uses SwiftDesign components and SwiftConfig’s navigation, typography and table
+layout. The settings menu offers all shared themes, including RN, RN Light, high-contrast
+options and Match system. The initial theme is RN (dark); existing light/dark/auto choices
+are migrated. Theme selection stays local to the browser.
 
 Anyone on the tailnet can read it. To act from it, set a password on the host with
 `devkit web password`; only a salted PBKDF2 hash is stored, in `~/.config/devkit/config.json`.
@@ -58,7 +62,7 @@ accepts targets that exist on the host, requests from the dashboard's own page, 
 an explicit confirmation for destroy and clean-up; five wrong passwords lock an address out for five
 minutes. `exec` stays in the CLI.
 
-With the T3 harness, a signed-in browser also gets **Pair device…** in T3 Code's menu: it
+With the T3 harness, a signed-in browser also gets **Pair device** beside the host services: it
 shows a QR code, link and code from `devkit pair` that connect one phone or computer to T3 Code
 within 10 minutes. devkit asks the `t3` version the T3 service runs (`t3 auth pairing create`),
 returns the link to that page only, without keeping it, and records only that a pairing happened.
@@ -179,3 +183,11 @@ show their reason. This does not grant container log/detail access outside manag
 previews or introduce deletion/force-off controls. See [projects](projects.md#turn-off-an-individual-vm-or-container).
 VNC and SPICE can both appear under Connect privately, each with its own tunnel and
 remote-viewer URI; the VM must actually expose the selected protocol.
+
+## Building the dashboard
+
+The Vue frontend compiles into `web/dist/`, which is embedded in the Go binary. Released
+hosts need no Node runtime, CDN, or SwiftDesign checkout. To change the dashboard, see
+[frontend development and checks](testing.md#frontend-development-and-checks). Go-only
+builds use the committed production assets; frontend edits must regenerate them before
+building the binary.

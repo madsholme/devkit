@@ -165,6 +165,15 @@ Run lifecycle commands inside the owning Git repository; `ls` works anywhere. Se
 - [Publishing](docs/publishing.md): the contract for team deployments.
 - [Acceptance check](docs/testing.md): checking a host end to end.
 
+## Developing the dashboard
+
+The dashboard uses SwiftDesign Vue components with SwiftConfig as its layout reference.
+Production assets are embedded in the Go binary; hosts need no frontend runtime.
+After changing `frontend/`, run `pnpm --dir frontend install --frozen-lockfile` and
+`pnpm --dir frontend build`, then rebuild devkit. Commit the regenerated `web/dist/`
+assets alongside source changes. See [frontend checks](docs/testing.md#frontend-development-and-checks)
+for the isolated preview, browser tests and package provenance.
+
 ## License
 
 MIT; see [LICENSE](LICENSE).

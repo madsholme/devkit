@@ -110,3 +110,40 @@ A scoped Docker wrapper prevents the test server from mutating user resources.
 `DEVKIT_QA_HOLD=1` retains the fixture for up to 15 minutes for a browser check and
 prints the location of a private fixture login descriptor; create `finish` alongside
 that descriptor to clean up early. This flag never retains user credentials.
+
+## Frontend development and checks
+
+Use Node 22.12+ (24 recommended) and pnpm 10.33.0. SwiftDesign snapshots are included in
+`frontend/vendor/` with provenance, so installation needs no private package token or
+sibling checkout. Dependencies are pinned by `frontend/pnpm-lock.yaml`.
+
+```sh
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend test
+pnpm --dir frontend build
+pnpm --dir frontend exec playwright install chromium
+pnpm --dir frontend test:ui
+go test ./...
+go vet ./...
+go build -o bin/devkit ./cmd/devkit
+```
+
+To use installed Chromium, set `CHROMIUM_PATH=/usr/bin/chromium-browser` for `test:ui`.
+The browser suite starts an isolated server on `127.0.0.1:4178` with invented host data.
+It covers all six views, anonymous/signed-in controls, exact confirmation targets,
+sharing, details, log follow, pairing, system sampling, failed discovery, expired
+sessions, theme selection and mobile navigation. It executes no host actions.
+Screenshots are written to `/tmp/devkit-swift-*.png`; test artifacts stay gitignored.
+
+For an interactive synthetic preview, run `node frontend/tests/fixture-server.mjs`
+after building and open `http://127.0.0.1:4178`. Its password is `demo-password`; it
+simulates operations only. For development against a deliberately chosen local devkit
+server, `pnpm --dir frontend dev` proxies `/api` to `127.0.0.1:3780`. The production
+server retains its same-origin checks; use the embedded build to verify real sign-in
+and mutations, or configure a separate authorized test host.
+
+Commit generated `web/dist/` with frontend source. The frontend CI job rebuilds and
+rejects stale assets, while Go asset tests check that HTML references (including theme
+boot) are actually served with the correct content type and caching. Release bundles
+continue to build directly with Go, using these checked-in assets. Do not hand-edit
+`web/dist/`. The standard-library-only backend and its auth/ownership tests remain intact.
