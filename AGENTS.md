@@ -27,6 +27,8 @@ old names are dropped on purpose.
   `project_documents.go` lists/reads bounded docs Markdown, root README and root agent guidance.
   Its CLI-backed authenticated saves accept only docs/*.md in registered checkouts,
   preserve permission bits and reject stale versions; never commit or execute content.
+  `document_media.go` serves bounded image files from exact registered checkouts, using
+  pinned no-follow paths and sandboxed SVG responses. Never proxy remote images.
   `project_create.go` implements explicit new-project creation from the embedded template,
   with exclusive destination reservation, optional origin, appended AGENTS.md notes and one initial commit.
   Discovery never runs hooks; authenticated `up` actions revalidate Git membership and recipe.

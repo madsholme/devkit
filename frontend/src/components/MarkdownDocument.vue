@@ -1,16 +1,41 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { renderDiagrams } from '../document-diagrams'
 import { renderMarkdown } from '../markdown'
-const props = defineProps<{ content: string; path: string }>()
+const props = defineProps<{ content: string; path: string; checkout: string }>()
 const emit = defineEmits<{ navigate: [path: string, anchor: string] }>()
-const rendered = computed(() => renderMarkdown(props.content, props.path))
+const rendered = computed(() => renderMarkdown(props.content, props.path, props.checkout))
 const body = ref<HTMLElement>()
+let generation = 0
+watch(rendered, async () => {
+  const version = ++generation
+  await nextTick()
+  if (!body.value) return
+  try { await renderDiagrams(body.value, () => version === generation) }
+  catch { /* Source remains readable if the lazy diagram module cannot load. */ }
+}, { immediate: true })
+onBeforeUnmount(() => { generation++ })
 function scrollTo(anchor: string) {
   const target = body.value?.querySelector(`#${CSS.escape('document-' + anchor)}`)
   target?.scrollIntoView({ block: 'start' })
 }
 function follow(event: MouseEvent) {
-  const link = (event.target as HTMLElement).closest('a')
+  const target = event.target instanceof Element ? event.target : null
+  const external = target?.closest<HTMLButtonElement>('[data-external-image]')
+  if (external && body.value?.contains(external)) {
+    const image = document.createElement('img')
+    image.alt = external.dataset.imageAlt || 'External image'
+    image.referrerPolicy = 'no-referrer'
+    image.addEventListener('error', () => {
+      const message = document.createElement('span')
+      message.textContent = `Image unavailable: ${image.alt}`
+      image.replaceWith(message)
+    }, { once: true })
+    image.src = external.dataset.externalImage!
+    external.replaceWith(image)
+    return
+  }
+  const link = target?.closest('a')
   if (!link || !body.value?.contains(link) || !link.hasAttribute('data-anchor')) return
   event.preventDefault()
   const path = link.dataset.document
@@ -173,4 +198,12 @@ defineExpose({ scrollTo })
   color: var(--muted-foreground);
   font-style: italic;
 }
+.markdown-document img { max-width: 100%; height: auto; border-radius: var(--radius); }
+.markdown-document picture { display: block; }
+.document-external-image { color: var(--primary); text-decoration: underline; }
+.document-diagram { margin: 1.5rem 0; }
+.document-diagram-rendered { overflow-x: auto; padding: 1rem; background: #fff; color: #222; border-radius: var(--radius); }
+.document-diagram-rendered svg { display: block; min-width: 32rem; max-width: 100%; height: auto; margin: auto; }
+.document-diagram details { margin-top: 0.5rem; font-size: 0.8125rem; }
+.document-diagram summary { cursor: pointer; color: var(--muted-foreground); }
 </style>

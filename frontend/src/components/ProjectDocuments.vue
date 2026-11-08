@@ -378,7 +378,7 @@ async function save() {
                 >{{ preview ? 'Edit source' : 'Preview Markdown' }}</Button
               ><span class="note">Saves to this checkout without committing.</span>
             </div>
-            <MarkdownDocument v-if="preview" :content="draft" :path="editorPath" />
+            <MarkdownDocument :checkout="checkout" v-if="preview" :content="draft" :path="editorPath" />
             <Textarea
               v-else
               v-model="draft"
@@ -413,6 +413,7 @@ async function save() {
           </header>
           <div class="document-body">
             <MarkdownDocument
+              :checkout="checkout"
               ref="renderer"
               :content="document.content"
               :path="document.path"

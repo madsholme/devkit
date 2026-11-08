@@ -182,6 +182,8 @@ func newHandler() (http.Handler, error) {
 			if data, err = listDocuments(query.Get("worktree")); err == nil {
 				sendJSON(w, data)
 			}
+		case "/api/document-image":
+			err = serveDocumentImage(w, r)
 		case "/api/document":
 			var data documentData
 			if data, err = readDocument(query.Get("worktree"), query.Get("path")); err == nil {

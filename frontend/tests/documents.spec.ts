@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { test, expect } from '@playwright/test'
 const main = '/home/demo/Work/atlas'
 const url = '/#/projects/' + encodeURIComponent(main) + '/documents'
@@ -245,4 +246,49 @@ test('document categories combine with search in tree and flat views', async ({ 
     await page.getByRole('option', { name: category, exact: true }).click()
     await expect(page.getByRole('button', { name: path, exact: true })).toBeVisible()
   }
+})
+
+test('pictures, Markdown images and Mermaid flowcharts render safely on desktop and mobile', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  let externalRequests = 0
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="240"><rect width="640" height="240" fill="#157a9c"/><text x="40" y="130" fill="white" font-size="32">Project preview</text></svg>'
+  const content = '# Media guide\n\n<picture>\n<source media="(prefers-color-scheme: dark)" srcset="docs/dark.svg">\n<img src="docs/light.svg" alt="Project screenshot" width="640" onerror="alert(1)">\n</picture>\n\n![Logo](logo.svg)\n\n```mermaid\nflowchart LR\n A[Read README] --> B{Choose checkout}\n B --> C[View pictures]\n B --> D[Read flowchart]\n```\n\n```mermaid\nflowchart LR\n A[broken\n```\n\n![External preview](https://images.example.test/preview.png)'
+  await page.route('**/api/document?*', route => route.fulfill({ json: { path: 'README.md', content, editable: false, version: 'a'.repeat(64) } }))
+  await page.route('**/api/document-image?*', route => route.fulfill({ contentType: 'image/svg+xml', body: svg }))
+  await page.route('https://images.example.test/**', route => { externalRequests++; return route.fulfill({ contentType: 'image/svg+xml', body: svg }) })
+  await page.goto(url + '?doc=README.md')
+  const picture = page.getByRole('img', { name: 'Project screenshot', exact: true })
+  await expect(picture).toBeVisible()
+  await expect.poll(() => picture.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0)
+  await expect(page.getByRole('img', { name: 'Mermaid flowchart', exact: true })).toBeVisible()
+  await expect(page.getByText('Could not render this flowchart. Check its Mermaid syntax.')).toBeVisible()
+  expect(externalRequests).toBe(0)
+  await page.getByRole('button', { name: 'Load external image: External preview' }).click()
+  await expect.poll(() => externalRequests).toBe(1)
+  await expect(page.getByRole('img', { name: 'External preview', exact: true })).toBeVisible()
+  await page.screenshot({ path: '/tmp/devkit-media-desktop.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(picture).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: '/tmp/devkit-media-mobile.png', fullPage: true })
+  expect(errors).toEqual([])
+})
+
+test('the repository README renders its actual pictures and flowchart', async ({ page }) => {
+ const content = readFileSync(new URL('../../README.md', import.meta.url), 'utf8')
+ await page.route('**/api/document?*', route => route.fulfill({ json: { path: 'README.md', content, editable: false, version: 'b'.repeat(64) } }))
+ await page.route('**/api/document-image?*', route => {
+   const path = new URL(route.request().url()).searchParams.get('path')!
+   if (!/^docs\/images\/[a-z-]+\.png$/.test(path)) return route.abort()
+   return route.fulfill({ contentType: 'image/png', body: readFileSync(new URL('../../'+path, import.meta.url)) })
+ })
+ await page.goto(url + '?doc=README.md')
+ await expect(page.getByRole('img', { name: 'Mermaid flowchart' })).toBeVisible()
+ await expect(page.locator('.document-diagram > .note')).toHaveCount(0)
+ for (const img of await page.locator('.markdown-document picture img').all()) {
+   await img.scrollIntoViewIfNeeded()
+   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0)
+ }
+ await expect(page.locator('.markdown-document picture')).toHaveCount(2)
 })

@@ -126,7 +126,7 @@ configures the rest of the host from your answers.
 |---|---|
 | `devkit setup` | Configure this host step by step; safe to run again (see [Host setup](docs/setup.md)) |
 | `devkit doctor` | Check the host and say how to fix what is missing |
-| `devkit docs list` / `devkit docs read PATH` | List and read Markdown under docs/ and root agent guidance in the current registered checkout |
+| `devkit docs list` / `devkit docs read PATH` | List and read Markdown under docs/, root README and agent guidance in the current registered checkout |
 | `devkit docs save PATH --expected VERSION\|new --file FILE\|-` | Create or edit a document under docs/ with stale-edit protection; no commit |
 | `devkit project create NAME [--remote URL] [--agents-file FILE\|-]` | Copy the built-in template into projects_dir, append agent instructions, initialize main and commit; optionally set origin |
 | `devkit version` | Show which devkit release or commit this is (the dashboard's footer shows it too) |

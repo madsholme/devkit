@@ -1,8 +1,8 @@
 import MarkdownIt from 'markdown-it'
+import { renderImage, renderMediaHTML } from './document-media'
 
-// HTML is deliberately disabled. Images are text, so reading a plan never
-// contacts tracking endpoints or requests arbitrary project assets.
-const markdown = new MarkdownIt({ html: false, linkify: false, typographer: false })
+// Raw HTML tokens are reconstructed through the media-only allowlist below.
+const markdown = new MarkdownIt({ html: true, linkify: false, typographer: false })
 export function documentLink(
   href: string,
   current: string
@@ -34,10 +34,17 @@ export function documentLink(
     return null
   }
 }
-markdown.renderer.rules.image = (tokens, idx) =>
-  `<span class="document-image-note">[Image: ${markdown.utils.escapeHtml(
-    tokens[idx].content
-  )}]</span>`
+markdown.renderer.rules.image = (tokens, idx, _options, env) =>
+  renderImage(String(tokens[idx].attrGet('src') || ''), tokens[idx].content, String(env?.path || ''), String(env?.checkout || ''))
+for (const rule of ['html_block', 'html_inline']) {
+  markdown.renderer.rules[rule] = (tokens, idx, _options, env) =>
+    renderMediaHTML(tokens[idx].content, String(env?.path || ''), String(env?.checkout || ''))
+}
+const fence = markdown.renderer.rules.fence!
+markdown.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  if (tokens[idx].info.trim().toLowerCase() !== 'mermaid') return fence(tokens, idx, options, env, self)
+  return `<div class="document-diagram" data-mermaid><pre><code>${markdown.utils.escapeHtml(tokens[idx].content)}</code></pre></div>`
+}
 markdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   const token = tokens[idx]
   const link = documentLink(String(token.attrGet('href') || ''), String(env?.path || ''))
@@ -55,8 +62,8 @@ markdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   }
   return self.renderToken(tokens, idx, options)
 }
-export function renderMarkdown(content: string, path: string) {
-  const tokens = markdown.parse(content, { path })
+export function renderMarkdown(content: string, path: string, checkout = '') {
+  const tokens = markdown.parse(content, { path, checkout })
   const headings: { id: string; text: string; level: number }[] = []
   const used = new Map<string, number>()
   for (let i = 0; i < tokens.length; i++) {
@@ -75,5 +82,5 @@ export function renderMarkdown(content: string, path: string) {
     tokens[i].attrSet('id', `document-${id}`)
     headings.push({ id, text, level: Number(tokens[i].tag.slice(1)) })
   }
-  return { html: markdown.renderer.render(tokens, markdown.options, { path }), headings }
+  return { html: markdown.renderer.render(tokens, markdown.options, { path, checkout }), headings }
 }

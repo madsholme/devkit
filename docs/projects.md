@@ -97,6 +97,9 @@ checkout or linked worktree. Root `README.md` and `AGENTS.md`/`AGENT.md` are vie
 `docs/` can be created or edited after sign-in. To use the same behavior from the CLI,
 run in the root of a registered project checkout:
 
+The reader also displays relative project images and Mermaid flowcharts; see
+[document media](dashboard.md#project-documents) for supported formats and limits.
+
 ```sh
 devkit docs list
 devkit docs read docs/plans/release.md

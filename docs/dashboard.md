@@ -140,9 +140,21 @@ The selected document’s parent folders open automatically. Use **On this page*
 navigate longer plans.
 
 The reader formats headings, lists, tables, quotes and code blocks. Relative Markdown
-links open another supported document in the same checkout. Raw HTML displays as text;
-images display their labels instead of loading external resources. External HTTP(S) links
-open separately. Non-Markdown source files and arbitrary project assets are not served.
+links open another supported document in the same checkout. Markdown images and HTML `<picture>`, `<source srcset>` and `<img>` render local images
+relative to the selected document and checkout. PNG, JPEG, GIF, WebP and SVG files up to
+8 MiB are supported, including root logos; hidden paths, links and special files remain
+blocked. SVG responses are sandboxed. Other raw HTML remains inert text. External HTTP(S)
+images show **Load external image** and contact that host only after a click, without a
+referrer; remote picture sources are omitted in favor of the image fallback. External
+HTTP(S) links open separately. Other project source/assets are not served.
+
+Fenced `mermaid` blocks render flowcharts (`flowchart` or `graph`, with a direction such
+as `LR` or `TD`). Wide diagrams scroll horizontally; **Diagram source** reveals the code.
+Invalid or unsupported diagrams keep their source and an explanation. Rendering is lazy,
+limited to 20 diagrams per document, 20,000 characters and 250 edges per diagram.
+Author Mermaid configuration, extended image/icon shapes and external resources are
+not supported. Other Mermaid diagram types stay as readable source. The same media
+rendering is used in the editor's Markdown preview.
 
 **New document** and **Edit** require sign-in. Enter a path inside docs/ (for example
 `plans/release.md`), write Markdown and use **Preview Markdown** before saving. New parent
