@@ -184,7 +184,7 @@ async function shortcut(event: KeyboardEvent) {
   if (
     event.key === '/' &&
     !state.dialog &&
-    !(event.target as HTMLElement).closest('input,textarea,select,[contenteditable]')
+    !(event.target as HTMLElement).closest('input,textarea,select,[contenteditable],[role=dialog]')
   ) {
     event.preventDefault()
     await router.push('/previews')

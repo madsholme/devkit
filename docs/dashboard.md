@@ -156,6 +156,13 @@ Author Mermaid configuration, extended image/icon shapes and external resources 
 not supported. Other Mermaid diagram types stay as readable source. The same media
 rendering is used in the editor's Markdown preview.
 
+Click any displayed picture or flowchart to open a large viewer. **+ / −** zoom in/out,
+**Fit** fits the media to the window, and **100%** shows its natural size. Drag with the
+mouse or scroll to pan; touch screens use native scrolling. Ctrl + scroll also zooms.
+Keyboard shortcuts are `+`, `-`, `0` (100%) and `F` (Fit). Escape or Close returns focus
+to the item you opened. The viewer preserves the active picture source, resets when
+the document changes, and releases temporary diagram images when closed.
+
 **New document** and **Edit** require sign-in. Enter a path inside docs/ (for example
 `plans/release.md`), write Markdown and use **Preview Markdown** before saving. New parent
 folders are created as needed. Saves leave ordinary uncommitted changes in the selected

@@ -2,25 +2,85 @@
 import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { renderDiagrams } from '../document-diagrams'
 import { renderMarkdown } from '../markdown'
+import DocumentMediaViewer from './DocumentMediaViewer.vue'
 const props = defineProps<{ content: string; path: string; checkout: string }>()
 const emit = defineEmits<{ navigate: [path: string, anchor: string] }>()
 const rendered = computed(() => renderMarkdown(props.content, props.path, props.checkout))
 const body = ref<HTMLElement>()
+const media = ref<{ src: string; title: string; width: number; height: number; temporary?: boolean } | null>(null)
+function closeMedia() {
+  if (media.value?.temporary) URL.revokeObjectURL(media.value.src)
+  media.value = null
+}
+function enhanceMedia() {
+  for (const element of body.value?.querySelectorAll<HTMLElement>('img, .document-diagram-rendered') || []) {
+    if (element.closest('.document-media-trigger')) continue
+    const image = element instanceof HTMLImageElement
+    const target = element.closest('a') || element.closest('picture') || element
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'document-media-trigger'
+    button.setAttribute('aria-label', image ? `Enlarge image: ${element.alt || 'Picture'}` : 'Enlarge flowchart')
+    button.title = 'Click to enlarge and zoom'
+    target.replaceWith(button)
+    // An image link now opens the viewer, rather than navigating away.
+    if (target.tagName === 'A') button.append(...Array.from(target.childNodes))
+    else button.append(target)
+  }
+}
+async function openMedia(button: HTMLButtonElement) {
+  const image = button.querySelector('img')
+  const svg = button.querySelector('svg')
+  if (image) {
+    if (!image.complete) { try { await image.decode() } catch { return } }
+    if (!body.value?.contains(button) || !image.naturalWidth) return
+    closeMedia()
+    button.focus({ preventScroll: true })
+    media.value = { src: image.currentSrc || image.src, title: image.alt || 'Picture', width: image.naturalWidth, height: image.naturalHeight }
+  } else if (svg) {
+    const box = svg.viewBox.baseVal
+    const width = box.width || svg.getBoundingClientRect().width
+    const height = box.height || svg.getBoundingClientRect().height
+    if (!width || !height) return
+    const copy = svg.cloneNode(true) as SVGSVGElement
+    copy.setAttribute('width', String(width))
+    copy.setAttribute('height', String(height))
+    copy.style.maxWidth = 'none'
+    copy.style.minWidth = '0'
+    // This SVG has already passed the diagram renderer's sanitization. Keep it
+    // in an image context and avoid duplicate IDs in the document DOM.
+    const src = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)], { type: 'image/svg+xml' }))
+    closeMedia()
+    button.focus({ preventScroll: true })
+    media.value = { src, title: 'Mermaid flowchart', width, height, temporary: true }
+  }
+}
 let generation = 0
 watch(rendered, async () => {
   const version = ++generation
+  closeMedia()
   await nextTick()
   if (!body.value) return
-  try { await renderDiagrams(body.value, () => version === generation) }
+  enhanceMedia()
+  try {
+    await renderDiagrams(body.value, () => version === generation)
+    if (version === generation) enhanceMedia()
+  }
   catch { /* Source remains readable if the lazy diagram module cannot load. */ }
 }, { immediate: true })
-onBeforeUnmount(() => { generation++ })
+onBeforeUnmount(() => { generation++; closeMedia() })
 function scrollTo(anchor: string) {
   const target = body.value?.querySelector(`#${CSS.escape('document-' + anchor)}`)
   target?.scrollIntoView({ block: 'start' })
 }
 function follow(event: MouseEvent) {
   const target = event.target instanceof Element ? event.target : null
+  const trigger = target?.closest<HTMLButtonElement>('.document-media-trigger')
+  if (trigger && body.value?.contains(trigger)) {
+    event.preventDefault()
+    void openMedia(trigger)
+    return
+  }
   const external = target?.closest<HTMLButtonElement>('[data-external-image]')
   if (external && body.value?.contains(external)) {
     const image = document.createElement('img')
@@ -31,6 +91,7 @@ function follow(event: MouseEvent) {
       message.textContent = `Image unavailable: ${image.alt}`
       image.replaceWith(message)
     }, { once: true })
+    image.addEventListener('load', enhanceMedia, { once: true })
     image.src = external.dataset.externalImage!
     external.replaceWith(image)
     return
@@ -67,6 +128,7 @@ defineExpose({ scrollTo })
       @click="follow"
       v-html="rendered.html"
     ></article>
+    <DocumentMediaViewer :media="media" @close="closeMedia" />
     <p v-if="!content.trim()" class="note">This document is empty.</p>
   </div>
 </template>
@@ -206,4 +268,7 @@ defineExpose({ scrollTo })
 .document-diagram-rendered svg { display: block; min-width: 32rem; max-width: 100%; height: auto; margin: auto; }
 .document-diagram details { margin-top: 0.5rem; font-size: 0.8125rem; }
 .document-diagram summary { cursor: pointer; color: var(--muted-foreground); }
+.document-media-trigger { display: block; max-width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: zoom-in; }
+.document-media-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: var(--radius); }
+.document-diagram > .document-media-trigger { width: 100%; }
 </style>
