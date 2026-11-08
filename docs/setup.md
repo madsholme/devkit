@@ -238,3 +238,14 @@ next started (`devkit start`, `live` or `review`).
 - https://doc.traefik.io/traefik/reference/install-configuration/tls/certificate-resolvers/acme/
 - https://letsencrypt.org/docs/challenge-types/
 - https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md
+
+## Managed development secrets
+
+Fresh setup defaults to OpenBao, with owner-only bind storage at
+`~/.local/state/devkit/secrets/openbao/data`. Initialization/unseal is a human terminal
+step before DNS credentials are collected; rerun setup afterward. Existing hosts
+keep their current provider unless selected explicitly. `--secrets-provider local`
+preserves local credentials and disables managed project secrets. See
+[Development secrets](secrets.md) for verified import, LAN/Tailscale DNS, manual
+unseal, encrypted recovery and explicit OpenBao updates. Bootstrap installs `age`
+for encrypted backups; the human supplies the recipient, key custody and off-host destination.

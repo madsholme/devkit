@@ -9,6 +9,7 @@ import {
   Monitor,
   Info,
   BookOpen,
+  KeyRound,
   RefreshCw,
   ChevronRight,
 } from 'lucide-vue-next'
@@ -22,6 +23,7 @@ import { home, short, up } from '../format'
 import CheckoutRow from '../components/CheckoutRow.vue'
 import ProjectContainers from '../components/ProjectContainers.vue'
 const ProjectDocuments = defineAsyncComponent(() => import('../components/ProjectDocuments.vue'))
+import ProjectSecrets from '../components/ProjectSecrets.vue'
 import ProjectVMs from '../components/ProjectVMs.vue'
 import InventoryNotice from '../components/InventoryNotice.vue'
 import type { Checkout } from '../types'
@@ -34,6 +36,7 @@ const sections = [
   { id: 'overview', label: 'Overview', icon: Info },
   { id: 'documents', label: 'Documents', icon: BookOpen },
   { id: 'worktrees', label: 'Worktrees', icon: GitBranch },
+  { id: 'secrets', label: 'Secrets', icon: KeyRound },
   { id: 'containers', label: 'Containers', icon: Container },
   { id: 'vms', label: 'Virtual machines', icon: Monitor },
 ]
@@ -43,6 +46,7 @@ const treePath = computed(() => (typeof route.query.tree === 'string' ? route.qu
 const tree = computed(() => inventory.value?.checkouts.find((t) => t.path === treePath.value))
 const resourceSections = [
   { id: 'overview', label: 'Information', icon: Info },
+  { id: 'secrets', label: 'Secrets', icon: KeyRound },
   { id: 'containers', label: 'Containers', icon: Container },
   { id: 'vms', label: 'Virtual machines', icon: Monitor },
 ]
@@ -279,6 +283,7 @@ const summary = computed(() =>
                 :show-containers="false"
               />
             </section>
+            <ProjectSecrets v-else-if="resource === 'secrets'" :key="tree.path" :root="tree.path" default-scope="worktree" />
             <ProjectContainers
               v-else-if="resource === 'containers'"
               :rows="containersFor(tree)"
@@ -369,6 +374,7 @@ const summary = computed(() =>
           </p>
         </div>
       </template>
+      <ProjectSecrets v-else-if="section === 'secrets'" :key="project.path" :root="project.main.path" />
       <ProjectDocuments
         v-else-if="section === 'documents'"
         :checkouts="inventory.checkouts"

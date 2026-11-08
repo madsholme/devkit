@@ -1,0 +1,5 @@
+<!-- devkit-managed:secrets:start -->
+## Devkit-managed secrets
+
+Use the installed `devkit-secrets` skill when a task needs passwords, API tokens, credentials or development environment configuration. Check `devkit secrets context --json` and `devkit secrets list --json` first. Devkit provides authorized project/branch/worktree scopes and retrieval through its CLI. Prefer `devkit secrets run -- <command>` for injection; `devkit secrets get KEY --reveal` is permitted for authorized plaintext retrieval, but never print or commit the value. Check inherited secret ownership before editing; never reach into Devkit system credentials or other projects. Do not manually delete vault secrets; Devkit's cleanup and 7/7/30-day retention apply. Read `devkit secrets --help` when uncertain.
+<!-- devkit-managed:secrets:end -->

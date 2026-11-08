@@ -142,3 +142,17 @@ old names are dropped on purpose.
   `devkit-<machine>-*` and DNS records with the comment `devkit share <machine>`.
 - Don't use `pkill -f` with a pattern that appears in your own shell command; it
   kills that shell. Kill by PID, or use a pattern like `[g]eckodriver`.
+
+## OpenBao Lite implementation
+
+Managed secrets live in `vault*.go`, `integrations.go`, `git_credentials.go`,
+`secret*.go` and `agent_skills.go`. Data uses an owner-only bind directory under
+`stateDir()/secrets/openbao/data`, never a disposable named volume. The private
+Unix broker and authenticated web endpoint share typed project/operator operations.
+Keep values out of metadata, history and job output; fail closed when sealed.
+Cleanup configuration supports durations, `never`, automatic off and a confirmed
+overdue-resume barrier. Existing tools retain Git/worktree lifecycle ownership.
+Agent assets are embedded from `cmd/devkit/agent-assets`; preserve edited assets
+and instruction blocks. `docs/secrets.md` documents operations/recovery.
+Use disposable homes/config/state in tests; the opt-in runtime runner must never
+target the deployed `devkit-vault` Compose project.

@@ -409,7 +409,7 @@ func proxyCurrent(cfg hostConfig, dom, ip string) bool {
 // doctor is devkit doctor: it prints every check and fails if any did.
 func doctor() (int, error) {
 	failed := 0
-	for _, c := range doctorChecks() {
+	for _, c := range append(doctorChecks(), vaultDoctorChecks()...) {
 		fmt.Fprintf(stdout, "%-4s  %-11s  %s\n", c.Status, c.Name, c.Detail)
 		if c.Status == "fail" {
 			failed++

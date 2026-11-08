@@ -554,3 +554,12 @@ These are examples, not interchangeable endpoints. A VNC-only VM needs SPICE ena
 in its existing launcher before a SPICE connection can appear. Devkit does not add
 listeners or restart guests to change their display protocol. Existing TLS/socket
 configurations keep their documented client-configuration fallback.
+
+## Project credentials
+
+Project and worktree detail pages have a **Secrets** panel, with a branch selector
+for branch-owned overrides. Enroll the intended checkout explicitly with
+`devkit secrets resources register`. Worktree values override branch values, then
+project values. Cleanup changes secret state only; existing tools continue to own
+Git/worktree lifecycle. See [Development secrets](secrets.md) for CLI use, immutable
+context, retirement/recovery and configurable retention, including automatic off.

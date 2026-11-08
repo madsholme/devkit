@@ -89,6 +89,21 @@ func passwordHash() string {
 
 // sessionSecret is the host secret that signs session cookies; it is created on first use.
 func sessionSecret() ([]byte, error) {
+	vc, err := loadVaultConfig()
+	if err != nil {
+		return nil, err
+	}
+	if vc.Provider == "openbao" {
+		value, err := readVaultReference("openbao://devkit/system/web-session-signing-key")
+		if err != nil {
+			return nil, err
+		}
+		key, err := base64.RawStdEncoding.DecodeString(value)
+		if err != nil || len(key) < 32 {
+			return nil, fail("Invalid vault-backed session key")
+		}
+		return key, nil
+	}
 	path := filepath.Join(configDir(), "web-secret")
 	if data, err := os.ReadFile(path); err == nil && len(data) >= 32 {
 		return data, nil

@@ -167,7 +167,11 @@ func proxyFiles(cfg hostConfig, dom string, addrs []string) (compose, dynamic ma
 	}
 	environment := map[string]any{}
 	for _, key := range sortedKeys(e.DNSEnv) {
-		environment[key] = "${" + key + ":?Start Traefik with devkit proxy up}"
+		if e.DNSEnv[key].OpenBao != "" {
+			environment[key+"_FILE"] = "/run/devkit-secrets/dns-" + key
+		} else {
+			environment[key] = "${" + key + ":?Start Traefik with devkit proxy up}"
+		}
 	}
 	var command []string
 	for i, a := range addrs {
@@ -200,6 +204,13 @@ func proxyFiles(cfg hostConfig, dom string, addrs []string) (compose, dynamic ma
 		}},
 		"volumes": map[string]any{"certificates": map[string]any{}},
 	}
+	for _, source := range e.DNSEnv {
+		if source.OpenBao != "" {
+			service := compose["services"].(map[string]any)["traefik"].(map[string]any)
+			service["volumes"] = append(service["volumes"].([]string), secretRuntimeDir()+":/run/devkit-secrets:ro")
+			break
+		}
+	}
 	routers := map[string]any{"devkit": map[string]any{
 		"rule": "Host(`devkit." + dom + "`)", "service": "devkit", "tls": map[string]any{}}}
 	services := map[string]any{"devkit": map[string]any{
@@ -210,11 +221,18 @@ func proxyFiles(cfg hostConfig, dom string, addrs []string) (compose, dynamic ma
 		services["harness"] = map[string]any{
 			"loadBalancer": map[string]any{"servers": []any{map[string]any{"url": h.URL}}}}
 	}
+	if vaultEnabled(cfg) {
+		routers["vault"] = map[string]any{"rule": "Host(`vault.devkit." + dom + "`)", "service": "vault", "entryPoints": vaultPrivateEntrypoints(addrs), "middlewares": []string{"vault-private"}, "tls": map[string]any{"certResolver": "dns", "domains": []any{map[string]string{"main": "vault.devkit." + dom}}}}
+		services["vault"] = map[string]any{"loadBalancer": map[string]any{"servers": []any{map[string]string{"url": cfg.Secrets.Address}}}}
+	}
 	dynamic = map[string]any{
 		// The default certificate is the wildcard; it covers one level below the domain, not the domain itself.
 		"tls": map[string]any{"stores": map[string]any{"default": map[string]any{"defaultGeneratedCert": map[string]any{
 			"resolver": "dns", "domain": map[string]any{"main": "*." + dom}}}}},
 		"http": map[string]any{"routers": routers, "services": services},
+	}
+	if vaultEnabled(cfg) {
+		dynamic["http"].(map[string]any)["middlewares"] = map[string]any{"vault-private": map[string]any{"ipAllowList": map[string]any{"sourceRange": []string{"127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7"}}}}
 	}
 	return compose, dynamic
 }
@@ -285,10 +303,27 @@ func proxyUp() error {
 	if err := checkListen(addrs); err != nil {
 		return err
 	}
+	if vaultEnabled(cfg) && len(vaultPrivateEntrypoints(addrs)) == 0 {
+		return fail("OpenBao needs an explicit private LAN/Tailscale proxy listener")
+	}
 	secrets := map[string]string{}
 	for _, key := range sortedKeys(cfg.Proxy.DNSEnv) {
+		if vaultEnabled(cfg) && cfg.Proxy.DNSEnv[key].OpenBao == "" {
+			return fail("Managed DNS needs OpenBao references; use vault migrate --source dns")
+		}
 		if secrets[key], err = cfg.Proxy.DNSEnv[key].read(); err != nil {
 			return fmt.Errorf("%s: %w", key, err)
+		}
+	}
+	for key, source := range cfg.Proxy.DNSEnv {
+		if source.OpenBao != "" {
+			if cfg.Proxy.DNSProvider != "cloudflare" {
+				return fail("Managed DNS file delivery currently supports Cloudflare; retain local provider for other DNS consumers")
+			}
+			if _, err := writeRuntimeSecret("dns-"+key, secrets[key]); err != nil {
+				return err
+			}
+			delete(secrets, key)
 		}
 	}
 	if err := ensureProxyNetwork(); err != nil {

@@ -18,7 +18,11 @@ Small, single-host preview runner for Git worktrees.
 commands:
   setup [--yes] [--domain D] [--email E] [--harness t3|none|custom]
                        configure this host: settings, credentials, DNS, Traefik and the dashboard
-  doctor               check this host and say how to fix what is missing
+  vault                managed OpenBao setup, status, unseal, backup and explicit updates
+  secrets              contextual secret storage, runtime injection and configurable cleanup
+  integrations         Cloudflare/GitHub credentials and exact Git HTTPS bindings
+  agents skills        install, inspect or repair Codex/Claude secrets guidance
+  doctor [--agents]    check this host and say how to fix what is missing
   version              show which devkit release or commit this is
   proxy up             write Traefik's configuration from the host config and start or update it
   up                   alias for live (Docker); use --vm TARGET for a configured VM
@@ -188,6 +192,14 @@ func dispatch(args []string) (int, error) {
 		}
 	}
 	switch command {
+	case "secrets":
+		return secretsCLI(rest)
+	case "integrations":
+		return integrationsCLI(rest)
+	case "agents":
+		return agentsSkillsCLI(rest)
+	case "vault":
+		return vaultCLI(rest)
 	case "docs":
 		return documentsCLI(rest)
 	case "project":
@@ -215,6 +227,7 @@ func dispatch(args []string) (int, error) {
 		set.StringVar(&opts.domain, "domain", "", "")
 		set.StringVar(&opts.email, "email", "", "")
 		set.StringVar(&opts.harness, "harness", "", "")
+		set.StringVar(&opts.secretsProvider, "secrets-provider", "", "")
 		if err := parse(set, rest); err != nil {
 			return 2, err
 		}
@@ -240,6 +253,9 @@ func dispatch(args []string) (int, error) {
 		}
 		return 0, listVMs(*asJSON)
 	case "doctor":
+		if len(rest) == 1 && rest[0] == "--agents" {
+			return doctorAgents()
+		}
 		if err := parse(flags(command), rest); err != nil {
 			return 2, err
 		}

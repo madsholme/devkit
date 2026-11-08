@@ -247,6 +247,7 @@ onBeforeUnmount(() => {
               <p v-if="!state.session.password_set" class="menu-help">
                 Run <code>devkit web password</code> on the host to enable actions.
               </p>
+              <DropdownMenuItem @select="router.push('/settings/secrets')">Secrets</DropdownMenuItem>
               <DropdownMenuSeparator /><DropdownMenuSub
                 ><DropdownMenuSubTrigger><Palette :size="16" />Theme</DropdownMenuSubTrigger
                 ><DropdownMenuSubContent class="theme-menu"
@@ -359,7 +360,7 @@ onBeforeUnmount(() => {
         <p v-if="reclaimable >= 5e9" class="note">
           {{ (reclaimable / 1e9).toFixed(1) }} GB of Docker data reclaimable
         </p>
-        <header v-if="route.name !== 'project'" class="workspace-heading">
+        <header v-if="route.name !== 'project' && route.name !== 'secrets-settings'" class="workspace-heading">
           <div>
             <h1>
               <component :is="page.icon" :size="25" />{{ page.title

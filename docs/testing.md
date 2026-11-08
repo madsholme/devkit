@@ -166,3 +166,78 @@ acceptance test includes document creation above the old 64 KiB request limit, r
 stale rejection and unchanged Git HEAD. Frontend tests cover Markdown escaping and safe
 links; browser tests cover reading, checkout selection, relative links, create/edit preview,
 authentication expiry, conflict retention and accepted/cancelled unsaved navigation.
+
+## OpenBao Lite
+
+Unit tests use synthetic credentials, temporary config/state and an in-process HTTP
+KV fixture. They cover CAS/inheritance, protocol boundaries, disabled/`never`
+cleanup, recovery and overdue-resume barriers, private runtime delivery, migration,
+update backup ordering, Git HTTPS matching and preservation of edited agent assets.
+The browser secret test verifies generation/metadata/reveal and clearing on
+navigation/logout. These do not prove a real OpenBao restore or external DNS/TLS.
+
+```sh
+go test ./...
+go test -race ./cmd/devkit -run 'TestSecrets|TestSecretCleanup|TestVault|TestGitCredentials'
+python3 tests/bootstrap_acceptance.py
+pnpm --dir frontend test
+pnpm --dir frontend build
+pnpm --dir frontend test:ui
+# Build into a disposable path, not the running host binary:
+go build -o /tmp/devkit-secrets-acceptance ./cmd/devkit
+python3 tests/agent_secrets_acceptance.py --devkit /tmp/devkit-secrets-acceptance
+DEVKIT_OPENBAO_RUNTIME_TEST=1 python3 tests/openbao_runtime_acceptance.py
+# Also requires age and age-keygen (Fedora: sudo dnf install age;
+# Debian/Ubuntu: sudo apt-get install age):
+DEVKIT_OPENBAO_RUNTIME_TEST=1 DEVKIT_OPENBAO_ENCRYPTED_TEST=1 python3 tests/openbao_runtime_acceptance.py
+# Includes encrypted recovery of the pre-upgrade backup:
+DEVKIT_OPENBAO_RUNTIME_TEST=1 DEVKIT_OPENBAO_UPGRADE_TEST=1 python3 tests/openbao_runtime_acceptance.py
+```
+
+The OpenBao runner requires Docker, pulls the pinned image if absent, and uses a
+unique test Compose project, private temporary bind directory and loopback ports.
+It tests real initialization/provisioning, root retirement, restart/manual unseal,
+Raft snapshot restore, KV version deletion/restoration, cleanup disabled past expiry,
+explicit scope recovery/purge, and metadata/native-audit/container configuration
+redaction. The native audit device is declared in server configuration and verified
+during provisioning; API audit creation stays disabled. It never
+uses deployed credentials or the `devkit-vault` Compose project. Opting in without
+Docker is a failure, not a simulated pass.
+
+The encrypted profile invokes Devkit's actual backup pipeline with a disposable
+Traefik certificate volume. It checks encrypted Raft/registry/cleanup/host/ACME
+components, wrong-key and tampered-ciphertext rejection, and proxy restart/partial
+output cleanup after encryption failure. It restores into fresh OpenBao bind storage
+using the original unseal key, logs in, provisions a new backend identity, and checks
+values, inheritance, history, deleted-key recovery and cleanup off. A separate
+Traefik volume restores the ACME archive with mode/owner checks and serves the
+original generated test certificate through hostname-verified TLS. Test decryption
+keys stay in a private `/dev/shm` directory and decrypted components in memory;
+all disposable containers, volumes and files are cleaned up. It uses no public CA,
+Cloudflare credentials or deployed proxy state. Release CI runs this profile.
+
+The upgrade profile starts with OpenBao 2.7.1 and invokes the real `vault update`
+CLI handler for 2.7.2. It checks read-only `--check`, failed encryption blocking the
+upgrade, a complete pre-upgrade encrypted backup, preservation of the same bind
+directory, target image/version, sealed reads, original-key manual unseal, secret
+persistence across another restart, and rejection of an in-place downgrade. It
+then decrypts the exact backup named in the update record and exercises the recovery
+profile in fresh **2.7.1** storage, leaving the upgraded instance intact. This proves
+that recovery route for this patch pair; it does not validate every permitted
+minor-version transition. Release CI runs both the normal and upgrade profiles.
+
+Actual public certificate issuance/renewal and real Cloudflare consumers,
+and LAN/Tailscale clients still require the operational checks in
+[Development secrets](secrets.md#backups-and-updates).
+
+The agent asset runner creates a disposable home and checks both install targets,
+identity/version and user-edit preservation. It **does not launch agents** or claim
+fresh-session discovery. For that separate acceptance, use a disposable enrolled
+project and a fresh Codex session, then a fresh Claude Code session in their real
+launch environment (including T3 when used). Request a temporary development
+password without mentioning the skill. Verify context/list precede creation,
+explicit scope, no value in chat/logs, correct UI metadata and runtime injection.
+Repeat with a sealed vault and cleanup off; neither agent should use plaintext
+fallback or change retention. Record each actual agent/version/result, plus LAN
+and remote Tailscale client DNS/TLS/native-login results. Unavailable environments
+remain pending. Respect any instruction prohibiting agent subprocesses.

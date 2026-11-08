@@ -7,6 +7,7 @@ import PreviewsView from './views/PreviewsView.vue'
 import ContainersView from './views/ContainersView.vue'
 import VMsView from './views/VMsView.vue'
 import WorktreesView from './views/WorktreesView.vue'
+import SecretsSettingsView from './views/SecretsSettingsView.vue'
 import HistoryView from './views/HistoryView.vue'
 import { store } from './format'
 import { tabs } from './dashboard'
@@ -31,6 +32,7 @@ const router = createRouter({
     { path: '/containers', component: ContainersView },
     { path: '/vms', component: VMsView },
     { path: '/worktrees', component: WorktreesView },
+    { path: '/settings/secrets', name: 'secrets-settings', component: SecretsSettingsView },
     { path: '/history', component: HistoryView },
     { path: '/:pathMatch(.*)*', redirect: '/projects' },
   ],

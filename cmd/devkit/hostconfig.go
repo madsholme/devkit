@@ -15,6 +15,7 @@ import (
 // hostConfig is ~/.config/devkit/config.json: what devkit knows about this host. devkit setup
 // writes it; devkit web password adds the dashboard password.
 type hostConfig struct {
+	Secrets     *vaultConfig   `json:"secrets,omitempty"`
 	ProjectsDir string         `json:"projects_dir,omitempty"` // parent of main project folders
 	VMProjects  []string       `json:"vm_projects,omitempty"`  // explicit recipe roots for VM-only projects
 	Name        string         `json:"name"`                   // optional; the dashboard's title, the hostname by default
@@ -88,6 +89,13 @@ func loadHostConfig() (hostConfig, error) {
 			return cfg, fail("%s: %v", configPath(), err)
 		}
 	}
+	if cfg.Secrets != nil {
+		normalized, e := loadVaultConfig()
+		if e != nil {
+			return cfg, e
+		}
+		cfg.Secrets = &normalized
+	}
 	if cfg.ProjectsDir != "" && !filepath.IsAbs(expandHome(cfg.ProjectsDir)) {
 		return cfg, fail("projects_dir must be absolute or start with ~/.")
 	}
@@ -153,6 +161,7 @@ var tailscaleIP = func() (string, error) {
 // secretSource says where a secret comes from: a private file, an environment variable or a
 // command such as "op read op://dev/cloudflare/token". Exactly one is set.
 type secretSource struct {
+	OpenBao string `json:"openbao,omitempty"`
 	File    string `json:"file,omitempty"`
 	Env     string `json:"env,omitempty"`
 	Command string `json:"command,omitempty"`
@@ -160,6 +169,8 @@ type secretSource struct {
 
 func (s secretSource) String() string {
 	switch {
+	case s.OpenBao != "":
+		return s.OpenBao
 	case s.File != "":
 		return "file " + expandHome(s.File)
 	case s.Env != "":
@@ -170,15 +181,18 @@ func (s secretSource) String() string {
 
 func (s secretSource) read() (string, error) {
 	set := 0
-	for _, v := range []string{s.File, s.Env, s.Command} {
+	for _, v := range []string{s.File, s.Env, s.Command, s.OpenBao} {
 		if v != "" {
 			set++
 		}
 	}
 	if set != 1 {
-		return "", fail("A secret needs exactly one of file, env or command.")
+		return "", fail("A secret needs exactly one of file, env, command or openbao.")
 	}
 	var value string
+	if s.OpenBao != "" {
+		return readVaultReference(s.OpenBao)
+	}
 	switch {
 	case s.File != "":
 		path := expandHome(s.File)
@@ -287,6 +301,13 @@ func loadShareConfig() (cfg shareConfig, ok bool, err error) {
 			file = filepath.Join(configDir(), "cloudflare-token")
 		}
 		cfg.Token = &secretSource{File: file}
+	}
+	provider, providerErr := loadVaultConfig()
+	if providerErr != nil {
+		return cfg, false, providerErr
+	}
+	if provider.Provider == "openbao" && cfg.Token.OpenBao == "" {
+		return cfg, false, fail("Managed sharing needs an OpenBao token reference; use vault migrate --source share")
 	}
 	if cfg.Prefix == nil {
 		prefix := "preview-"

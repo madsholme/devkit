@@ -161,6 +161,10 @@ func newHandler() (http.Handler, error) {
 			send(w, http.StatusOK, a.body, a.kind, a.cache)
 			return
 		}
+		if r.URL.Path == "/api/secrets" {
+			secretsWebHandler(w, r)
+			return
+		}
 		if actions.handles(r.URL.Path) {
 			actions.ServeHTTP(w, r)
 			return
@@ -480,6 +484,13 @@ func serve(host string, port int) error {
 	if err != nil {
 		return err
 	}
+	stopSecrets, err := startSecretSocket()
+	if err != nil {
+		return err
+	}
+	defer stopSecrets()
+	stopMaintenance := startSecretsMaintenance()
+	defer stopMaintenance()
 	address := net.JoinHostPort(host, strconv.Itoa(port))
 	listener, err := net.Listen("tcp", address)
 	if err != nil {

@@ -1,0 +1,5 @@
+<!-- devkit-managed:secrets:start -->
+## Devkit-managed secrets
+
+This project uses Devkit's OpenBao-backed secrets integration when enabled. For passwords, tokens, API keys and other credentials, consult the installed `devkit-secrets` skill. First run `devkit secrets context --json` and `devkit secrets list --json`. Use Devkit CLI to generate, store, retrieve, rotate and inject secrets; avoid Git-tracked plaintext `.env` files. Use explicit `--reveal` only when a plaintext secret is needed, and never echo values in conversation or logs. Secrets may come from worktree, branch or project scopes; check provenance before editing. Do not access system/other-project secrets or manually purge vault paths. Devkit handles scoped cleanup and retention. See `devkit secrets --help`.
+<!-- devkit-managed:secrets:end -->

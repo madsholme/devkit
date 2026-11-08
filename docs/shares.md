@@ -51,3 +51,11 @@ recreated to pick it up, and again when the share ends). Let the app accept that
 e.g. Django's `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`, and build absolute URLs
 and OAuth callbacks from it. A share is public: anyone with the link can open it.
 Prefer review previews; a live preview may run with debug pages on.
+
+## Managed credentials
+
+With OpenBao enabled, sharing requires an OpenBao reference for its Cloudflare
+API token. Use the explicit [verified import](secrets.md#integration-credentials-and-existing-host-import)
+for existing source files. The per-tunnel token is delivered through an owner-only
+memory-backed runtime file, not Docker environment/arguments. Unseal and restart
+the affected consumer after reboot; there is no persistent plaintext fallback.

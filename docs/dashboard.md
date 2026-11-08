@@ -306,3 +306,13 @@ hosts need no Node runtime, CDN, or SwiftDesign checkout. To change the dashboar
 [frontend development and checks](testing.md#frontend-development-and-checks). Go-only
 builds use the committed production assets; frontend edits must regenerate them before
 building the binary.
+
+## Secrets
+
+Project/worktree **Secrets** panels and **Settings → Secrets** require sign-in for
+metadata and values. Reveal/copy requests are transient responses outside retained
+action jobs; values clear on navigation/logout and after 30 seconds. Settings
+include OpenBao status/native UI, manual update preview, encrypted backups,
+integration credentials, agent skill repair and cleanup durations/`never`/automatic off.
+All operations have [CLI equivalents](secrets.md). A sealed vault also prevents
+authenticated dashboard access; use terminal unseal/recovery independently.

@@ -71,6 +71,7 @@ class Bootstrap(unittest.TestCase):
         result, calls = self.run_bootstrap()
         self.assertEqual(result.returncode, 0, result.stderr)
         packages = next(c for c in calls if c[0]=='apt-get' and 'swtpm' in c)
+        self.assertTrue(any(c[0] == 'apt-get' and 'age' in c for c in calls))
         self.assertIn('qemu-system-x86', packages)
         self.assertIn('ovmf', packages)
         self.assertIn(['systemctl','enable','--now','libvirtd.service'], calls)
@@ -82,6 +83,7 @@ class Bootstrap(unittest.TestCase):
     def test_fedora_modular_and_spice(self):
         result, calls = self.run_bootstrap('fedora', MOCK_MODULAR='yes')
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(any(c[0] == 'dnf' and 'age' in c for c in calls))
         packages = next(c for c in calls if c[0]=='dnf' and 'swtpm' in c)
         for package in ('qemu-ui-spice-core','qemu-device-display-qxl','edk2-ovmf','libvirt-daemon-kvm'):
             self.assertIn(package, packages)

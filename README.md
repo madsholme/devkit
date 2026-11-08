@@ -92,7 +92,7 @@ cd devkit
 ./bootstrap.sh                      # Docker, Tailscale and lingering, with sudo; open the Tailscale link it prints
 # log out and back in, so Docker works without sudo
 install -D devkit ~/.local/bin/devkit
-devkit setup                        # domain, DNS token, certificate, dashboard and T3 Code
+devkit setup                        # vault-first credentials, domain, certificate, dashboard and T3 Code
 ```
 
 Then open `https://devkit.<your domain>` from a device on your tailnet, and set a dashboard
@@ -125,6 +125,10 @@ configures the rest of the host from your answers.
 | Command | Behavior |
 |---|---|
 | `devkit setup` | Configure this host step by step; safe to run again (see [Host setup](docs/setup.md)) |
+| `devkit vault` | Manage OpenBao setup, manual unseal, encrypted backups and explicit updates |
+| `devkit secrets` | Save/generate development passwords with scoped inheritance and configurable cleanup |
+| `devkit integrations` | Store integration credentials and bind exact Git HTTPS remotes |
+| `devkit agents skills` | Install/status/repair Codex and Claude Code secret guidance |
 | `devkit doctor` | Check the host and say how to fix what is missing |
 | `devkit docs list` / `devkit docs read PATH` | List and read Markdown under docs/, root README and agent guidance in the current registered checkout |
 | `devkit docs save PATH --expected VERSION\|new --file FILE\|-` | Create or edit a document under docs/ with stale-edit protection; no commit |
@@ -161,6 +165,8 @@ Run lifecycle commands inside the owning Git repository; `ls` works anywhere. Se
 [Previews](docs/previews.md) for what each command does to a preview and its data.
 
 ## Documentation
+
+- [Development secrets](docs/secrets.md): OpenBao with bind-mounted data, password capture, cleanup off/never, updates and recovery.
 
 - [Host setup](docs/setup.md): requirements, `bootstrap.sh`, `devkit setup`, the host config,
   secrets and private routing.

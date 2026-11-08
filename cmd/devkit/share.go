@@ -162,12 +162,15 @@ func shareLabels(web container, s share) []string {
 	return args
 }
 
-// startCloudflared runs the connector; the token travels in the environment, not on the command line.
+// startCloudflared passes only a memory-backed file reference to Docker.
 var startCloudflared = func(cfg shareConfig, web container, s share, token string) (string, error) {
-	args := append([]string{"docker", "run", "-d", "--quiet", "--name", s.Preview + "-share", "--network", "devkit-proxy",
-		"--restart", "unless-stopped", "--env", "TUNNEL_TOKEN"}, shareLabels(web, s)...)
-	args = append(args, cfg.Image, "tunnel", "--no-autoupdate", "run")
-	return runCommand(args, runOpts{capture: true, env: withEnv(os.Environ(), map[string]string{"TUNNEL_TOKEN": token})})
+	path, err := writeRuntimeSecret("tunnel-"+s.Preview, token)
+	if err != nil {
+		return "", err
+	}
+	args := append([]string{"docker", "run", "-d", "--quiet", "--name", s.Preview + "-share", "--network", "devkit-proxy", "--restart", "unless-stopped", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "--mount", "type=bind,source=" + path + ",target=/run/devkit-tunnel-token,readonly"}, shareLabels(web, s)...)
+	args = append(args, cfg.Image, "tunnel", "--no-autoupdate", "run", "--token-file", "/run/devkit-tunnel-token")
+	return runCommand(args, runOpts{capture: true})
 }
 
 var removeContainer = func(id string) error {

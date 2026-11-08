@@ -31,6 +31,21 @@ jobs:
           go vet ./...
           go test ./...
 
+      - name: Install backup encryption tools
+        run: sudo apt-get update && sudo apt-get install -y age
+
+      - name: Verify disposable OpenBao storage and encrypted recovery
+        env:
+          DEVKIT_OPENBAO_RUNTIME_TEST: '1'
+          DEVKIT_OPENBAO_ENCRYPTED_TEST: '1'
+        run: python3 tests/openbao_runtime_acceptance.py
+
+      - name: Verify backup-gated OpenBao upgrade and recovery
+        env:
+          DEVKIT_OPENBAO_RUNTIME_TEST: '1'
+          DEVKIT_OPENBAO_UPGRADE_TEST: '1'
+        run: python3 tests/openbao_runtime_acceptance.py
+
       - name: Build the bundles
         env:
           DEVKIT_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
@@ -38,6 +53,13 @@ jobs:
           ./bundle.sh amd64
           ./bundle.sh arm64
           cd bin && sha256sum devkit-linux-*.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+      - name: Verify embedded agent assets from the amd64 bundle
+        run: |
+          staging=$(mktemp -d)
+          trap 'rm -rf "$staging"' EXIT
+          tar -xzf bin/devkit-linux-amd64.tar.gz -C "$staging"
+          python3 tests/agent_secrets_acceptance.py --devkit "$staging/devkit/devkit"
 
       - name: Keep the bundles of a manual run
         if: github.ref_type != 'tag'

@@ -41,9 +41,9 @@ fi
 say "Base packages"
 if [ "$family" = apt ]; then
 	sudo apt-get update -qq
-	sudo apt-get install -y -qq ca-certificates curl git
+	sudo apt-get install -y -qq ca-certificates curl git age
 else
-	sudo dnf install -y -q ca-certificates curl git
+	sudo dnf install -y -q ca-certificates curl git age
 fi
 
 say "Docker Engine and Compose v2"

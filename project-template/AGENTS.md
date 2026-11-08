@@ -58,3 +58,7 @@ mounts. `DEVKIT_URL` is the preview's URL; while shared, the web service also ge
   `devkit stop` then `devkit start` (data is kept).
 - Checks: `devkit exec python3 -c 'import ast; ast.parse(open("app.py").read())'`.
   Review runs the same check through the `check` hook.
+
+<!-- devkit-secrets begin sha256:6b1dc8e06239bcb7be71fbe26555306b19a4df468ee6a931831fd97e805af445 -->
+Use the devkit-secrets skill for development credentials. Save generated passwords with devkit secrets; never put values in chat, Git or permanent dotenv files. Choose an explicit project, branch or worktree scope. Use runtime injection and metadata-only output. Preserve existing Git/T3/agent workflows. Cleanup retention is configurable, including never and automatic off.
+<!-- devkit-secrets end -->
