@@ -36,6 +36,9 @@ commands:
                        gracefully stop one Docker container; retain data
   cleanup --vm NAME|--project SLUG [--purge] [--yes]
                        stop and unregister QEMU VMs; dry run, retain disks unless --purge
+  docs list | read PATH | save PATH --expected VERSION|new --file FILE|-
+  project create NAME [--remote URL] [--agents-file FILE|-]
+                       copy the bundled template into projects_dir, initialize main and commit
   git fetch|sync|push   fetch origin, fast-forward from its upstream, or explicitly push
   ls                   list managed previews, including stopped ones
   web [--host H] [--port P]
@@ -185,6 +188,10 @@ func dispatch(args []string) (int, error) {
 		}
 	}
 	switch command {
+	case "docs":
+		return documentsCLI(rest)
+	case "project":
+		return projectCreateCLI(rest)
 	case "git":
 		dashboard := len(rest) == 2 && rest[1] == "--dashboard"
 		if len(rest) != 1 && !dashboard {

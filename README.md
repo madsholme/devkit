@@ -74,8 +74,9 @@ Docker labels know the previews.
 - **Not a CI or deployment system.** Deploying for team review goes through a `publish` hook you
   write (see [Publishing](docs/publishing.md)).
 - **Explicit Git controls only.** Fetch origin, fast-forward a clean branch from its origin
-  upstream, or push separately. devkit never creates/deletes worktrees, commits, stashes,
-  rebases or force-pushes. Resolve dirty or diverged branches with your own Git tools.
+  upstream, or push separately. New project creation makes its initial commit; devkit never
+  commits changes in existing projects, creates/deletes worktrees, stashes, rebases or force-pushes.
+  Resolve dirty or diverged branches with your own Git tools.
 
 ## Quick start
 
@@ -95,8 +96,10 @@ devkit setup                        # domain, DNS token, certificate, dashboard 
 ```
 
 Then open `https://devkit.<your domain>` from a device on your tailnet, and set a dashboard
-password with `devkit web password` to act from it. For a first project, copy
-`project-template` into a Git repository, commit it and run `devkit live` there; see
+password with `devkit web password` to act from it. For a first project, configure
+`projects_dir` and your global Git name/email, then run
+`devkit project create my-app` (or use **Projects → Create Project**) and run `devkit live`
+in the new folder; see
 [Project recipe](docs/projects.md) for your own apps and [Host setup](docs/setup.md) for details.
 
 For headless or graphical QEMU VMs, `./bootstrap.sh --qemu` adds the optional Fedora/Ubuntu prerequisites.
@@ -115,13 +118,17 @@ Start a live preview whenever you want a longer back-and-forth session.
 devkit does not create or delete worktrees. Your tools (T3 Code, Orca, or plain
 `git worktree add`) own them; devkit only manages the environment (containers,
 volumes, preview URL) of whichever worktree it runs in. Creating a worktree does
-not start services. The kit does not commit, push Git, merge or install system
-software; `devkit setup` configures the rest of the host from your answers.
+not start services. Only explicit project creation makes an initial commit; Git push is a
+separate explicit command. The kit does not merge or install system software; `devkit setup`
+configures the rest of the host from your answers.
 
 | Command | Behavior |
 |---|---|
 | `devkit setup` | Configure this host step by step; safe to run again (see [Host setup](docs/setup.md)) |
 | `devkit doctor` | Check the host and say how to fix what is missing |
+| `devkit docs list` / `devkit docs read PATH` | List and read Markdown under docs/ and root agent guidance in the current registered checkout |
+| `devkit docs save PATH --expected VERSION\|new --file FILE\|-` | Create or edit a document under docs/ with stale-edit protection; no commit |
+| `devkit project create NAME [--remote URL] [--agents-file FILE\|-]` | Copy the built-in template into projects_dir, append agent instructions, initialize main and commit; optionally set origin |
 | `devkit version` | Show which devkit release or commit this is (the dashboard's footer shows it too) |
 | `devkit proxy up` | Write Traefik's configuration from the host config and start or update it |
 | `devkit up` | Alias for `devkit live` |
@@ -164,6 +171,15 @@ Run lifecycle commands inside the owning Git repository; `ls` works anywhere. Se
 - [Public shares](docs/shares.md): Cloudflare Tunnel shares that expire.
 - [Publishing](docs/publishing.md): the contract for team deployments.
 - [Acceptance check](docs/testing.md): checking a host end to end.
+
+## Developing the dashboard
+
+The dashboard uses SwiftDesign Vue components with SwiftConfig as its layout reference.
+Production assets are embedded in the Go binary; hosts need no frontend runtime.
+After changing `frontend/`, run `pnpm --dir frontend install --frozen-lockfile` and
+`pnpm --dir frontend build`, then rebuild devkit. Commit the regenerated `web/dist/`
+assets alongside source changes. See [frontend checks](docs/testing.md#frontend-development-and-checks)
+for the isolated preview, browser tests and package provenance.
 
 ## License
 

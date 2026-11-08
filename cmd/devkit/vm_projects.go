@@ -130,6 +130,7 @@ func readVMProjects(roots []string) ([]projectConfig, []string) {
 func assignVMProjects(rows []virtualMachine, projects []projectConfig) {
 	names, uuids := map[string]int{}, map[string]int{}
 	byName, byUUID := map[string]map[string]bool{}, map[string]map[string]bool{}
+	rootsByName, rootsByUUID := map[string]map[string]bool{}, map[string]map[string]bool{}
 	add := func(index map[string]map[string]bool, key, project string) {
 		if index[key] == nil {
 			index[key] = map[string]bool{}
@@ -146,8 +147,14 @@ func assignVMProjects(rows []virtualMachine, projects []projectConfig) {
 		for _, s := range cfg.VMs {
 			if s.UUID != "" {
 				add(byUUID, strings.ToLower(s.UUID), cfg.Project)
+				if cfg.root != "" {
+					add(rootsByUUID, strings.ToLower(s.UUID), cfg.root)
+				}
 			} else {
 				add(byName, s.Name, cfg.Project)
+				if cfg.root != "" {
+					add(rootsByName, s.Name, cfg.root)
+				}
 			}
 		}
 	}
@@ -155,10 +162,13 @@ func assignVMProjects(rows []virtualMachine, projects []projectConfig) {
 		vm := &rows[i]
 		vm.Project = ""
 		vm.ProjectNote = ""
+		vm.WorktreeKey, vm.WorktreeNote = "", ""
 		claims := byUUID[strings.ToLower(vm.UUID)]
+		roots := rootsByUUID[strings.ToLower(vm.UUID)]
 		count := uuids[strings.ToLower(vm.UUID)]
 		if len(claims) == 0 {
 			claims = byName[vm.Name]
+			roots = rootsByName[vm.Name]
 			count = names[vm.Name]
 		}
 		if len(claims) == 0 {
@@ -174,6 +184,15 @@ func assignVMProjects(rows []virtualMachine, projects []projectConfig) {
 		}
 		for project := range claims {
 			vm.Project = project
+		}
+		// Presentation metadata only: retain existing project/control authority. Never
+		// publish recipe paths, nor select one worktree when several claim the VM.
+		if len(roots) == 1 {
+			for root := range roots {
+				vm.WorktreeKey = digest(root)
+			}
+		} else if len(roots) > 1 {
+			vm.WorktreeNote = "Mapped by multiple worktrees"
 		}
 	}
 }

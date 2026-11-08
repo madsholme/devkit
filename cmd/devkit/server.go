@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +28,7 @@ type asset struct {
 func loadAssets() (map[string]asset, error) {
 	assets := map[string]asset{}
 	for path, file := range map[string]struct{ name, kind, cache string }{
-		"/":                     {"index.html", "text/html; charset=utf-8", "no-store"},
+		"/":                     {"dist/index.html", "text/html; charset=utf-8", "no-store"},
 		"/logo.svg":             {"logo.svg", "image/svg+xml", "max-age=3600"},
 		"/favicon.ico":          {"favicon.ico", "image/x-icon", "max-age=3600"},
 		"/apple-touch-icon.png": {"apple-touch-icon.png", "image/png", "max-age=3600"},
@@ -38,7 +40,30 @@ func loadAssets() (map[string]asset, error) {
 		// Browsers keep favicons in their own cache and may skip no-store responses.
 		assets[path] = asset{body, file.kind, file.cache}
 	}
-	return assets, nil
+	// Only compiled assets embedded at build time are published. Never serve source,
+	// package files or arbitrary filesystem paths; unknown URLs remain 404s.
+	err := fs.WalkDir(web.Files, "dist", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if _, known := assets["/"+strings.TrimPrefix(name, "dist/")]; known || name == "dist/index.html" {
+			return nil
+		}
+		kind := map[string]string{".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".svg": "image/svg+xml"}[path.Ext(name)]
+		if kind == "" {
+			return fmt.Errorf("unsupported dashboard asset: %s", name)
+		}
+		body, err := web.Files.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		assets["/"+strings.TrimPrefix(name, "dist/")] = asset{body, kind, "public, max-age=31536000, immutable"}
+		return nil
+	})
+	return assets, err
 }
 
 func send(w http.ResponseWriter, code int, body []byte, kind, cache string) {
@@ -150,6 +175,16 @@ func newHandler() (http.Handler, error) {
 		case "/api/containers":
 			var data containersData
 			if data, err = containersOverview(r.Context()); err == nil {
+				sendJSON(w, data)
+			}
+		case "/api/documents":
+			var data documentList
+			if data, err = listDocuments(query.Get("worktree")); err == nil {
+				sendJSON(w, data)
+			}
+		case "/api/document":
+			var data documentData
+			if data, err = readDocument(query.Get("worktree"), query.Get("path")); err == nil {
 				sendJSON(w, data)
 			}
 		case "/api/projects":
@@ -310,7 +345,7 @@ func (h *actionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		actionRequest
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil && r.URL.Path != "/api/logout" {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&body); err != nil && r.URL.Path != "/api/logout" {
 		sendError(w, http.StatusBadRequest, "Send JSON.")
 		return
 	}

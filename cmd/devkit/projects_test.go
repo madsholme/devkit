@@ -246,3 +246,20 @@ func TestIncompleteProjectDiscoveryBlocksVMControls(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectCheckoutExposesOpaqueVMWorktreeKey(t *testing.T) {
+	root := t.TempDir()
+	const uuid = "aaaaaaaa-1111-1111-1111-111111111111"
+	os.WriteFile(filepath.Join(root, "devkit.json"), []byte(`{"project":"lab","vms":[{"name":"worker","control":{"start":"PRIVATE_START","stop":"PRIVATE_STOP"}},{"uuid":"`+uuid+`"}]}`), 0600)
+	row := checkoutProject(worktree{Path: root}, nil)
+	if row.WorktreeKey != digest(resolve(root)) {
+		t.Fatalf("missing worktree identity: %+v", row)
+	}
+	data, err := json.Marshal(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "PRIVATE_") || strings.Contains(string(data), `"control"`) {
+		t.Fatalf("private VM configuration exposed: %s", data)
+	}
+}

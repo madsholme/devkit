@@ -13,3 +13,8 @@ work/
 # Built by: go build -o bin/devkit ./cmd/devkit
 /bin/
 /cmd/devkit/devkit
+
+# Frontend authoring dependencies and test output
+/frontend/node_modules/
+/frontend/test-results/
+/frontend/playwright-report/

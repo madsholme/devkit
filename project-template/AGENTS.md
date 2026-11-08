@@ -4,8 +4,8 @@ This project runs on a devkit host: the app and its services run in Docker, one
 preview per Git worktree, at a private HTTPS URL on the tailnet. The host may not
 have the project's language or tools installed; the containers do.
 
-Copy the "Previews with devkit" section into your project's own AGENTS.md (or
-CLAUDE.md) and fill in "This project" for it.
+Keep the "Previews with devkit" guidance when adapting this project. Update "This
+project" as the app changes; additional project instructions can follow below.
 
 ## Previews with devkit
 
@@ -41,7 +41,7 @@ Never:
 - run `docker`, `docker compose` or the app directly on the host to get around devkit;
 - publish ports, set `container_name` or `network_mode` in Compose files, or put
   host secrets into an image;
-- create or remove worktrees, or commit, push or merge, unless asked (devkit never does);
+- create or remove worktrees, or commit, push or merge, unless asked (devkit only makes the initial commit during explicit project creation);
 - fix the host yourself (Traefik, DNS, certificates, `devkit setup`). Report what
   `devkit doctor` says instead.
 

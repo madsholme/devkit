@@ -1,6 +1,6 @@
 # Project recipe
 
-Copy/adapt `project-template` into ONE real project. Give `devkit.json` a unique
+Use `devkit project create` for a new project, or copy/adapt `project-template` into ONE existing project. Give `devkit.json` a unique
 project slug per clone on a host. It identifies the web service, its internal port,
 and separate live/review Compose files. Common configuration can be factored out
 later; the tiny sample deliberately keeps each file self-contained.
@@ -27,6 +27,47 @@ an allowlist for the sample. Rendered Compose config may contain environment sec
 it is stored privately at `<git-common-dir>/devkit/runs/<preview>/compose.json`.
 These are per-preview execution artifacts for restart/cleanup, not a task registry.
 
+## Create a project
+
+Configure `projects_dir` in the host config and create that parent directory first.
+Configure `git config --global user.name` and `git config --global user.email` for the
+host account running devkit. Then use **Projects → Create Project** after signing in,
+or run from any directory:
+
+```sh
+devkit project create my-app
+devkit project create another-app --remote git@github.com:you/another-app.git --agents-file notes.md
+# Read additional instructions from stdin:
+cat notes.md | devkit project create third-app --agents-file -
+```
+
+The name is 1–32 lowercase letters, digits or hyphens, starting with a letter or digit.
+Creation copies the built-in `project-template` into `projects_dir/NAME`: the sample Python
+app, message, Dockerfile, live/review Compose files, `devkit.json`, T3 actions, AGENTS.md,
+CLAUDE.md and both dotfiles. It sets the recipe's project slug, initializes Git on `main`
+and commits all starter files once. The template is embedded in the binary; it does not
+clone the devkit repository or its history. No files need to be removed during creation.
+Adapt the sample app, Dockerfile and recipes together afterward for your own stack.
+
+The optional remote accepts HTTPS or SSH (including `git@host:owner/repo.git`) without
+embedded credentials, query strings or fragments. It only sets `origin`: it does not
+create a hosted repository, verify remote access, fetch or push. Use an empty hosted
+repository when you later publish this new history; importing an existing repository
+is a separate workflow.
+
+Additional instructions are UTF-8 text up to 16 KiB, appended under **Project-specific
+instructions** in AGENTS.md. Existing devkit guidance stays intact; CLAUDE.md references
+AGENTS.md. The modal lets you review that guidance. Instructions travel to the CLI over
+stdin and are excluded from job output and history, but are committed in the new project:
+do not put secrets in them.
+
+Existing destinations are refused, including empty folders, files and symlinks. Concurrent
+attempts cannot overwrite one another. Missing Git identity is reported before creating
+anything. If copying or Git fails afterward, the partial folder is retained and its path
+is reported; inspect it before manually removing it or choosing another name. Creation
+runs no template hooks and starts no containers or VMs. The initial commit is the sole
+exception to devkit's rule against committing changes in an existing project.
+
 ## Discovering projects before launch
 
 Set `"projects_dir": "~/Work"` in the host's `~/.config/devkit/config.json`, using
@@ -48,6 +89,37 @@ Associated VMs show their existing **Start**, **Stop** and **Restart** controls;
 **Details & connect** opens their inventory and private connection instructions.
 Each VM still needs an explicit mapping and lifecycle adapter below. Launching
 containers never implicitly starts VMs, and launching a VM never starts containers.
+
+## Read and edit documents
+
+The dashboard's **Documents** tab reads Markdown from the selected project's main
+checkout or linked worktree. Root `README.md` and `AGENTS.md`/`AGENT.md` are view-only (case-insensitive names); Markdown under
+`docs/` can be created or edited after sign-in. To use the same behavior from the CLI,
+run in the root of a registered project checkout:
+
+```sh
+devkit docs list
+devkit docs read docs/plans/release.md
+cat plan.md | devkit docs save docs/plans/release.md --expected new --file -
+```
+
+List and read produce JSON. `read` includes the exact content and its SHA-256 `version`.
+For an edit, pass that version to `--expected VERSION` with the updated content supplied
+through `--file FILE` or `--file -` (stdin). `new` only creates a nonexistent destination.
+Paths must be non-hidden `.md` files under docs/; nested folders are created for new files.
+The current folder must still be registered through project discovery when the save runs.
+
+Saves preserve existing permission bits, use a sibling temporary file and atomic
+publication, and serialize devkit saves per checkout. Version checks reject stale edits
+and observed external changes. External editors do not share the lock: avoid editing the
+same document simultaneously because a change after the final check can still race the
+atomic replacement. No existing file is removed on failure, and failed drafts remain in
+the dashboard editor. No commits, hooks, fetches or pushes occur. New files and edited
+plans appear as ordinary Git working-tree changes.
+
+The individual file limit is 256 KiB of UTF-8 text without NUL bytes. Symbolic/hard links
+and special files are refused. Document contents travel to CLI jobs over stdin and are
+excluded from job output/history; successful saves record the document path only.
 
 ## Existing Compose stacks
 

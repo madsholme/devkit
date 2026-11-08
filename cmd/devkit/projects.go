@@ -40,6 +40,7 @@ type projectPreview struct {
 	URL    string `json:"url"`
 }
 type projectCheckout struct {
+	WorktreeKey string           `json:"worktree_key,omitempty"`
 	Containers  []containerRow   `json:"containers,omitempty"`
 	Path        string           `json:"path"`
 	Branch      string           `json:"branch"`
@@ -51,6 +52,7 @@ type projectCheckout struct {
 	Previews    []projectPreview `json:"previews"`
 	worktreeInfo
 }
+
 type projectRow struct {
 	Name      string            `json:"name"`
 	Path      string            `json:"path"`
@@ -81,6 +83,7 @@ func checkoutProject(tree worktree, containers []container) projectCheckout {
 		}
 	default:
 		row.Project = cfg.Project
+		row.WorktreeKey = digest(cfg.root)
 		compose := resolve(filepath.Join(tree.Path, orDefault(cfg.Compose["live"], "compose.live.yaml")))
 		row.Docker = row.Git && within(compose, resolve(tree.Path)) && isFile(compose)
 		if !row.Git && len(cfg.Compose) > 0 {

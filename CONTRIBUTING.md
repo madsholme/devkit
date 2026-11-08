@@ -22,15 +22,18 @@ Before you open one:
 - If you changed how previews run, also run the Docker check:
   `go build -o bin/devkit ./cmd/devkit && DEVKIT_RUNTIME_TEST=1 python3 tests/runtime_acceptance.py`.
 - Update `README.md` or the page in `docs/` that describes what you changed.
-- For dashboard changes, add a screenshot to the pull request.
+- For dashboard changes, run `pnpm --dir frontend test`, `pnpm --dir frontend build`
+  and `pnpm --dir frontend test:ui`. Commit regenerated `web/dist/` assets and add a
+  synthetic-data screenshot to the pull request. See [frontend checks](docs/testing.md#frontend-development-and-checks).
 
 ## How the code is kept
 
 [AGENTS.md](AGENTS.md) describes the layout and conventions; it's written for coding agents, but
 it's the best map for people too. The main rules:
 
-- The CLI is Go with the standard library only, and the dashboard (`web/index.html`) is vanilla
-  JavaScript without a build step. Please don't add dependencies.
+- The CLI is Go with the standard library only. The Vue dashboard in `frontend/` uses
+  SwiftDesign components and themes; reuse those components and avoid unrelated dependencies.
+  Its compiled assets remain embedded in the single Go binary.
 - Tests replace package variables such as `runCommand` and `dockerContainers` instead of running
   Docker or Git for real, and never read the real host config.
 - Dashboard actions run the `devkit` binary itself, so new actions start as a CLI command.

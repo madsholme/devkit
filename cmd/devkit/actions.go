@@ -15,22 +15,30 @@ import (
 
 // Dashboard actions run the devkit binary itself, exactly as the CLI would, as background jobs whose
 // output the page follows. Every target is checked against what exists on this host first: a preview
-// devkit manages, or a worktree of a repository devkit knows.
+// devkit manages, or a worktree of a repository devkit knows. Explicit project creation
+// instead reserves a new child of the configured projects directory.
 
 type actionRequest struct {
-	VM        string `json:"vm"`
-	Container string `json:"container"`
-	Action    string `json:"action"`
-	Preview   string `json:"preview"`
-	Worktree  string `json:"worktree"`
-	Repo      string `json:"repo"`
-	Host      string `json:"host"`
-	Hours     int    `json:"hours"`
-	Confirm   string `json:"confirm"`
+	Path       string `json:"path"`
+	Expected   string `json:"expected"`
+	Content    string `json:"content"`
+	Name       string `json:"name"`
+	Remote     string `json:"remote"`
+	AgentNotes string `json:"agent_notes"`
+	VM         string `json:"vm"`
+	Container  string `json:"container"`
+	Action     string `json:"action"`
+	Preview    string `json:"preview"`
+	Worktree   string `json:"worktree"`
+	Repo       string `json:"repo"`
+	Host       string `json:"host"`
+	Hours      int    `json:"hours"`
+	Confirm    string `json:"confirm"`
 }
 
 // plannedAction is a checked request: the devkit arguments, where to run them and what they lock.
 type plannedAction struct {
+	stdin  string
 	args   []string
 	dir    string
 	target string
@@ -67,6 +75,12 @@ func repoDir(trees []worktree, preferred string) string {
 }
 
 func planAction(req actionRequest) (plannedAction, error) {
+	if req.Action == "document-save" {
+		return planDocumentSave(req)
+	}
+	if req.Action == "project-create" {
+		return planProjectCreate(req)
+	}
 	if req.Action == "container-start" {
 		return planContainerStart(req)
 	}
@@ -204,6 +218,7 @@ var runAction = func(p plannedAction, out *job) error {
 	}
 	cmd := exec.Command(self, p.args...)
 	cmd.Dir, cmd.Stdout, cmd.Stderr = p.dir, out, out
+	cmd.Stdin = strings.NewReader(p.stdin)
 	cmd.Env = withEnv(os.Environ(), map[string]string{"DEVKIT_BY": "dashboard"})
 	return cmd.Run()
 }

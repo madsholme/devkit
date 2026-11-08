@@ -1,6 +1,6 @@
 # Acceptance check
 
-1. Create a Git repository from the sample and commit it.
+1. Run `devkit project create sample` in an isolated configured projects_dir; verify its initial commit.
 2. Create worktrees for branches `try/a` and `try-a` (e.g. `git worktree add -b try/a ../try-a`);
    verify distinct names/URLs.
 3. Start both live previews. Change each `message.txt`; verify different responses.
@@ -110,3 +110,59 @@ A scoped Docker wrapper prevents the test server from mutating user resources.
 `DEVKIT_QA_HOLD=1` retains the fixture for up to 15 minutes for a browser check and
 prints the location of a private fixture login descriptor; create `finish` alongside
 that descriptor to clean up early. This flag never retains user credentials.
+
+## Frontend development and checks
+
+Use Node 22.12+ (24 recommended) and pnpm 10.33.0. SwiftDesign snapshots are included in
+`frontend/vendor/` with provenance, so installation needs no private package token or
+sibling checkout. Dependencies are pinned by `frontend/pnpm-lock.yaml`.
+
+```sh
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend test
+pnpm --dir frontend build
+pnpm --dir frontend exec playwright install chromium
+pnpm --dir frontend test:ui
+go test ./...
+go vet ./...
+go build -o bin/devkit ./cmd/devkit
+```
+
+To use installed Chromium, set `CHROMIUM_PATH=/usr/bin/chromium-browser` for `test:ui`.
+The browser suite starts an isolated server on `127.0.0.1:4178` with invented host data.
+It covers all six views, anonymous/signed-in controls, exact confirmation targets,
+sharing, details, log follow, pairing, system sampling, failed discovery, expired
+sessions, theme selection and mobile navigation. Project checks cover list/detail navigation,
+worktree resource isolation, project-wide branch links, ambiguous VM assignments, deep links,
+reload/back behavior and missing selections. Unit tests pin exact container association and
+opaque VM worktree mapping; Go tests retain UUID precedence, duplicate-claim handling and
+private-path/command exclusion. It executes no host actions.
+Screenshots are written to `/tmp/devkit-swift-*.png`; test artifacts stay gitignored.
+
+For an interactive synthetic preview, run `node frontend/tests/fixture-server.mjs`
+after building and open `http://127.0.0.1:4178`. Its password is `demo-password`; it
+simulates operations only. For development against a deliberately chosen local devkit
+server, `pnpm --dir frontend dev` proxies `/api` to `127.0.0.1:3780`. The production
+server retains its same-origin checks; use the embedded build to verify real sign-in
+and mutations, or configure a separate authorized test host.
+
+Commit generated `web/dist/` with frontend source. The frontend CI job rebuilds and
+rejects stale assets, while Go asset tests check that HTML references (including theme
+boot) are actually served with the correct content type and caching. Release bundles
+continue to build directly with Go, using these checked-in assets. Do not hand-edit
+`web/dist/`. The standard-library-only backend and its auth/ownership tests remain intact.
+
+Project creation coverage in `go test ./...` checks complete template copying, notes preservation,
+origin and initial commit, duplicate paths/symlinks, concurrency, invalid input, missing identity,
+retained partial failures and authenticated action planning. `tests/git_runtime_acceptance.py`
+also exercises real HTTP job → CLI stdin → template/Git creation and duplicate rejection using
+temporary directories. `DEVKIT_GIT_BINARY` selects the binary. Frontend `test:ui` covers the
+Create Project modal, cancel, preserved guidance, duplicate errors, retained input and catalog refresh.
+
+Document tests cover registered main/linked checkouts, empty catalogs, root agent aliases,
+read-only guidance, nested creation, preserved modes, stale/concurrent writes, traversal,
+links, special/oversized/non-text files and private stdin action plans. The real Git HTTP
+acceptance test includes document creation above the old 64 KiB request limit, read/edit,
+stale rejection and unchanged Git HEAD. Frontend tests cover Markdown escaping and safe
+links; browser tests cover reading, checkout selection, relative links, create/edit preview,
+authentication expiry, conflict retention and accepted/cancelled unsaved navigation.
