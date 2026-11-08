@@ -15,34 +15,56 @@ const dimensions = computed(() => ({
   width: `${(props.media?.width || 1) * scale.value}px`,
   height: `${(props.media?.height || 1) * scale.value}px`,
 }))
-let dragging: { id: number; x: number; y: number; left: number; top: number } | null = null
+type Point = { x: number; y: number }
+type Anchor = Point & { imageX: number; imageY: number }
+const pointers = new Map<number, Point>()
+let dragging: (Point & { left: number; top: number }) | null = null
+let pinch: { distance: number; scale: number; anchor: Anchor } | null = null
+let zoomRevision = 0
 const panning = ref(false)
 
 function fit() {
   const area = viewport.value
   if (!area || !props.media) return
   fitMode.value = true
+  zoomRevision++
   scale.value = Math.min(area.clientWidth / props.media.width, area.clientHeight / props.media.height, 8)
   area.scrollTo(0, 0)
 }
-async function zoom(value: number) {
+function anchorAt(x: number, y: number): Anchor {
+  const area = viewport.value!
+  const media = props.media!
+  return {
+    x, y,
+    imageX: (area.scrollLeft + x - Math.max(0, (area.clientWidth - media.width * scale.value) / 2)) / scale.value,
+    imageY: (area.scrollTop + y - Math.max(0, (area.clientHeight - media.height * scale.value) / 2)) / scale.value,
+  }
+}
+function localPoint(point: Point): Point {
+  const area = viewport.value!
+  const rect = area.getBoundingClientRect()
+  return { x: point.x - rect.left - area.clientLeft, y: point.y - rect.top - area.clientTop }
+}
+async function zoom(value: number, anchor?: Anchor) {
   const area = viewport.value
   const media = props.media
   if (!area || !media) return
-  const old = scale.value
-  const x = (area.scrollLeft + area.clientWidth / 2 - Math.max(0, (area.clientWidth - media.width * old) / 2)) / old
-  const y = (area.scrollTop + area.clientHeight / 2 - Math.max(0, (area.clientHeight - media.height * old) / 2)) / old
+  const version = ++zoomRevision
+  const point = anchor || anchorAt(area.clientWidth / 2, area.clientHeight / 2)
   fitMode.value = false
   scale.value = Math.max(0.01, Math.min(8, value))
   await nextTick()
-  if (media !== props.media) return
-  area.scrollLeft = x * scale.value + Math.max(0, (area.clientWidth - media.width * scale.value) / 2) - area.clientWidth / 2
-  area.scrollTop = y * scale.value + Math.max(0, (area.clientHeight - media.height * scale.value) / 2) - area.clientHeight / 2
+  if (media !== props.media || version !== zoomRevision) return
+  area.scrollLeft = point.imageX * scale.value + Math.max(0, (area.clientWidth - media.width * scale.value) / 2) - point.x
+  area.scrollTop = point.imageY * scale.value + Math.max(0, (area.clientHeight - media.height * scale.value) / 2) - point.y
 }
 watch(() => props.media, () => {
   failed.value = false
   fitMode.value = true
+  zoomRevision++
+  pointers.clear()
   dragging = null
+  pinch = null
   panning.value = false
 })
 watch(viewport, (area, _old, cleanup) => {
@@ -63,29 +85,55 @@ function keyboard(event: KeyboardEvent) {
   }
 }
 function wheel(event: WheelEvent) {
-  if (!event.ctrlKey) return
+  if (!viewport.value || !props.media || !event.deltaY) return
   event.preventDefault()
-  void zoom(scale.value * (event.deltaY < 0 ? 1.1 : 1 / 1.1))
+  event.stopPropagation()
+  const point = localPoint({ x: event.clientX, y: event.clientY })
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.value.clientHeight : 1
+  const delta = Math.max(-500, Math.min(500, event.deltaY * unit))
+  void zoom(scale.value * Math.exp(-delta * 0.002), anchorAt(point.x, point.y))
+}
+function rebaseGesture() {
+  dragging = null
+  pinch = null
+  const area = viewport.value
+  const points = [...pointers.values()]
+  panning.value = points.length > 0
+  if (!area || !props.media) return
+  if (points.length === 1) {
+    dragging = { ...points[0], left: area.scrollLeft, top: area.scrollTop }
+  } else if (points.length === 2) {
+    const [a, b] = points
+    const middle = localPoint({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+    pinch = { distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), scale: scale.value, anchor: anchorAt(middle.x, middle.y) }
+  }
 }
 function startPan(event: PointerEvent) {
   const area = viewport.value
-  // Touch uses native scrolling; only mouse dragging needs pointer capture.
-  if (!area || event.pointerType !== 'mouse' || event.button !== 0) return
+  if (!area || !props.media || event.button !== 0 || pointers.size >= 2) return
   event.preventDefault()
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
   area.setPointerCapture(event.pointerId)
-  dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, left: area.scrollLeft, top: area.scrollTop }
-  panning.value = true
+  rebaseGesture()
 }
 function pan(event: PointerEvent) {
-  if (!dragging || dragging.id !== event.pointerId || !viewport.value) return
-  viewport.value.scrollLeft = dragging.left + dragging.x - event.clientX
-  viewport.value.scrollTop = dragging.top + dragging.y - event.clientY
+  const area = viewport.value
+  if (!area || !pointers.has(event.pointerId)) return
+  event.preventDefault()
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()]
+    const middle = localPoint({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+    void zoom(pinch.scale * Math.hypot(a.x - b.x, a.y - b.y) / pinch.distance, { ...pinch.anchor, ...middle })
+  } else if (dragging) {
+    area.scrollLeft = dragging.left + dragging.x - event.clientX
+    area.scrollTop = dragging.top + dragging.y - event.clientY
+  }
 }
 function stopPan(event: PointerEvent) {
-  if (dragging?.id !== event.pointerId) return
+  if (!pointers.delete(event.pointerId)) return
   if (viewport.value?.hasPointerCapture(event.pointerId)) viewport.value.releasePointerCapture(event.pointerId)
-  dragging = null
-  panning.value = false
+  rebaseGesture()
 }
 </script>
 <template>
@@ -93,7 +141,7 @@ function stopPan(event: PointerEvent) {
     <DialogContent class="document-media-viewer" @keydown="keyboard">
       <DialogHeader class="media-viewer-heading">
         <DialogTitle>{{ media?.title }}</DialogTitle>
-        <DialogDescription>Zoom with the controls or Ctrl + scroll. Drag or scroll to move around.</DialogDescription>
+        <DialogDescription>Scroll or pinch to zoom. Drag with the mouse or one finger to move around.</DialogDescription>
       </DialogHeader>
       <div class="media-viewer-toolbar" role="group" aria-label="Media zoom controls">
         <Button variant="outline" size="sm" aria-label="Zoom out" :disabled="scale <= 0.01" @click="zoom(scale * 0.8)"><ZoomOut :size="16" /></Button>
@@ -127,7 +175,7 @@ function stopPan(event: PointerEvent) {
 .media-viewer-heading [data-slot='dialog-title'] { overflow-wrap: anywhere; }
 .media-viewer-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .media-viewer-percent { min-width: 3.5rem; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.875rem; }
-.media-viewer-viewport { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; color: #222; cursor: grab; }
+.media-viewer-viewport { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; touch-action: none; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; color: #222; cursor: grab; }
 .media-viewer-viewport.panning { cursor: grabbing; }
 .media-viewer-viewport:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .media-viewer-canvas { display: grid; place-items: center; width: max-content; min-width: 100%; min-height: 100%; }

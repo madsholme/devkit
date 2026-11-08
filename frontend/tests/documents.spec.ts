@@ -350,3 +350,48 @@ test('images and flowcharts open in a keyboard-accessible zoom viewer', async ({
  await viewer.getByRole('button',{name:'Close',exact:true}).click()
  await expect(viewer).toHaveCount(0)
 })
+
+test('wheel zooms without modifiers and touch pinch keeps one-finger panning', async ({ browser }) => {
+ const context = await browser.newContext({ viewport: {width:390,height:844}, hasTouch:true, isMobile:true })
+ const page = await context.newPage()
+ try {
+  await page.route('**/api/document?*', route => route.fulfill({ json:{path:'README.md',content:'![Gesture preview](large.svg)',editable:false,version:'d'.repeat(64)} }))
+  await page.route('**/api/document-image?*', route => route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200"><rect width="1800" height="1200" fill="#157a9c"/></svg>'}))
+  await page.goto(url+'?doc=README.md')
+  await page.getByRole('button',{name:'Enlarge image: Gesture preview'}).tap()
+  const dialog=page.getByRole('dialog')
+  const zoom=dialog.getByRole('status')
+  await dialog.getByRole('button',{name:'Actual size',exact:true}).tap()
+  const area=dialog.getByRole('region',{name:'Zoomable media'})
+  const bounds=(await area.boundingBox())!
+  await page.mouse.move(bounds.x+100,bounds.y+200)
+  await page.mouse.wheel(0,-120)
+  await expect(zoom).not.toHaveText('100%')
+  expect(Number((await zoom.textContent())!.replace('%',''))).toBeGreaterThan(100)
+  await dialog.getByRole('button',{name:'Actual size',exact:true}).tap()
+  await area.evaluate(el=>{el.scrollLeft=300;el.scrollTop=200})
+  const cdp=await context.newCDPSession(page)
+  const y=bounds.y+200
+  const x=bounds.x+170
+  const touch=(id:number,x:number)=>({id,x,y,radiusX:4,radiusY:4,force:1})
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,x-40),touch(2,x+40)]})
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(1,x-80),touch(2,x+80)]})
+  await expect(zoom).toHaveText('200%')
+  expect(await page.evaluate(()=>window.visualViewport!.scale)).toBe(1)
+  // Lift one finger and keep dragging without resetting/jumping the gesture.
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[touch(2,x+80)]})
+  const before=await area.evaluate(el=>el.scrollLeft)
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(1,x-120)]})
+  await expect.poll(()=>area.evaluate(el=>el.scrollLeft)).toBeGreaterThan(before+20)
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]})
+  // A fresh pinch inward shrinks content, not the browser page.
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,x-80),touch(2,x+80)]})
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[touch(1,x-40),touch(2,x+40)]})
+  await expect(zoom).toHaveText('100%')
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]})
+  await dialog.getByRole('button',{name:'Fit to window',exact:true}).tap()
+  expect(Number((await zoom.textContent())!.replace('%',''))).toBeLessThan(100)
+  await dialog.getByRole('button',{name:'Close',exact:true}).tap()
+  await expect(dialog).toHaveCount(0)
+ } finally { await context.close() }
+})

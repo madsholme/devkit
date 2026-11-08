@@ -157,8 +157,10 @@ not supported. Other Mermaid diagram types stay as readable source. The same med
 rendering is used in the editor's Markdown preview.
 
 Click any displayed picture or flowchart to open a large viewer. **+ / −** zoom in/out,
-**Fit** fits the media to the window, and **100%** shows its natural size. Drag with the
-mouse or scroll to pan; touch screens use native scrolling. Ctrl + scroll also zooms.
+**Fit** fits the media to the window, and **100%** shows its natural size. Use the mouse wheel
+directly to zoom around the pointer, without a modifier key.
+On touch screens, pinch with two fingers to zoom around their midpoint. Drag with the
+mouse or one finger to pan. These gestures affect only the media canvas, not page zoom.
 Keyboard shortcuts are `+`, `-`, `0` (100%) and `F` (Fit). Escape or Close returns focus
 to the item you opened. The viewer preserves the active picture source, resets when
 the document changes, and releases temporary diagram images when closed.
