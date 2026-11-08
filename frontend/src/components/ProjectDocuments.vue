@@ -8,6 +8,7 @@ import { Textarea } from '@madsholme/ui/textarea'
 import { Badge } from '@madsholme/ui/badge'
 import { request, post, APIError } from '../api'
 import { store } from '../format'
+import { documentCategories, matchesDocumentCategory } from '../document-filter'
 import { state, openDialog, refresh } from '../dashboard'
 import type { Checkout } from '../types'
 import FilterSelect from './FilterSelect.vue'
@@ -39,6 +40,7 @@ const options = computed(() =>
 const files = ref<Entry[]>([])
 const warnings = ref<string[]>([])
 const filter = ref('')
+const category = ref('all')
 const documentViews = [
   { value: 'tree', label: 'Folder tree' },
   { value: 'files', label: 'Files only' },
@@ -51,7 +53,10 @@ const documentView = ref(
 watch(documentView, (value) => store.set('document-view', value))
 const fileName = (path: string) => path.split('/').pop() || path
 const filtered = computed(() =>
-  files.value.filter((f) => f.path.toLowerCase().includes(filter.value.trim().toLowerCase()))
+  files.value.filter((f) =>
+    matchesDocumentCategory(f.path, category.value) &&
+    f.path.toLowerCase().includes(filter.value.trim().toLowerCase())
+  )
 )
 const flatFiles = computed(() =>
   [...filtered.value].sort((a, b) => {
@@ -294,6 +299,10 @@ async function save() {
             :options="documentViews"
           />
         </div>
+        <div class="document-view-options">
+          <span class="note">Show</span>
+          <FilterSelect v-model="category" label="Document category" :options="documentCategories" />
+        </div>
         <div class="document-filter">
           <Input
             v-model="filter"
@@ -306,7 +315,7 @@ async function save() {
             :files="filtered"
             :selected="!creating ? document?.path : undefined"
             :scope="checkout"
-            :searching="Boolean(filter.trim())"
+            :searching="Boolean(filter.trim()) || category !== 'all'"
             :disabled="saving"
             @navigate="navigate"
           />
@@ -324,7 +333,7 @@ async function save() {
           >
             <FileText :size="15" />
             <span>{{ documentView === 'files' ? fileName(file.path) : file.path }}</span>
-            <span v-if="!file.editable" class="sr-only">Read-only agent guidance</span>
+            <span v-if="!file.editable" class="sr-only">Read-only root document</span>
           </button>
         </nav>
         <p v-if="!filtered.length && !loading" class="document-empty note">
@@ -395,7 +404,7 @@ async function save() {
             <div>
               <h2>{{ document.path }}</h2>
               <p class="note">
-                {{ document.editable ? 'Working tree document' : 'Agent guidance · read-only' }}
+                {{ document.editable ? 'Working tree document' : 'Root document · read-only' }}
               </p>
             </div>
             <Button v-if="document.editable" variant="outline" @click="startEdit"

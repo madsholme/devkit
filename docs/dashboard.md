@@ -121,12 +121,18 @@ counts. See [project creation](projects.md#create-a-project) for CLI usage and f
 
 Open **Projects → a project → Documents** to read plans, specs and other Markdown
 under `docs/`, including nested folders. Choose the main checkout or a linked worktree
-from the checkout selector. The file list also exposes root `AGENTS.md` or `AGENT.md`
-(case-insensitive names) as read-only guidance. File and checkout choices are deep-linked
+from the checkout selector. The file list also exposes root `README.md`, `AGENTS.md` or `AGENT.md`
+(case-insensitive names) as read-only documents. File and checkout choices are deep-linked
 in the URL. The sidebar's **View** selector offers **Folder tree**, **Files only** (filenames without
 folders or paths), and **Flat paths** (full relative paths). The choice is remembered in
 this browser. Search works in every mode; hover a file to see its full path when names
 repeat. Switching views keeps the selected document, draft and tree expansion state.
+**Show** filters by **All documents**, **Milestones**, **Plans**, **Specs**, or **README**.
+Milestones match path tokens such as milestone, milestones, m1 and m2; Plans match
+plan/plans; Specs match spec/specs/specification/specifications. README matches the
+filename README.md. Matching is case-insensitive and combines with search in all views.
+A milestone under plans/ appears in both categories. Filtering keeps the open document
+and draft intact.
 Expand folder rows in the file tree, or use **Expand all** / **Collapse all** above it.
 Search matches full paths and automatically expands matching folders; clear search to
 restore your previous expansion state. Arrow keys navigate and expand/collapse the tree.
@@ -141,7 +147,7 @@ open separately. Non-Markdown source files and arbitrary project assets are not 
 **New document** and **Edit** require sign-in. Enter a path inside docs/ (for example
 `plans/release.md`), write Markdown and use **Preview Markdown** before saving. New parent
 folders are created as needed. Saves leave ordinary uncommitted changes in the selected
-checkout; no Git commit or hook is run. Root agent guidance cannot be edited here.
+checkout; no Git commit or hook is run. Root README and agent guidance cannot be edited here.
 
 A stale version, an existing new-file destination, or a failed save leaves the editor's
 draft intact. If another tool changed a plan, copy your draft before reloading and reconcile

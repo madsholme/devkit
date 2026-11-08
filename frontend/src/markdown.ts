@@ -27,7 +27,7 @@ export function documentLink(
       } else if (part !== '.') parts.push(part)
     }
     const path = parts.join('/')
-    if (!/^docs\/(?:[^/.][^/]*\/)*[^/.][^/]*\.md$/i.test(path) && !/^agents?\.md$/i.test(path))
+    if (!/^docs\/(?:[^/.][^/]*\/)*[^/.][^/]*\.md$/i.test(path) && !/^(?:agents?|readme)\.md$/i.test(path))
       return null
     return { path, anchor: decodeURIComponent(anchor) }
   } catch {

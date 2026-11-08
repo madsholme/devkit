@@ -40,3 +40,8 @@ describe('project Markdown', () => {
       expect(documentLink(link, 'docs/plan.md')).toBeNull()
   })
 })
+
+it('navigates between root README and docs', () => {
+ expect(documentLink('../../readme.md', 'docs/plans/plan.md')?.path).toBe('readme.md')
+ expect(documentLink('docs/plan.md', 'README.md')?.path).toBe('docs/plan.md')
+})

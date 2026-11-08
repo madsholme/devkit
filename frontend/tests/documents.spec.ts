@@ -222,3 +222,27 @@ test('document selector switches between tree, filenames and paths while preserv
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
+
+test('document categories combine with search in tree and flat views', async ({ page }) => {
+  const paths = ['README.md', 'docs/plans/m1-setup.md', 'docs/milestone-2.md', 'docs/plans/release.md', 'docs/specs/design.md']
+  await page.route('**/api/documents?*', route => route.fulfill({ json: {
+    files: paths.map(path => ({ path, editable: path.startsWith('docs/') })), warnings: [],
+  } }))
+  await page.goto(url)
+  await page.getByRole('combobox', { name: 'Document category' }).click()
+  await page.getByRole('option', { name: 'Milestones', exact: true }).click()
+  await expect(page.getByRole('treeitem', { name: 'm1-setup.md', exact: true })).toBeVisible()
+  await expect(page.getByRole('treeitem', { name: 'milestone-2.md', exact: true })).toBeVisible()
+  await expect(page.getByRole('treeitem', { name: 'release.md', exact: true })).toHaveCount(0)
+  await page.getByRole('combobox', { name: 'Document selector view' }).click()
+  await page.getByRole('option', { name: 'Flat paths', exact: true }).click()
+  await page.getByRole('textbox', { name: 'Filter documents' }).fill('setup')
+  await expect(page.getByRole('button', { name: 'docs/plans/m1-setup.md', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'docs/milestone-2.md', exact: true })).toHaveCount(0)
+  await page.getByRole('textbox', { name: 'Filter documents' }).fill('')
+  for (const [category, path] of [['Plans', 'docs/plans/release.md'], ['Specs', 'docs/specs/design.md'], ['README', 'README.md']]) {
+    await page.getByRole('combobox', { name: 'Document category' }).click()
+    await page.getByRole('option', { name: category, exact: true }).click()
+    await expect(page.getByRole('button', { name: path, exact: true })).toBeVisible()
+  }
+})

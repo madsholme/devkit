@@ -93,7 +93,7 @@ containers never implicitly starts VMs, and launching a VM never starts containe
 ## Read and edit documents
 
 The dashboard's **Documents** tab reads Markdown from the selected project's main
-checkout or linked worktree. Root `AGENTS.md`/`AGENT.md` is view-only; Markdown under
+checkout or linked worktree. Root `README.md` and `AGENTS.md`/`AGENT.md` are view-only (case-insensitive names); Markdown under
 `docs/` can be created or edited after sign-in. To use the same behavior from the CLI,
 run in the root of a registered project checkout:
 

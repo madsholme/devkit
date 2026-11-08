@@ -163,3 +163,23 @@ func TestDocumentsListingBounds(t *testing.T) {
 		t.Fatalf("unbounded list: %d %+v %v", len(data.Files), data.Warnings, err)
 	}
 }
+
+func TestDocumentsRootReadme(t *testing.T) {
+	for _, name := range []string{"README.md", "readme.md", "ReadMe.MD"} {
+		t.Run(name, func(t *testing.T) {
+			root := documentHost(t)
+			os.WriteFile(filepath.Join(root, name), []byte("# Welcome"), 0644)
+			list, err := listDocuments(root)
+			if err != nil || len(list.Files) != 3 {
+				t.Fatalf("README missing: %+v %v", list, err)
+			}
+			d, err := readDocument(root, name)
+			if err != nil || d.Content != "# Welcome" || d.Editable {
+				t.Fatalf("README read: %+v %v", d, err)
+			}
+			if err := saveDocument(root, name, d.Version, "overwrite"); err == nil {
+				t.Fatal("root README unexpectedly writable")
+			}
+		})
+	}
+}

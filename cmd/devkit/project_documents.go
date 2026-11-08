@@ -36,7 +36,7 @@ func agentDocument(path string) bool {
 	return strings.EqualFold(path, "AGENTS.md") || strings.EqualFold(path, "AGENT.md")
 }
 func validDocumentPath(path string, write bool) bool {
-	if agentDocument(path) {
+	if agentDocument(path) || strings.EqualFold(path, "README.md") {
 		return !write
 	}
 	if len(path) > 512 || !strings.HasPrefix(path, "docs/") || !strings.EqualFold(filepath.Ext(path), ".md") || strings.ContainsAny(path, "\\\x00") {
@@ -142,9 +142,9 @@ func readDocumentAt(dir *os.File, name string) ([]byte, os.FileInfo, error) {
 	return data, info, nil
 }
 func readDocument(root, path string) (documentData, error) {
-	result := documentData{documentEntry: documentEntry{Path: path, Editable: !agentDocument(path)}}
+	result := documentData{documentEntry: documentEntry{Path: path, Editable: validDocumentPath(path, true)}}
 	if !validDocumentPath(path, false) {
-		return result, fail("Choose a Markdown file under docs/ or the root agent guidance file.")
+		return result, fail("Choose a Markdown file under docs/ or root README/agent guidance.")
 	}
 	dir, err := openDocumentRoot(root)
 	if err != nil {
@@ -208,7 +208,7 @@ func listDocuments(root string) (documentList, error) {
 					child.Close()
 				} else if validDocumentPath(path, false) {
 					if _, _, e := readDocumentAt(folder, name); e == nil {
-						result.Files = append(result.Files, documentEntry{path, !agentDocument(path)})
+						result.Files = append(result.Files, documentEntry{path, validDocumentPath(path, true)})
 					} else {
 						skipped = true
 					}
@@ -237,7 +237,7 @@ func listDocuments(root string) (documentList, error) {
 }
 func validateDocumentSave(path, expected, content string) error {
 	if !validDocumentPath(path, true) {
-		return fail("Only Markdown files under docs/ can be created or edited. Agent guidance is read-only.")
+		return fail("Only Markdown files under docs/ can be created or edited. Root README and agent guidance are read-only.")
 	}
 	if expected != "new" {
 		v, e := hex.DecodeString(expected)

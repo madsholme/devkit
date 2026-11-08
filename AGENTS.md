@@ -24,7 +24,7 @@ old names are dropped on purpose.
   from projects_dir/Docker/harness/cwd and host `vm_projects` roots, and leaves ambiguous claims unassigned.
   `projects.go` discovers direct project folders from host `projects_dir`, groups Git checkouts
   by common directory, and serves the independent `/api/projects` tree with launch capabilities.
-  `project_documents.go` lists/reads bounded docs Markdown and root agent guidance.
+  `project_documents.go` lists/reads bounded docs Markdown, root README and root agent guidance.
   Its CLI-backed authenticated saves accept only docs/*.md in registered checkouts,
   preserve permission bits and reject stale versions; never commit or execute content.
   `project_create.go` implements explicit new-project creation from the embedded template,
