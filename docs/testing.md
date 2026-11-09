@@ -187,6 +187,7 @@ pnpm --dir frontend test:ui
 go build -o /tmp/devkit-secrets-acceptance ./cmd/devkit
 python3 tests/agent_secrets_acceptance.py --devkit /tmp/devkit-secrets-acceptance
 python3 tests/vault_terminal_acceptance.py --devkit /tmp/devkit-secrets-acceptance
+DEVKIT_GUIDED_SETUP_TEST=1 python3 tests/guided_setup_acceptance.py
 DEVKIT_OPENBAO_RUNTIME_TEST=1 python3 tests/openbao_runtime_acceptance.py
 # Also requires age and age-keygen (Fedora: sudo dnf install age;
 # Debian/Ubuntu: sudo apt-get install age):
@@ -199,6 +200,26 @@ The terminal acceptance test uses a real PTY and a synthetic loopback API. It wa
 31 seconds at hidden input, then verifies that unseal still reaches the API and
 credential input is not echoed. Unit tests cover bounded KV-readiness retries and
 permanent-error rejection.
+
+The guided-setup runner builds a temporary Go test binary and invokes the production
+`setup` coordinator through a real controlling PTY, with real OpenBao in two uniquely
+named local Docker Compose projects and disposable homes/config/state. It covers an
+uninterrupted fresh run, interruption immediately after initialization, a 3-share/
+2-share-threshold resume, ready reruns, and sealed restart/unseal without reprovisioning.
+It checks native admin login, root revocation, DNS credential persistence, hidden input,
+metadata/audit redaction, service-definition generation and both installed agent skills.
+Only synthetic credentials are used; recovery material stays in runner memory and is
+never written to a transcript. Cleanup removes the disposable containers/data and
+checks that pre-existing running containers retain their start identities.
+
+Tailscale, DNS, Cloudflare, certificate checks, proxy startup and service-manager
+commands use existing test seams. Certificate route configuration is rendered, but
+this runner does not start a real proxy/dashboard service or exercise public issuance,
+real tailnet enrollment, remote client routing, bootstrap package installation or T3
+installation. It selects the supported no-harness setup option. Those boundaries
+remain separate host/network acceptance checks; this is a disposable host fixture,
+not a complete VM installation. The runner refuses remote Docker endpoints and never
+contacts Devbox or uses its credentials.
 
 The OpenBao runner requires Docker, pulls the pinned image if absent, and uses a
 unique test Compose project, private temporary bind directory and loopback ports.
