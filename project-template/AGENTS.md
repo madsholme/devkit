@@ -51,13 +51,7 @@ mounts. `DEVKIT_URL` is the preview's URL; while shared, the web service also ge
 `DEVKIT_PUBLIC_URL`. Hooks (`prepare`, `check`, `build`, `publish`) live in
 `devkit.json`.
 
-## This project
 
-- Web service `web` on port 8000; config in `devkit.json`.
-- `message.txt` is reread on every request. Python code changes need a restart:
-  `devkit stop` then `devkit start` (data is kept).
-- Checks: `devkit exec python3 -c 'import ast; ast.parse(open("app.py").read())'`.
-  Review runs the same check through the `check` hook.
 
 <!-- devkit-secrets begin sha256:4756ed054083c0f35d012b2fde77fd4b669b7492abbbd6ef266d0f5b866db231 -->
 ## Development credentials with Devkit
@@ -73,3 +67,5 @@ Use the devkit-secrets skill whenever creating, generating, saving or using deve
 - Preserve existing Git/T3/agent workflows. Cleanup retention is configurable, including never and automatic off; do not change cleanup settings or delete credentials as an incidental step.
 - If the vault is sealed or unavailable, report it and ask the human to restore access. Never fall back to plaintext storage or read host backend tokens, root tokens or unseal material.
 <!-- devkit-secrets end -->
+
+## This project
