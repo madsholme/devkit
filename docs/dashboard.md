@@ -309,6 +309,10 @@ building the binary.
 
 ## Secrets
 
+Choose Single value or Login when creating an entry. A login stores its username and password together, with separate reveal/copy controls and optional environment-variable mappings. The tab counts each login once; metadata does not expose either field.
+
+Project tabs show counts for Documents (files in the selected checkout) and Secrets (active saved entries across all project scopes). Worktree Secrets badges count entries owned by that worktree. Secret counts require sign-in; unavailable counts show a dash. The Secrets panel identifies the selected branch and checkout path, reveals values within their own rows, and provides copy icons without displaying values.
+
 Project/worktree **Secrets** panels and **Settings → Secrets** require sign-in for
 metadata and values. Reveal/copy requests are transient responses outside retained
 action jobs; values clear on navigation/logout and after 30 seconds. Settings

@@ -17,7 +17,7 @@ import (
 //go:embed agent-assets/devkit-secrets/SKILL.md
 var secretsSkillAssets embed.FS
 
-const secretsSkillVersion = "1"
+const secretsSkillVersion = "2"
 
 type secretsSkillManifest struct {
 	Version string `json:"version"`

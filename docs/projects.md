@@ -557,7 +557,7 @@ configurations keep their documented client-configuration fallback.
 
 ## Project credentials
 
-Project and worktree detail pages have a **Secrets** panel, with a branch selector
+Project and worktree detail pages have a **Secrets** panel supporting single values and paired username/password login entries, with a branch selector
 for branch-owned overrides. Enroll the intended checkout explicitly with
 `devkit secrets resources register`. Worktree values override branch values, then
 project values. Cleanup changes secret state only; existing tools continue to own

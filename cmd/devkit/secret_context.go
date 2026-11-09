@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,6 +44,9 @@ func inspectSecretCheckout(root string) (secretCheckout, error) {
 	var e error
 	c.Root, e = gitControlCommand(ctx, root, "rev-parse", "--show-toplevel")
 	if e != nil {
+		if errors.Is(e, errNotGitRepository) {
+			return c, fail("Run this command from a project's Git checkout: cd /path/to/project, then try again.")
+		}
 		return c, e
 	}
 	c.Root = resolve(c.Root)

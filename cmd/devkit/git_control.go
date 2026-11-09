@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,14 +14,24 @@ import (
 
 // Keep remote diagnostics private: a configured URL may contain credentials.
 // Commands are noninteractive and bounded, including their SSH/helper children.
+var errNotGitRepository = errors.New("Not a Git repository")
+
 var gitControlCommand = func(ctx context.Context, root string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
 	cmd.Env = withEnv(os.Environ(), map[string]string{"GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never", "SSH_ASKPASS": "/bin/false", "SSH_ASKPASS_REQUIRE": "force"})
+	checkingRoot := len(args) == 2 && args[0] == "rev-parse" && args[1] == "--show-toplevel"
+	if checkingRoot {
+		cmd.Env = withEnv(cmd.Env, map[string]string{"LC_ALL": "C"})
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 250 * time.Millisecond
 	out, err := cmd.Output()
 	if err != nil {
+		var exit *exec.ExitError
+		if checkingRoot && errors.As(err, &exit) && exit.ExitCode() == 128 && strings.HasPrefix(string(exit.Stderr), "fatal: not a git repository") {
+			return "", errNotGitRepository
+		}
 		return "", fail("Git command failed or timed out; check repository access and credentials on the host.")
 	}
 	return strings.TrimSpace(string(out)), nil

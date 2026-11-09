@@ -226,3 +226,58 @@ func TestSecretsRebindRefusesAnAlreadyRegisteredBranchIdentity(t *testing.T) {
 		t.Fatal("two identities now claim the same branch")
 	}
 }
+
+func TestSecretsContextCountsOnlyActiveOwnedEntries(t *testing.T) {
+	secretFixture(t)
+	repo, other := newGitRepo(t), newGitRepo(t)
+	run := func(root string, q secretRequest) secretResponse {
+		t.Helper()
+		q.Root = root
+		out, err := executeSecret(context.Background(), q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	registered := run(repo.root, secretRequest{Operation: "register"})
+	run(other.root, secretRequest{Operation: "register"})
+	for _, scope := range []string{"project", "branch", "worktree"} {
+		run(repo.root, secretRequest{Operation: "set", Scope: scope, Key: "PASSWORD", Value: "count-SENTINEL"})
+	}
+	run(other.root, secretRequest{Operation: "set", Scope: "project", Key: "OTHER", Value: "other-SENTINEL"})
+	run(repo.root, secretRequest{Operation: "set", Scope: "worktree", Key: "DELETED", Value: "deleted-SENTINEL"})
+	preview := run(repo.root, secretRequest{Operation: "delete", Scope: "worktree", Key: "DELETED"})
+	run(repo.root, secretRequest{Operation: "delete", Scope: "worktree", Key: "DELETED", Confirm: preview.Confirmation})
+	check := func(want int) {
+		t.Helper()
+		out := run(repo.root, secretRequest{Operation: "context"})
+		encoded, _ := json.Marshal(out)
+		var response struct {
+			Counts map[string]int `json:"counts"`
+		}
+		if json.Unmarshal(encoded, &response) != nil || response.Counts == nil {
+			t.Fatal("context lacks counts")
+		}
+		total := 0
+		for _, count := range response.Counts {
+			total += count
+		}
+		if total != want || response.Counts[registered.Context.Project] != 1 {
+			t.Fatalf("counts: %v", response.Counts)
+		}
+		if strings.Contains(string(encoded), "SENTINEL") {
+			t.Fatal("count response leaks values")
+		}
+	}
+	check(3)
+	// An inactive branch's stored entries are excluded without affecting its parent.
+	r, err := loadSecretRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Resources[registered.Context.Branch].State = "destroyed"
+	if err := saveSecretRegistry(&r); err != nil {
+		t.Fatal(err)
+	}
+	check(2)
+}

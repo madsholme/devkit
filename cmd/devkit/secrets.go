@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +14,11 @@ import (
 )
 
 type secretRequest struct {
+	secretEntryMeta
+	Username  string             `json:"username,omitempty"`
+	Password  string             `json:"password,omitempty"`
+	Field     string             `json:"field,omitempty"`
+	ClearEnv  bool               `json:"clear_env,omitempty"`
 	Service   string             `json:"service,omitempty"`
 	Image     string             `json:"image,omitempty"`
 	Backup    *vaultBackupConfig `json:"backup,omitempty"`
@@ -35,6 +38,7 @@ type secretRequest struct {
 	Cleanup   *cleanupConfig     `json:"cleanup,omitempty"`
 }
 type secretRecord struct {
+	secretEntryMeta
 	Name      string     `json:"name"`
 	Resource  string     `json:"resource"`
 	Scope     string     `json:"scope"`
@@ -46,6 +50,7 @@ type secretRecord struct {
 	Deadline  *time.Time `json:"deadline,omitempty"`
 }
 type secretResponse struct {
+	Counts       map[string]int    `json:"counts,omitempty"`
 	Management   map[string]any    `json:"management,omitempty"`
 	Values       map[string]string `json:"values,omitempty"`
 	Context      secretContext     `json:"context"`
@@ -123,9 +128,18 @@ func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error)
 		return out, e
 	}
 	if q.Operation == "context" || q.Operation == "resources" {
+		out.Counts = map[string]int{}
 		for _, v := range r.Resources {
 			if v.Project == out.Context.Project {
 				out.Resources = append(out.Resources, v)
+				if v.State == "active" {
+					out.Counts[v.ID] = 0
+				}
+			}
+		}
+		for _, key := range r.Keys {
+			if _, active := out.Counts[key.Resource]; active && !key.Deleted {
+				out.Counts[key.Resource]++
 			}
 		}
 		sort.Slice(out.Resources, func(i, j int) bool { return out.Resources[i].ID < out.Resources[j].ID })
@@ -185,7 +199,7 @@ func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error)
 				if !k.Deleted && !exists {
 					effective[k.Name] = k
 				}
-				out.Records = append(out.Records, secretRecord{Name: k.Name, Resource: id, Scope: source.Kind, Inherited: id != selected, Effective: !k.Deleted && !exists, Version: k.Version, Updated: k.Updated, Deleted: k.Deleted, Deadline: k.Deadline})
+				out.Records = append(out.Records, secretRecord{secretEntryMeta: k.secretEntryMeta, Name: k.Name, Resource: id, Scope: source.Kind, Inherited: id != selected, Effective: !k.Deleted && !exists, Version: k.Version, Updated: k.Updated, Deleted: k.Deleted, Deadline: k.Deadline})
 			}
 		}
 	}
@@ -200,16 +214,9 @@ func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error)
 		if e = secretAudit("inject", selected, ""); e != nil {
 			return out, e
 		}
-		for name, key := range effective {
-			if !envName.MatchString(name) || strings.HasPrefix(name, "VAULT_") || strings.HasPrefix(name, "BAO_") || strings.HasPrefix(name, "DEVKIT_") {
-				return out, fail("Secret name cannot be injected into this environment")
-			}
-			path, _ := resourceKVPath(r.Resources[key.Resource], name)
-			value, _, err := client.read(ctx, path)
-			if err != nil {
-				return secretResponse{}, err
-			}
-			out.Values[name] = value
+		out.Values, e = injectSecretEntries(ctx, client, &r, effective)
+		if e != nil {
+			return secretResponse{}, e
 		}
 		return out, nil
 	}
@@ -246,7 +253,26 @@ func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error)
 			if e = secretAudit("reveal", current.Resource, q.Key); e != nil {
 				return out, e
 			}
-			out.Value, _, e = client.read(ctx, path)
+			var data secretEntryData
+			data, e = readSecretEntry(ctx, client, path, current)
+			if e != nil {
+				return secretResponse{}, e
+			}
+			if data.Type == "login" {
+				switch q.Field {
+				case "username":
+					out.Value = data.Username
+				case "password":
+					out.Value = data.Password
+				default:
+					return out, fail("Select --field username or --field password to reveal a login")
+				}
+			} else {
+				if q.Field != "" && q.Field != "value" {
+					return out, fail("Single-value secrets have only the value field")
+				}
+				out.Value = data.Value
+			}
 		}
 		return out, e
 	case "set", "update", "generate", "rotate":
@@ -268,34 +294,24 @@ func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error)
 				return out, fail("No owned secret to update; create an explicit override")
 			}
 		}
-		value := q.Value
-		if q.Operation == "generate" || q.Operation == "rotate" {
-			length := q.Length
-			if length == 0 {
-				length = 32
-			}
-			if length < 16 || length > 256 {
-				return out, fail("Generated passwords need 16–256 characters")
-			}
-			b := make([]byte, length)
-			if _, e = rand.Read(b); e != nil {
-				return out, e
-			}
-			value = base64.RawURLEncoding.EncodeToString(b)[:length]
-		}
-		if len(value) == 0 || len(value) > 64<<10 {
-			return out, fail("Secret must contain 1–65536 bytes")
-		}
 		path, e := resourceKVPath(r.Resources[selected], q.Key)
 		if e != nil {
 			return out, e
 		}
+		data, e := prepareSecretEntry(ctx, client, path, q, key, effective[q.Key])
+		if e != nil {
+			return out, e
+		}
+
 		// Refuse automatic KV eviction even when cleanup is disabled.
 		if version >= 1000 {
 			return out, fail("Version retention limit reached; archive/purge explicitly before another write")
 		}
 		if e = secretAudit(q.Operation, selected, q.Key); e != nil {
 			return out, e
+		}
+		if data.Type == "login" {
+			r.Schema = 2
 		}
 		r.Pending = &secretOperation{ID: secretID(), Kind: "write", Resource: selected, Key: q.Key, Expected: version}
 		if e = saveSecretRegistry(&r); e != nil {
@@ -306,11 +322,12 @@ func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error)
 				Version int `json:"version"`
 			} `json:"data"`
 		}
-		e = client.call(ctx, "POST", "kv/data/"+path, map[string]any{"options": map[string]int{"cas": version}, "data": map[string]string{"value": value, "operation_id": r.Pending.ID}}, &result)
+		data.OperationID = r.Pending.ID
+		e = client.call(ctx, "POST", "kv/data/"+path, map[string]any{"options": map[string]int{"cas": version}, "data": data}, &result)
 		if e != nil {
 			return out, e
 		}
-		r.Keys[secretKeyID(selected, q.Key)] = &secretKey{Resource: selected, Name: q.Key, Version: result.Data.Version, Updated: secretsNow().UTC()}
+		r.Keys[secretKeyID(selected, q.Key)] = &secretKey{secretEntryMeta: data.secretEntryMeta, Resource: selected, Name: q.Key, Version: result.Data.Version, Updated: secretsNow().UTC()}
 		r.Pending = nil
 		if e = saveSecretRegistry(&r); e != nil {
 			return out, e
@@ -337,9 +354,7 @@ func reconcileSecretWrite(ctx context.Context, c *vaultClient, r *secretRegistry
 	}
 	var got struct {
 		Data struct {
-			Data struct {
-				ID string `json:"operation_id"`
-			} `json:"data"`
+			Data     secretEntryData `json:"data"`
 			Metadata struct {
 				Version int `json:"version"`
 			} `json:"metadata"`
@@ -350,8 +365,14 @@ func reconcileSecretWrite(ctx context.Context, c *vaultClient, r *secretRegistry
 	if e != nil && (!errors.As(e, &ve) || ve.Code != 404) {
 		return e
 	}
-	if e == nil && got.Data.Metadata.Version == op.Expected+1 && got.Data.Data.ID == op.ID {
-		r.Keys[secretKeyID(op.Resource, op.Key)] = &secretKey{Resource: op.Resource, Name: op.Key, Version: got.Data.Metadata.Version, Updated: secretsNow().UTC()}
+	if e == nil && got.Data.Metadata.Version == op.Expected+1 && got.Data.Data.OperationID == op.ID {
+		if e = validateEntryData(got.Data.Data); e != nil {
+			return e
+		}
+		if got.Data.Data.Type == "login" {
+			r.Schema = 2
+		}
+		r.Keys[secretKeyID(op.Resource, op.Key)] = &secretKey{secretEntryMeta: got.Data.Data.secretEntryMeta, Resource: op.Resource, Name: op.Key, Version: got.Data.Metadata.Version, Updated: secretsNow().UTC()}
 	} else if !(e != nil && op.Expected == 0) && got.Data.Metadata.Version != op.Expected {
 		return fail("Vault/registry conflict; preserve both and resolve explicitly")
 	}

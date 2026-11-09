@@ -24,6 +24,7 @@ interface Document extends Entry {
   version: string
 }
 const props = defineProps<{ checkouts: Checkout[]; main: string }>()
+const emit = defineEmits<{ count: [count: number, root: string] }>()
 const route = useRoute()
 const router = useRouter()
 const checkout = computed(() =>
@@ -138,6 +139,7 @@ async function load() {
     const data = await request<{ files: Entry[]; warnings: string[] }>(`documents?${query}`)
     if (current !== generation) return
     files.value = data.files
+    emit('count', data.files.length, checkout.value)
     warnings.value = data.warnings
     const selected =
       typeof route.query.doc === 'string'

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, ref, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   ArrowLeft,
@@ -27,6 +27,8 @@ import ProjectSecrets from '../components/ProjectSecrets.vue'
 import ProjectVMs from '../components/ProjectVMs.vue'
 import InventoryNotice from '../components/InventoryNotice.vue'
 import type { Checkout } from '../types'
+import { request } from '../api'
+import { secretRequest, type SecretReply } from '../secrets'
 const route = useRoute()
 const inventory = computed(() =>
   projectInventories.value.find((i) => i.project.path === route.params.project)
@@ -59,6 +61,42 @@ const containersFor = (t: Checkout) =>
   inventory.value?.containers.filter((r) => r.checkout?.path === t.path) || []
 const vmsFor = (t: Checkout) =>
   inventory.value?.vms.filter((r) => r.checkout?.path === t.path) || []
+const secretSummary = ref<SecretReply>()
+const documentCount = ref<number>()
+let secretGeneration = 0, documentGeneration = 0
+const secretTotal = computed(() => secretSummary.value?.counts ? Object.values(secretSummary.value.counts).reduce((sum, n) => sum + n, 0) : undefined)
+const documentRoot = computed(() => section.value === 'documents' && treePath.value ? tree.value?.path : project.value?.main.path)
+function updateSecretSummary(reply: SecretReply) {
+  if (state.session.signed_in && inventory.value?.checkouts.some(t => t.path === reply.context.root)) { secretGeneration++; secretSummary.value = reply }
+}
+function updateDocumentCount(count: number, root: string) {
+  if (root === documentRoot.value) { documentGeneration++; documentCount.value = count }
+}
+function worktreeSecretCount(path: string) {
+  const owner = secretSummary.value?.resources?.find(r => r.kind === 'worktree' && r.path === path && r.state === 'active')
+  return owner ? secretSummary.value?.counts?.[owner.id] : undefined
+}
+watch(() => [project.value?.main.path, state.session.signed_in, state.updated.projects], async () => {
+  const current = ++secretGeneration
+  secretSummary.value = undefined
+  const root = project.value?.main.path
+  if (!root || !state.session.signed_in) return
+  try {
+    const reply = await secretRequest({ operation: 'context', root })
+    if (current === secretGeneration) updateSecretSummary(reply)
+  } catch { /* An unavailable or unenrolled context is not a zero count. */ }
+}, { immediate: true })
+watch(() => [documentRoot.value, state.updated.projects], async () => {
+  const current = ++documentGeneration
+  documentCount.value = undefined
+  const root = documentRoot.value
+  if (!root) return
+  try {
+    const reply = await request<{ files: unknown[] }>(`documents?${new URLSearchParams({ worktree: root })}`)
+    if (current === documentGeneration) documentCount.value = reply.files.length
+  } catch { /* Keep unavailable distinct from an empty document list. */ }
+}, { immediate: true })
+onBeforeUnmount(() => { secretGeneration++; documentGeneration++ })
 const summary = computed(() =>
   inventory.value
     ? [
@@ -132,7 +170,7 @@ const summary = computed(() =>
           :to="projectLocation(project.path, item.id)"
           :aria-current="section === item.id ? 'page' : undefined"
           ><component :is="item.icon" :size="16" />{{ item.label
-          }}<span v-if="item.id === 'worktrees'" class="section-count">{{
+          }}<span v-if="item.id === 'documents'" class="section-count" :title="documentCount === undefined ? 'Document count unavailable' : 'Documents in the selected checkout'">{{ documentCount ?? '—' }}</span><span v-if="item.id === 'secrets' && state.session.signed_in" class="section-count" :title="secretTotal === undefined ? 'Secret count unavailable; open Secrets to check registration' : 'Active saved entries across all project scopes'">{{ secretTotal ?? '—' }}</span><span v-if="item.id === 'worktrees'" class="section-count">{{
             inventory.checkouts.length
           }}</span
           ><span v-if="item.id === 'containers'" class="section-count">{{
@@ -256,7 +294,7 @@ const summary = computed(() =>
                 :to="projectLocation(project.path, 'worktrees', tree.path, item.id)"
                 :aria-current="resource === item.id ? 'page' : undefined"
                 ><component :is="item.icon" :size="15" />{{ item.label
-                }}<span v-if="item.id === 'containers'" class="section-count">{{
+                }}<span v-if="item.id === 'secrets' && state.session.signed_in" class="section-count" title="Active entries saved in this worktree">{{ worktreeSecretCount(tree.path) ?? '—' }}</span><span v-if="item.id === 'containers'" class="section-count">{{
                   containersFor(tree).length
                 }}</span
                 ><span v-if="item.id === 'vms'" class="section-count">{{
@@ -283,7 +321,7 @@ const summary = computed(() =>
                 :show-containers="false"
               />
             </section>
-            <ProjectSecrets v-else-if="resource === 'secrets'" :key="tree.path" :root="tree.path" default-scope="worktree" />
+            <ProjectSecrets v-else-if="resource === 'secrets'" :key="tree.path" :root="tree.path" :checkouts="[tree]" default-scope="worktree" @context="updateSecretSummary" />
             <ProjectContainers
               v-else-if="resource === 'containers'"
               :rows="containersFor(tree)"
@@ -374,11 +412,12 @@ const summary = computed(() =>
           </p>
         </div>
       </template>
-      <ProjectSecrets v-else-if="section === 'secrets'" :key="project.path" :root="project.main.path" />
+      <ProjectSecrets v-else-if="section === 'secrets'" :key="project.path" :root="project.main.path" :checkouts="inventory.checkouts" @context="updateSecretSummary" />
       <ProjectDocuments
         v-else-if="section === 'documents'"
         :checkouts="inventory.checkouts"
         :main="project.main.path"
+        @count="updateDocumentCount"
       />
       <ProjectContainers
         v-else-if="section === 'containers'"

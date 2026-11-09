@@ -171,6 +171,51 @@ func TestVaultRuntimeBindRestartAndSnapshot(t *testing.T) {
 		q.Confirm = preview.Confirmation
 		runSecret(q)
 	}
+	// Exercise the real CLI/socket path for a paired entry, using protected stdin.
+	cli := filepath.Join(root, "devkit-login-test")
+	build := exec.Command("go", "build", "-o", cli, "./cmd/devkit")
+	build.Dir = kit
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("Build CLI: %v: %s", err, out)
+	}
+	stopBroker, err := startSecretSocket()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stopBroker()
+	cliRun := func(input string, args ...string) []byte {
+		t.Helper()
+		command := exec.Command(cli, args...)
+		command.Dir = repo.root
+		command.Stdin = strings.NewReader(input)
+		out, err := command.Output()
+		if err != nil {
+			t.Fatalf("Login CLI %s failed: %v", args[0], err)
+		}
+		return out
+	}
+	const loginUser = "runtime-login-user-SENTINEL"
+	generated := cliRun(`{"username":"`+loginUser+`"}`, "secrets", "generate", "dev-admin", "--type", "login", "--scope", "project", "--username-env", "APP_USER", "--password-env", "APP_PASS", "--stdin")
+	if bytes.Contains(generated, []byte(loginUser)) {
+		t.Fatal("Generation output leaked username")
+	}
+	cliRun("", "secrets", "rotate", "dev-admin", "--scope", "project", "--expected", "1")
+	if strings.TrimSpace(string(cliRun("", "secrets", "get", "dev-admin", "--field", "username", "--reveal"))) != loginUser {
+		t.Fatal("CLI username reveal failed")
+	}
+	loginPassword := strings.TrimSpace(string(cliRun("", "secrets", "get", "dev-admin", "--field", "password", "--reveal")))
+	if len(loginPassword) != 32 {
+		t.Fatal("Login rotation failed")
+	}
+	if string(cliRun("", "secrets", "run", "--", "sh", "-c", `test -n "$APP_USER" && test "${#APP_PASS}" -eq 32 && printf success`)) != "success" {
+		t.Fatal("CLI login injection failed")
+	}
+	confirmed(secretRequest{Operation: "delete", Scope: "project", Key: "dev-admin"})
+	confirmed(secretRequest{Operation: "restore", Scope: "project", Key: "dev-admin"})
+	if got := runSecret(secretRequest{Operation: "get", Scope: "project", Key: "dev-admin", Field: "password", Reveal: true}); got.Value != loginPassword {
+		t.Fatal("Login restore lost password")
+	}
+	t.Log("Verified paired login CLI stdin, rotation, field reveals, child injection and recoverable deletion")
 	runSecret(secretRequest{Operation: "set", Scope: "worktree", Key: "TEMP_PASSWORD", Value: "temporary-v1"})
 	runSecret(secretRequest{Operation: "update", Scope: "worktree", Key: "TEMP_PASSWORD", Value: "temporary-v2", Expected: 1})
 	confirmed(secretRequest{Operation: "delete", Scope: "worktree", Key: "TEMP_PASSWORD"})
@@ -237,10 +282,17 @@ func TestVaultRuntimeBindRestartAndSnapshot(t *testing.T) {
 	if e != nil || status.State != "sealed" {
 		t.Fatal("restart did not preserve sealed initialized storage")
 	}
+	sealedLogin, sealedErr := executeSecret(ctx, secretRequest{Operation: "get", Root: repo.root, Scope: "project", Key: "dev-admin", Field: "username", Reveal: true})
+	if sealedErr == nil || sealedLogin.Value != "" {
+		t.Fatal("Sealed login reveal did not fail closed")
+	}
 	unseal()
 	value, _, e := backend.read(ctx, path)
 	if e != nil || value != sentinel {
 		t.Fatal("bind mount did not preserve secret")
+	}
+	if got := runSecret(secretRequest{Operation: "get", Scope: "project", Key: "dev-admin", Field: "password", Reveal: true}); got.Value != loginPassword {
+		t.Fatal("Restart lost paired login")
 	}
 	// Restore the snapshot into this disposable instance after changing its value.
 	if _, e = backend.write(ctx, path, "changed-after-snapshot", 1); e != nil {
@@ -279,12 +331,18 @@ func TestVaultRuntimeBindRestartAndSnapshot(t *testing.T) {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
+	if got := runSecret(secretRequest{Operation: "get", Scope: "project", Key: "dev-admin", Field: "username", Reveal: true}); got.Value != loginUser {
+		t.Fatal("Snapshot recovery lost paired login username")
+	}
+	if got := runSecret(secretRequest{Operation: "get", Scope: "project", Key: "dev-admin", Field: "password", Reveal: true}); got.Value != loginPassword {
+		t.Fatal("Snapshot recovery lost paired login password")
+	}
 	for _, name := range []string{file, filepath.Join(vaultDir(), "openbao", "server.json"), filepath.Join(secretStateDir(), "registry.json"), filepath.Join(secretStateDir(), "audit.jsonl"), filepath.Join(secretStateDir(), "openbao", "data", "audit.jsonl")} {
 		b, e := os.ReadFile(name)
 		if e != nil {
 			t.Fatal(e)
 		}
-		if bytes.Contains(b, []byte(sentinel)) || bytes.Contains(b, []byte(init.Token)) || bytes.Contains(b, []byte(init.Keys[0])) || bytes.Contains(b, []byte("runtime-human-password-strong")) {
+		if bytes.Contains(b, []byte(loginUser)) || bytes.Contains(b, []byte(loginPassword)) || bytes.Contains(b, []byte(sentinel)) || bytes.Contains(b, []byte(init.Token)) || bytes.Contains(b, []byte(init.Keys[0])) || bytes.Contains(b, []byte("runtime-human-password-strong")) {
 			t.Fatal("plaintext in managed metadata")
 		}
 	}

@@ -25,6 +25,10 @@ const secretsUsage = `usage: devkit secrets context|list|get KEY [--reveal] [--j
        devkit secrets cleanup preview|retire|restore|purge ID [--confirm PREVIEW_ID]
        devkit secrets cleanup status|resume [--confirm PREVIEW_ID]
        devkit secrets cleanup config show|set [--automatic on|off] [--branch-retention 7d|never] [--worktree-retention 7d|never] [--project-retention 30d|never] [--confirm PREVIEW_ID]
+Login entries: --type login; hidden prompts or --stdin JSON with username/password.
+       generate --type login accepts a username and generates its password.
+       get KEY --field username|password --reveal returns one field.
+       --username-env NAME --password-env NAME maps both fields; --no-env removes mappings.
 Selectors: --project ID --branch ID --worktree ID. Values use stdin or hidden prompt, never argv.
 Changes to cleanup settings and destructive operations return a preview confirmation first.
 `
@@ -85,7 +89,7 @@ func parseSecretsArgs(args []string) (q secretRequest, values map[string]string,
 		}
 	}
 	var positional []string
-	positional, values, err = splitArgs(rest, map[string]bool{"--project": true, "--branch": true, "--worktree": true, "--scope": true, "--expected": true, "--length": true, "--confirm": true, "--automatic": true, "--branch-retention": true, "--worktree-retention": true, "--project-retention": true}, map[string]bool{"--json": true, "--reveal": true, "--stdin": true})
+	positional, values, err = splitArgs(rest, map[string]bool{"--project": true, "--branch": true, "--worktree": true, "--scope": true, "--expected": true, "--length": true, "--type": true, "--field": true, "--username-env": true, "--password-env": true, "--confirm": true, "--automatic": true, "--branch-retention": true, "--worktree-retention": true, "--project-retention": true}, map[string]bool{"--json": true, "--reveal": true, "--stdin": true, "--no-env": true})
 	if err != nil {
 		return
 	}
@@ -93,6 +97,11 @@ func parseSecretsArgs(args []string) (q secretRequest, values map[string]string,
 	q.Branch = values["--branch"]
 	q.Worktree = values["--worktree"]
 	q.Scope = values["--scope"]
+	q.Type = values["--type"]
+	q.Field = values["--field"]
+	q.UsernameEnv = values["--username-env"]
+	q.PasswordEnv = values["--password-env"]
+	_, q.ClearEnv = values["--no-env"]
 	q.Confirm = values["--confirm"]
 	_, q.Reveal = values["--reveal"]
 	for name, dest := range map[string]*int{"--expected": &q.Expected, "--length": &q.Length} {
@@ -157,7 +166,25 @@ func secretsCLI(args []string) (int, error) {
 	if e != nil {
 		return 1, e
 	}
-	if q.Operation == "set" || q.Operation == "update" {
+	if q.Type == "login" && (q.Operation == "set" || q.Operation == "update" || q.Operation == "generate") {
+		if _, fromStdin := flags["--stdin"]; fromStdin {
+			if e = readLoginInput(os.Stdin, &q); e != nil {
+				return 1, e
+			}
+		} else {
+			input := bufio.NewReader(os.Stdin)
+			q.Username, e = readSecret("Username (hidden): ", input)
+			if e != nil {
+				return 1, e
+			}
+			if q.Operation != "generate" {
+				q.Password, e = readSecret("Password (hidden): ", input)
+				if e != nil {
+					return 1, e
+				}
+			}
+		}
+	} else if q.Operation == "set" || q.Operation == "update" {
 		if _, ok := flags["--stdin"]; ok {
 			b, e := io.ReadAll(io.LimitReader(os.Stdin, (64<<10)+1))
 			if e != nil || len(b) > 64<<10 {

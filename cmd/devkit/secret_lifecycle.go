@@ -152,7 +152,7 @@ func executeCleanup(ctx context.Context, r *secretRegistry, q secretRequest) (se
 		}
 		for _, key := range r.Keys {
 			if key.Deleted && key.Deadline != nil && !cfg.ResumeAfter.IsZero() && !key.Deadline.After(cfg.ResumeAfter) {
-				out.Records = append(out.Records, secretRecord{Name: key.Name, Resource: key.Resource, Scope: r.Resources[key.Resource].Kind, Version: key.Version, Deleted: true, Deadline: key.Deadline})
+				out.Records = append(out.Records, secretRecord{secretEntryMeta: key.secretEntryMeta, Name: key.Name, Resource: key.Resource, Scope: r.Resources[key.Resource].Kind, Version: key.Version, Deleted: true, Deadline: key.Deadline})
 			}
 		}
 		if q.Confirm != out.Confirmation {
@@ -200,7 +200,7 @@ func executeCleanup(ctx context.Context, r *secretRegistry, q secretRequest) (se
 	}
 	for _, k := range r.Keys {
 		if ids[k.Resource] {
-			out.Records = append(out.Records, secretRecord{Name: k.Name, Resource: k.Resource, Scope: r.Resources[k.Resource].Kind, Version: k.Version, Deleted: k.Deleted, Deadline: k.Deadline})
+			out.Records = append(out.Records, secretRecord{secretEntryMeta: k.secretEntryMeta, Name: k.Name, Resource: k.Resource, Scope: r.Resources[k.Resource].Kind, Version: k.Version, Deleted: k.Deleted, Deadline: k.Deadline})
 		}
 	}
 	op := q.Operation

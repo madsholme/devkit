@@ -45,6 +45,8 @@ DNS credentials are fetched into a private memory-backed runtime directory, then
 
 Run from the intended Git checkout. Enrollment is explicit and records project, branch and worktree identities without changing Git:
 
+You can also run commands from a subdirectory of that checkout. Running them from a non-Git directory such as `~` reports: `Run this command from a project's Git checkout: cd /path/to/project, then try again.`
+
 ```sh
 devkit secrets resources register
 devkit secrets context --json
@@ -58,7 +60,9 @@ devkit secrets get DATABASE_PASSWORD --reveal          # explicit plaintext
 devkit secrets run --scope worktree -- your-command
 ```
 
-Generation does not print its value. The dashboard lists name, version, owner, inheritance and effective source; values are fetched only on Reveal/Copy and hidden after 30 seconds or context/logout changes. Clipboard history may retain copied values. `secrets run` injects effective values into the child environment and preserves its exit status/signals. Avoid environment dumps, tracing, or programs that log their credentials.
+Generation does not print its value. The dashboard lists name, version, owner, inheritance and effective source; values are fetched only on Reveal/Copy. Reveal displays the value within its own row and hides it after 30 seconds or context/logout changes. Each row has a copy icon (labeled Copy username, Copy password or Copy value according to its name); copying writes directly to the clipboard without displaying the value, and briefly shows a checkmark. Clipboard history may retain copied values. `secrets run` injects effective values into the child environment and preserves its exit status/signals. Avoid environment dumps, tracing, or programs that log their credentials.
+
+The project Secrets tab badge counts active saved entries across all project scopes (overrides count separately); deleted entries are excluded. Worktree tab badges count entries saved in that worktree. Counts require sign-in, and an unavailable count is shown as a dash rather than zero. The panel identifies the selected branch and checkout path, lets you choose a checkout, and reports the effective entries in that scope, including inherited values.
 
 Inheritance is **worktree > linked branch > project**. Detached worktrees inherit project values only. Branch selection is available in the Secrets panel; worktree details also have their own Secrets tab. Optional `--project ID`, `--branch ID`, and `--worktree ID` selectors use registered IDs and remain constrained to the current project.
 
@@ -67,6 +71,38 @@ Writes require an explicit scope. Saving the same name in a child makes an overr
 Moved worktrees and renamed/recreated branches need explicit `resources bind ID` preview/confirmation. `resources reconcile` reports missing or ambiguous Git resources without deleting secrets. Missing inventory is not proof of deletion. Branches with unavailable/rewritten reflog identity require investigation; Devkit does not silently transfer old secrets. Temporary Devkit review checkouts cannot register secret scopes. Non-Git folders do not currently support secret contexts.
 
 Use Devkit for contextual writes. Native OpenBao administration is available for advanced recovery, but direct edits to Devkit-managed KV paths can create version/registry conflicts requiring reconciliation; listing arbitrary native keys is not a registry import.
+
+## Paired logins and single values
+
+Choose **Single value** for an API token or one environment value. Choose **Login (username + password)** when the two fields describe one account. A login named `dev-admin` is stored as one OpenBao KV entry with `username` and `password` fields; the username is not its key name. Existing separate username/password entries remain unchanged. Each login is one row and one counted entry, with independent reveal/copy controls for both fields. Copying does not reveal the field on screen.
+
+```sh
+# Hidden prompts for both fields:
+devkit secrets set dev-admin --type login --scope worktree
+# Hidden username prompt; generate the password and return metadata only:
+devkit secrets generate test-admin --type login --scope worktree --length 32
+# Explicitly reveal one field:
+devkit secrets get dev-admin --field username --reveal
+devkit secrets get dev-admin --field password --reveal
+# Rotate only the stored password, preserving username and mappings:
+devkit secrets rotate dev-admin --scope worktree --expected 1
+```
+
+For programmatic input, add `--stdin`: `set/update --type login` accepts one JSON object with string `username` and `password` fields; `generate --type login` accepts `username` only. Use a pipe from the credential producer or a protected input file, never literal values in shell arguments/history. Neither field is included in routine metadata, audit events or the registry. Explicit reveal prints the selected field to your terminal; use runtime injection when possible.
+
+The generic Git HTTPS helper continues to bind a single-value project token and its separately configured username; paired logins do not automatically replace existing Git bindings.
+
+Logins used only for human sign-in need no environment mapping. To use one in a child process, supply both mappings when saving/generating:
+
+```sh
+devkit secrets set dev-admin --type login --scope worktree \
+  --username-env APP_USERNAME --password-env APP_PASSWORD
+devkit secrets run -- your-command
+```
+
+Unmapped logins are skipped by `secrets run`. Mapped logins supply the two named variables; a collision with any other effective entry stops injection before the child starts. Reserved `DEVKIT_`, `VAULT_` and `BAO_` prefixes are refused. Updates with omitted mappings preserve an owned login's mappings; `--no-env` explicitly removes them. The dashboard exposes the same mapping toggle and field names. An override selects the whole login, not a mixture of parent and child fields. Existing entry types cannot be changed under the same effective name; create a new entry instead. Delete/restore, retirement and purge apply to both fields together. Rotation does not change the real application's password.
+
+Legacy single-value entries and registry schema 1 remain readable. The first login write upgrades the registry to schema 2 to prevent older binaries from overwriting typed entries. After that, use a login-capable Devkit binary: a binary-only downgrade cannot resume project-secret operations. Keep the current vault and registry together during backup/recovery; do not restore an older registry alone. No automatic combination, conversion or deletion of existing entries occurs.
 
 ## Cleanup is configurable
 

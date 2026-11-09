@@ -1,10 +1,11 @@
 import { ref } from 'vue'
 import { post } from './api'
-export interface SecretRecord { name: string; resource: string; scope: string; inherited: boolean; effective: boolean; version: number; updated: string; deleted: boolean; deadline?: string }
-export interface SecretResource { id: string; kind: string; name: string; state: string; deadline?: string }
+export interface SecretRecord { type?: 'value' | 'login'; username_env?: string; password_env?: string; name: string; resource: string; scope: string; inherited: boolean; effective: boolean; version: number; updated: string; deleted: boolean; deadline?: string }
+export interface SecretResource { id: string; kind: string; name: string; state: string; path?: string; deadline?: string }
 export interface CleanupConfig { automatic: boolean; branch: string; worktree: string; project: string; resume_after?: string }
 export interface BackupConfig { recipient: string; directory: string; daily: boolean; retain: number }
 export interface SecretReply {
+  counts?: Record<string, number>
   context: { project: string; branch?: string; worktree?: string; root: string }
   records: SecretRecord[] | null; resources?: SecretResource[]; value?: string
   confirmation?: string; message?: string; cleanup?: CleanupConfig; history?: unknown

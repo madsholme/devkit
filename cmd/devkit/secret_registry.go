@@ -26,6 +26,7 @@ type secretResource struct {
 	Deadline      *time.Time `json:"deadline,omitempty"`
 }
 type secretKey struct {
+	secretEntryMeta
 	DeletedBy string     `json:"deleted_by,omitempty"`
 	Resource  string     `json:"resource"`
 	Name      string     `json:"name"`
@@ -68,8 +69,13 @@ func loadSecretRegistry() (secretRegistry, error) {
 	if e != nil {
 		return r, e
 	}
-	if e = json.Unmarshal(b, &r); e != nil || r.Schema != 1 || r.Installation == "" || r.Resources == nil || r.Keys == nil {
+	if e = json.Unmarshal(b, &r); e != nil || (r.Schema != 1 && r.Schema != 2) || r.Installation == "" || r.Resources == nil || r.Keys == nil {
 		return r, fail("Invalid secrets registry; restore its matching backup")
+	}
+	for _, k := range r.Keys {
+		if k == nil || validateEntryMeta(k.secretEntryMeta) != nil || (k.Type == "login" && r.Schema < 2) {
+			return r, fail("Invalid secrets entry metadata; restore its matching backup")
+		}
 	}
 	return r, nil
 }
