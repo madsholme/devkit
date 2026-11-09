@@ -88,7 +88,7 @@ function timeLeft(expires: string) {
       </p>
     </div>
   </div>
-  <div class="workspace-surface" data-inventory>
+  <div class="workspace-surface previews-inventory" data-inventory>
     <div class="workspace-toolbar">
       <div class="search-field">
         <Search :size="16" /><Input
@@ -118,7 +118,7 @@ function timeLeft(expires: string) {
         ]"
       />
     </div>
-    <Table
+    <Table class="preview-table"
       ><TableHeader
         ><TableRow
           ><TableHead>Preview</TableHead><TableHead>Status</TableHead><TableHead>Source</TableHead
@@ -130,8 +130,8 @@ function timeLeft(expires: string) {
             v-if="index === 0 || rows[index - 1]?.project !== preview.project"
             class="group-row"
             ><TableCell colspan="5">{{ preview.project }}</TableCell></TableRow
-          ><TableRow
-            ><TableCell
+          ><TableRow class="preview-row"
+            ><TableCell class="preview-identity"
               ><div class="resource-identity">
                 <Button
                   size="icon"
@@ -160,7 +160,7 @@ function timeLeft(expires: string) {
               <Badge v-if="gone.has(preview.name)" variant="warning"
                 >Worktree gone</Badge
               ></TableCell
-            ><TableCell
+            ><TableCell class="preview-status"
               ><StatusBadge :status="preview.status" />
               <p v-if="!expanded.has(preview.name)" class="note">
                 {{
@@ -170,7 +170,7 @@ function timeLeft(expires: string) {
                     .join(' · ')
                 }}
               </p></TableCell
-            ><TableCell
+            ><TableCell class="preview-source" data-label="Source"
               ><code
                 >{{
                   preview.mode === 'live'
@@ -190,8 +190,8 @@ function timeLeft(expires: string) {
               <p v-if="preview.mode !== 'live' && preview.behind" class="note">
                 <Badge variant="warning">{{ preview.behind }} commits behind</Badge>
               </p></TableCell
-            ><TableCell>{{ ago(preview.started) }}</TableCell
-            ><TableCell
+            ><TableCell class="preview-uptime" data-label="Uptime">{{ ago(preview.started) }}</TableCell
+            ><TableCell class="preview-actions"
               ><div class="actions">
                 <DropdownMenu v-if="preview.share"
                   ><DropdownMenuTrigger as-child
@@ -288,8 +288,8 @@ function timeLeft(expires: string) {
                         <ContainerIcon :size="15" /><strong>{{ service.name }}</strong
                         ><Badge v-if="service.web" variant="outline">web</Badge>
                       </div></TableCell
-                    ><TableCell><StatusBadge :status="service.status" /></TableCell
-                    ><TableCell
+                    ><TableCell data-label="Status"><StatusBadge :status="service.status" /></TableCell
+                    ><TableCell data-label="Ports / routes"
                       ><div v-for="port in service.ports" :key="`${port.port}/${port.protocol}`">
                         <code
                           >{{ port.port
@@ -312,10 +312,10 @@ function timeLeft(expires: string) {
                           ></template
                         >
                       </div></TableCell
-                    ><TableCell
+                    ><TableCell data-label="Image / ID"
                       ><p class="path table-path">{{ service.image }}</p>
                       <code>{{ service.id }}</code></TableCell
-                    ><TableCell>{{ ago(service.started) }}</TableCell
+                    ><TableCell data-label="Uptime">{{ ago(service.started) }}</TableCell
                     ><TableCell
                       ><div class="actions">
                         <Button
@@ -375,3 +375,116 @@ function timeLeft(expires: string) {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Desktop keeps the shared inventory table. Phones use the same controls in stacked rows. */
+@media (max-width: 767px) {
+  .previews-inventory .workspace-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .previews-inventory .search-field {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .previews-inventory :deep(.filter-select) {
+    width: 100%;
+    min-width: 0;
+  }
+  .previews-inventory :deep([data-slot='table-container']) {
+    overflow: visible;
+    min-width: 0;
+  }
+  .previews-inventory :deep(table),
+  .previews-inventory :deep(tbody) {
+    display: block;
+    width: 100%;
+  }
+  .previews-inventory :deep(thead) {
+    display: none;
+  }
+  .previews-inventory :deep(td) {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .previews-inventory :deep(.group-row) {
+    display: block;
+    padding: .75rem 1rem;
+  }
+  .previews-inventory :deep(.preview-row) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .75rem 1rem;
+    padding: 1rem;
+  }
+  .preview-identity,
+  .preview-source,
+  .preview-actions {
+    grid-column: 1 / -1;
+  }
+  .preview-identity { order: 0; }
+  .preview-status { order: 1; }
+  .preview-uptime { order: 2; text-align: right; }
+  .preview-source { order: 3; }
+  .preview-actions { order: 4; }
+  .preview-identity .resource-identity {
+    display: grid;
+    grid-template-columns: 2.75rem auto minmax(0, 1fr);
+    gap: .5rem;
+  }
+  .preview-identity .table-path { margin-top: .5rem; }
+  .previews-inventory :deep([data-label])::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: .25rem;
+    color: var(--muted-foreground);
+    font-size: .75rem;
+    font-weight: 500;
+  }
+  .previews-inventory .table-path {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .preview-actions .actions {
+    justify-content: flex-start;
+    gap: .5rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--border);
+  }
+  .previews-inventory :deep(button),
+  .preview-actions :deep(a) {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+  .previews-inventory :deep(.detail-row) {
+    display: block;
+    padding: 0 1rem 1rem;
+  }
+  .previews-inventory :deep(.service-table tr) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: .75rem 1rem;
+    padding: 1rem 0;
+  }
+  .previews-inventory :deep(.service-table td:first-child),
+  .previews-inventory :deep(.service-table td[data-label='Image / ID']),
+  .previews-inventory :deep(.service-table td:last-child) {
+    grid-column: 1 / -1;
+  }
+  .previews-inventory .recent-events p {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem .5rem;
+  }
+  .previews-inventory .recent-events p span {
+    flex-basis: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+</style>
