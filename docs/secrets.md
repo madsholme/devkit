@@ -145,7 +145,7 @@ devkit integrations github configure
 devkit integrations github status --verify
 ```
 
-Cloudflare `token` binds the private proxy's DNS credential. A share token may need broader Tunnel permissions; keep it separate and point `share.token.openbao` to its saved integration reference. GitHub verification checks token identity, not access to every repository. Tailscale API credentials can be stored explicitly as an integration; normal Tailscale connectivity needs no API credential. SSH keys/agent are unchanged. Managed DNS runtime delivery currently supports Cloudflare.
+Cloudflare `token` binds the private proxy's DNS credential. A share token may need broader Tunnel permissions; keep it separate and point `share.token.openbao` to its saved integration reference. GitHub verification checks token identity, not access to every repository. Explicit [project creation](projects.md#create-a-project) can use this host integration to create a GitHub repository and optionally push its initial commit; it does not install or share the credential in the new project. Tailscale API credentials can be stored explicitly as an integration; normal Tailscale connectivity needs no API credential. SSH keys/agent are unchanged. Managed DNS runtime delivery currently supports Cloudflare.
 
 Existing source files are imported only by explicit preview/confirmation:
 

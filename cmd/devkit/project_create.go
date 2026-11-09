@@ -24,9 +24,16 @@ const maxAgentNotes = 16 << 10
 
 var scpRemote = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*:[^\s-][^\s]*$`)
 
-type createProjectOptions struct{ name, remote, notes, expectedParent string }
+type createProjectOptions struct {
+	name, remote, notes, expectedParent string
+	githubOwner, githubRepo             string
+	githubPublic, githubPush            bool
+}
 
 func validateProjectCreation(opts createProjectOptions) error {
+	if err := validateProjectGitHub(opts); err != nil {
+		return err
+	}
 	if !projectSlug.MatchString(opts.name) {
 		return fail("Use a project name of 1–32 lowercase letters, digits or hyphens, starting with a letter or digit.")
 	}
@@ -78,7 +85,7 @@ func creationParent(expected string) (string, error) {
 
 // Preflight is repeated by the CLI at execution; the dashboard never chooses a parent path.
 func planProjectCreate(req actionRequest) (plannedAction, error) {
-	opts := createProjectOptions{name: req.Name, remote: req.Remote, notes: req.AgentNotes}
+	opts := createProjectOptions{name: req.Name, remote: req.Remote, notes: req.AgentNotes, githubOwner: req.GitHubOwner, githubRepo: req.GitHubRepo, githubPublic: req.GitHubPublic, githubPush: req.GitHubPush}
 	if err := validateProjectCreation(opts); err != nil {
 		return plannedAction{}, err
 	}
@@ -98,6 +105,15 @@ func planProjectCreate(req actionRequest) (plannedAction, error) {
 	if opts.remote != "" {
 		args = append(args, "--remote", opts.remote)
 	}
+	if opts.githubOwner != "" {
+		args = append(args, "--github-owner", opts.githubOwner, "--github-repo", opts.githubRepo)
+		if opts.githubPublic {
+			args = append(args, "--github-public")
+		}
+		if opts.githubPush {
+			args = append(args, "--github-push")
+		}
+	}
 	return plannedAction{args: args, dir: parent, target: "create project " + filepath.Join(parent, opts.name), title: "Create project " + opts.name, stdin: opts.notes}, nil
 }
 
@@ -108,14 +124,16 @@ func projectCreateCLI(args []string) (int, error) {
 	if len(args) == 0 || args[0] != "create" {
 		return 2, usageError("usage: devkit project create NAME [--remote URL] [--agents-file FILE|-]")
 	}
-	positional, values, err := splitArgs(args[1:], map[string]bool{"--remote": true, "--agents-file": true, "--projects-dir": true}, nil)
+	positional, values, err := splitArgs(args[1:], map[string]bool{"--remote": true, "--agents-file": true, "--projects-dir": true, "--github-owner": true, "--github-repo": true}, map[string]bool{"--github-public": true, "--github-push": true})
 	if err != nil {
 		return 2, err
 	}
 	if len(positional) != 1 {
 		return 2, usageError("project create needs exactly one project name")
 	}
-	opts := createProjectOptions{name: positional[0], remote: values["--remote"], expectedParent: values["--projects-dir"]}
+	opts := createProjectOptions{name: positional[0], remote: values["--remote"], expectedParent: values["--projects-dir"], githubOwner: values["--github-owner"], githubRepo: values["--github-repo"]}
+	_, opts.githubPublic = values["--github-public"]
+	_, opts.githubPush = values["--github-push"]
 	if path, ok := values["--agents-file"]; ok {
 		var reader io.Reader = os.Stdin
 		if path != "-" {
@@ -198,11 +216,22 @@ func createProject(opts createProjectOptions) (result error) {
 	if _, err := root.Lstat(opts.name); !os.IsNotExist(err) {
 		return fail("A file or folder named %s already exists, or the destination cannot be inspected. Nothing was changed.", opts.name)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	timeout := 30 * time.Second
+	if opts.githubOwner != "" {
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	author, email, err := creationIdentity(ctx, parent)
 	if err != nil {
 		return err
+	}
+	var githubToken, githubEndpoint string
+	if opts.githubOwner != "" {
+		githubToken, githubEndpoint, err = projectGitHubPreflight(ctx, opts)
+		if err != nil {
+			return err
+		}
 	}
 	// Mkdir is the no-clobber reservation across all CLI/dashboard processes. No
 	// failure path recursively deletes it: concurrent user edits must survive.
@@ -312,6 +341,24 @@ func createProject(opts createProjectOptions) (result error) {
 	parentNow, err := creationParent(parent)
 	if err != nil || parentNow != parent {
 		return fail("The configured projects directory changed during creation.")
+	}
+	if opts.githubOwner != "" {
+		remote, err := createProjectGitHub(ctx, opts, githubToken, githubEndpoint)
+		if err != nil {
+			return err
+		}
+		if _, err = git("remote", "add", "origin", remote); err != nil {
+			return fail("GitHub repository %s was created, but origin could not be configured. Retain it and configure origin manually.", remote)
+		}
+		if opts.githubPush {
+			if err = projectGitHubPush(ctx, gitDir, remote, githubToken); err != nil {
+				return fail("GitHub repository %s and local origin are retained. Initial push failed or its result is uncertain; inspect the remote and retry from the project with git push -u origin main using configured Git credentials.", remote)
+			}
+			happened("github-push", opts.name, "Pushed initial main commit to "+remote)
+			fmt.Fprintln(stdout, "Pushed initial main commit and set origin/main as upstream.")
+		} else {
+			fmt.Fprintln(stdout, "Configured origin; initial commit was not pushed. To publish later, configure Git credentials and run git push -u origin main.")
+		}
 	}
 	happened("project-create", opts.name, "Created project from template with an initial main commit.")
 	fmt.Fprintf(stdout, "Created project %s at %s\nInitialized main with an initial commit.\n", opts.name, destination)

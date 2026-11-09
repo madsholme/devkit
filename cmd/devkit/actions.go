@@ -19,21 +19,25 @@ import (
 // instead reserves a new child of the configured projects directory.
 
 type actionRequest struct {
-	Path       string `json:"path"`
-	Expected   string `json:"expected"`
-	Content    string `json:"content"`
-	Name       string `json:"name"`
-	Remote     string `json:"remote"`
-	AgentNotes string `json:"agent_notes"`
-	VM         string `json:"vm"`
-	Container  string `json:"container"`
-	Action     string `json:"action"`
-	Preview    string `json:"preview"`
-	Worktree   string `json:"worktree"`
-	Repo       string `json:"repo"`
-	Host       string `json:"host"`
-	Hours      int    `json:"hours"`
-	Confirm    string `json:"confirm"`
+	GitHubOwner  string `json:"github_owner"`
+	GitHubRepo   string `json:"github_repo"`
+	GitHubPublic bool   `json:"github_public"`
+	GitHubPush   bool   `json:"github_push"`
+	Path         string `json:"path"`
+	Expected     string `json:"expected"`
+	Content      string `json:"content"`
+	Name         string `json:"name"`
+	Remote       string `json:"remote"`
+	AgentNotes   string `json:"agent_notes"`
+	VM           string `json:"vm"`
+	Container    string `json:"container"`
+	Action       string `json:"action"`
+	Preview      string `json:"preview"`
+	Worktree     string `json:"worktree"`
+	Repo         string `json:"repo"`
+	Host         string `json:"host"`
+	Hours        int    `json:"hours"`
+	Confirm      string `json:"confirm"`
 }
 
 // plannedAction is a checked request: the devkit arguments, where to run them and what they lock.

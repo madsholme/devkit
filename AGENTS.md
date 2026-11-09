@@ -31,6 +31,8 @@ old names are dropped on purpose.
   pinned no-follow paths and sandboxed SVG responses. Never proxy remote images.
   `project_create.go` implements explicit new-project creation from the embedded template,
   with exclusive destination reservation, optional origin, appended AGENTS.md notes and one initial commit.
+  `project_github.go` optionally creates a github.com repository using the host integration token;
+  private by default, initial push opt-in, no remote deletion/reuse. Credentials remain ephemeral.
   Discovery never runs hooks; authenticated `up` actions revalidate Git membership and recipe.
   `git_control.go` provides authenticated, CLI-backed origin fetch/sync/push with
   checkout revalidation, clean-state checks, bounded commands and per-repository locking.

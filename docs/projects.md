@@ -55,6 +55,47 @@ create a hosted repository, verify remote access, fetch or push. Use an empty ho
 repository when you later publish this new history; importing an existing repository
 is a separate workflow.
 
+To create a new **github.com** repository at the same time, select **Create GitHub
+repository** in the form or use:
+
+```sh
+devkit project create my-app --github-owner YOUR_USER_OR_ORG --github-repo my-app
+# Explicitly publish the initial commit and track origin/main:
+devkit project create another-app --github-owner YOUR_USER_OR_ORG --github-repo another-app --github-push
+```
+
+Repositories are **private by default**. `--github-public` (the form's **Public
+repository** checkbox) makes one public. Initial push is off by default; select
+**Push initial commit** or add `--github-push` to upload the template and appended
+agent instructions. The dashboard repository name defaults to the project name.
+CLI owner and repository name are both required. GitHub options cannot be combined
+with `--remote`; GitHub Enterprise is not supported by this flow.
+
+Configure the host's GitHub integration under **Secrets → Integrations** or run
+`devkit integrations github configure` first. Creation reads `integrations.github.token`
+from host config using the existing secret sources (OpenBao, private file, environment,
+or command). A sealed/unavailable source fails closed before local reservation.
+The credential must identify your user and permit repository creation for the selected
+personal account or organization. GitHub enforces organization policies and token
+permissions; a classic PAT needs `repo` for private repositories. Fine-grained tokens
+need the applicable repository Administration permission and, for initial push, Contents
+write access to the new repository. See [GitHub's repository API documentation](https://docs.github.com/en/rest/repos/repos#create-a-repository-for-the-authenticated-user).
+
+Creation never adopts an existing repository. It creates an empty remote only after
+the local initial commit succeeds, then sets an HTTPS origin. Initial push uses the
+host credential for this one operation, with hooks disabled, redirects refused, and
+no force push. The token is never saved in the project, Git config, URLs, arguments,
+job output or history. Later Git operations require separately configured credentials
+(for example an [exact project credential binding](secrets.md#integration-credentials-and-existing-host-import));
+the host integration token is not automatically shared with projects.
+
+If GitHub rejects creation or its result is uncertain, the local project is retained.
+Inspect the reported GitHub URL before retrying; devkit never retries creation or
+deletes remote repositories automatically. If setting origin or pushing fails, the
+created remote is retained too. For a failed push, inspect both sides, configure Git
+credentials, and run `git push -u origin main` inside the retained project. Do not
+rerun project creation against an existing local folder.
+
 Additional instructions are UTF-8 text up to 16 KiB, appended under **Project-specific
 instructions** in AGENTS.md. Existing devkit guidance stays intact; CLAUDE.md references
 AGENTS.md. The modal lets you review that guidance. Instructions travel to the CLI over

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Button } from '@madsholme/ui/button'
+import { Checkbox } from '@madsholme/ui/checkbox'
 import { Input } from '@madsholme/ui/input'
 import { Textarea } from '@madsholme/ui/textarea'
 import { DialogFooter } from '@madsholme/ui/dialog'
@@ -10,6 +11,11 @@ import templateGuidance from '../../../project-template/AGENTS.md?raw'
 const name = ref('')
 const remote = ref('')
 const notes = ref('')
+const github = ref(false)
+const githubOwner = ref('')
+const githubRepo = ref('')
+const githubPublic = ref(false)
+const githubPush = ref(false)
 const notesBytes = computed(() => new TextEncoder().encode(notes.value).length)
 const destination = computed(
   () => `${(state.projects?.directory || '').replace(/\/$/, '')}/${name.value || 'project-name'}`
@@ -18,7 +24,13 @@ async function create() {
   await runAction({
     action: 'project-create',
     name: name.value,
-    remote: remote.value.trim(),
+    remote: github.value ? '' : remote.value.trim(),
+    ...(github.value ? {
+      github_owner: githubOwner.value.trim(),
+      github_repo: githubRepo.value.trim() || name.value,
+      github_public: githubPublic.value,
+      github_push: githubPush.value,
+    } : {}),
     agent_notes: notes.value,
   })
   if (state.dialog === 'job') filters.projects = ''
@@ -45,7 +57,36 @@ async function create() {
         >. Existing folders cannot be used.
       </p>
     </div>
-    <div class="create-field">
+    <label class="checkbox-label">
+      <Checkbox :model-value="github" :disabled="state.pending" @update:model-value="github = $event === true" />
+      Create GitHub repository
+    </label>
+    <template v-if="github">
+      <div class="create-field">
+        <label for="github-owner">GitHub owner</label>
+        <Input id="github-owner" v-model="githubOwner" required maxlength="39"
+          pattern="[a-zA-Z0-9]([a-zA-Z0-9\-]{0,37}[a-zA-Z0-9])?"
+          placeholder="Your username or organization" autocomplete="off" :disabled="state.pending" />
+      </div>
+      <div class="create-field">
+        <label for="github-repo">Repository name</label>
+        <Input id="github-repo" v-model="githubRepo" maxlength="100" pattern="[a-zA-Z0-9_.\-]{1,100}"
+          :placeholder="name || 'my-project'" autocomplete="off" :disabled="state.pending" aria-describedby="github-repo-help" />
+        <p id="github-repo-help" class="note">Defaults to the project name. Must be a new repository, without the .git suffix.</p>
+      </div>
+      <label class="checkbox-label">
+        <Checkbox :model-value="githubPublic" :disabled="state.pending" @update:model-value="githubPublic = $event === true" />
+        Public repository
+      </label>
+      <p class="note">{{ githubPublic ? 'Anyone can see this repository and anything pushed to it.' : 'Private: access is limited to people you authorize on GitHub.' }}</p>
+      <label class="checkbox-label">
+        <Checkbox :model-value="githubPush" :disabled="state.pending" @update:model-value="githubPush = $event === true" />
+        Push initial commit
+      </label>
+      <p class="note">{{ githubPush ? 'Uploads the template and additional agent instructions to GitHub and tracks origin/main.' : 'Creates an empty GitHub repository and sets origin. Your initial commit stays local.' }}</p>
+      <p class="note">Uses the host’s configured GitHub integration token. Configure it under Secrets → Integrations first; it must allow repository creation for this owner{{ githubPush ? ' and writing contents' : '' }}.</p>
+    </template>
+    <div v-else class="create-field">
       <label for="project-remote">Git remote URL <span class="note">(optional)</span></label>
       <Input
         id="project-remote"

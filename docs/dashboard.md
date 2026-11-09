@@ -113,7 +113,11 @@ On the Projects directory page, **Create Project** opens a signed-in form for a 
 optional Git remote and additional agent instructions. The form shows the destination
 under the configured `projects_dir` and the preserved devkit guidance. It copies the
 complete starter template, initializes `main`, and makes one initial commit. An optional
-remote only sets origin locally. Existing destinations are refused; validation errors
+remote only sets origin locally. Alternatively, **Create GitHub repository** accepts a
+user/organization owner and repository name. Repositories start private; **Public
+repository** is explicit. **Push initial commit** starts unchecked and uploads the
+starter files and appended instructions only when selected. The host GitHub integration
+must be configured first. Existing destinations are refused; validation errors
 keep your entries in the form. Successful jobs refresh the project catalog and global
 counts. See [project creation](projects.md#create-a-project) for CLI usage and failure handling.
 

@@ -42,6 +42,7 @@ commands:
                        stop and unregister QEMU VMs; dry run, retain disks unless --purge
   docs list | read PATH | save PATH --expected VERSION|new --file FILE|-
   project create NAME [--remote URL] [--agents-file FILE|-]
+                      [--github-owner OWNER --github-repo REPO [--github-public] [--github-push]]
                        copy the bundled template into projects_dir, initialize main and commit
   git fetch|sync|push   fetch origin, fast-forward from its upstream, or explicitly push
   ls                   list managed previews, including stopped ones

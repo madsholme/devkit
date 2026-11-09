@@ -102,6 +102,8 @@ export function day(iso: string) {
 
 const historyVerbs: Record<string, string> = {
   'project-create': 'Created project',
+  'github-create': 'Created GitHub repository',
+  'github-push': 'Pushed initial commit',
   'document-save': 'Saved document',
   live: 'Live preview',
   review: 'Review',

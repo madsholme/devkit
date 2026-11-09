@@ -214,6 +214,10 @@ export interface ActionRequest {
   name?: string
   remote?: string
   agent_notes?: string
+  github_owner?: string
+  github_repo?: string
+  github_public?: boolean
+  github_push?: boolean
   action: string
   preview?: string
   worktree?: string
