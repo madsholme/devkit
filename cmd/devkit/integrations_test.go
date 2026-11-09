@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -38,6 +39,14 @@ func TestIntegrationRuntimeFileAndVaultProxy(t *testing.T) {
 	data, _ = json.Marshal(dynamic)
 	if !strings.Contains(string(data), "vault.devkit.dev.example.com") || !strings.Contains(string(data), "127.0.0.1:8210") || !strings.Contains(string(data), "sourceRange") {
 		t.Fatalf("missing private vault TLS %s", data)
+	}
+	router := dynamic["http"].(map[string]any)["routers"].(map[string]any)["vault"].(map[string]any)
+	tls := router["tls"].(map[string]any)
+	if tls["certResolver"] != "dns" || tls["domains"].([]any)[0].(map[string]string)["main"] != "vault.devkit.dev.example.com" {
+		t.Fatal("vault must request its exact hostname certificate through the existing DNS resolver")
+	}
+	if !slices.Equal(router["entryPoints"].([]string), []string{"websecure", "websecure2"}) || !slices.Equal(router["middlewares"].([]string), []string{"vault-private"}) {
+		t.Fatal("vault must serve both private LAN and Tailscale listeners with the private allowlist")
 	}
 	if _, e := writeRuntimeSecret("../escape", "secret"); e == nil {
 		t.Fatal("unsafe runtime filename accepted")

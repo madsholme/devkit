@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -31,6 +32,8 @@ type vaultStatus struct {
 	Threshold   int    `json:"t,omitempty"`
 }
 type vaultError struct{ Code int }
+
+var errVaultMountInitializing = errors.New("OpenBao KV engine is initializing")
 
 func (e vaultError) Error() string {
 	switch e.Code {
@@ -93,6 +96,21 @@ func (c *vaultClient) call(ctx context.Context, method, path string, in, out any
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// OpenBao briefly returns 400 while a newly mounted KV v2 engine initializes.
+		// Recognize only its fixed readiness messages; never expose arbitrary API bodies.
+		if resp.StatusCode == http.StatusBadRequest && path == "kv/config" {
+			var result struct {
+				Errors []string `json:"errors"`
+			}
+			b, readErr := io.ReadAll(io.LimitReader(resp.Body, 65537))
+			if readErr == nil && len(b) <= 65536 && json.Unmarshal(b, &result) == nil && len(result.Errors) == 1 {
+				switch result.Errors[0] {
+				case "Upgrading from non-versioned to versioned data. This backend will be unavailable for a brief period and will resume service shortly.",
+					"Waiting for the primary to upgrade from non-versioned to versioned data. This backend will be unavailable for a brief period and will resume service when the primary is finished.":
+					return errVaultMountInitializing
+				}
+			}
+		}
 		return vaultError{resp.StatusCode}
 	}
 	if out == nil {

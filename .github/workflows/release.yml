@@ -60,6 +60,7 @@ jobs:
           trap 'rm -rf "$staging"' EXIT
           tar -xzf bin/devkit-linux-amd64.tar.gz -C "$staging"
           python3 tests/agent_secrets_acceptance.py --devkit "$staging/devkit/devkit"
+          python3 tests/vault_terminal_acceptance.py --devkit "$staging/devkit/devkit"
 
       - name: Keep the bundles of a manual run
         if: github.ref_type != 'tag'

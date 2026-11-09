@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -277,6 +278,42 @@ func TestSetupTriesStagingBeforeProduction(t *testing.T) {
 	}
 	if !slices.Equal(ups, []bool{true}) {
 		t.Errorf("issuance failure must not fall back to production: %v", ups)
+	}
+}
+
+func TestSetupWaitsForVaultCertificate(t *testing.T) {
+	for _, ready := range []bool{true, false} {
+		t.Run(fmt.Sprintf("vault-ready-%t", ready), func(t *testing.T) {
+			hostWith(t, `{}`)
+			swap[io.Writer](t, &stdout, &bytes.Buffer{})
+			swap(t, &certificateTimeout, 10*time.Millisecond)
+			swap(t, &certificatePoll, time.Millisecond)
+			proxy := proxyHost().Proxy
+			vault := defaultVaultConfig()
+			raw := map[string]any{"secrets": vault}
+			vaultChecks := 0
+			swap(t, &setupProxy, func() error { return nil })
+			swap(t, &servedCertificate, func(ip, host string) (*x509.Certificate, error, error) {
+				cert := &x509.Certificate{Issuer: pkix.Name{CommonName: "test issuer"}}
+				if host == "vault.devkit.dev.example.com" {
+					vaultChecks++
+					if !ready || vaultChecks == 1 {
+						return cert, errors.New("hostname mismatch"), nil
+					}
+				}
+				return cert, nil, nil
+			})
+			err := startProxyWithCertificate(raw, proxy, "dev.example.com", "100.64.0.9")
+			if vaultChecks < 2 {
+				t.Fatal("setup must wait for the vault certificate even when the dashboard certificate is trusted")
+			}
+			if ready && err != nil {
+				t.Fatal(err)
+			}
+			if !ready && (err == nil || !strings.Contains(err.Error(), "vault.devkit.dev.example.com")) {
+				t.Fatalf("missing vault certificate must fail setup with its hostname: %v", err)
+			}
+		})
 	}
 }
 

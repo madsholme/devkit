@@ -576,19 +576,30 @@ func startProxyWithCertificate(raw map[string]any, proxy *proxyConfig, dom, ip s
 		if err := setupProxy(); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "Waiting for a %s certificate for *.%s (up to %s)...\n", want, dom, certificateTimeout)
-		deadline := time.Now().Add(certificateTimeout)
-		for {
-			if cert, verr, err := servedCertificate(ip, host); err == nil && accept(cert, verr) {
-				fmt.Fprintf(stdout, "Got it, issued by %s, valid until %s.\n", cert.Issuer.CommonName, cert.NotAfter.Format("2 Jan 2006"))
-				return nil
-			}
-			if time.Now().After(deadline) {
-				return fail("No %s certificate after %s. See docker logs %s-traefik-1, fix the cause and run devkit setup again.",
-					want, certificateTimeout, proxyProject)
-			}
-			time.Sleep(certificatePoll)
+		cfg, err := loadHostConfig()
+		if err != nil {
+			return err
 		}
+		hosts := []string{host}
+		if vaultEnabled(cfg) {
+			hosts = append(hosts, "vault.devkit."+dom)
+		}
+		fmt.Fprintf(stdout, "Waiting for %s certificates for %s (up to %s)...\n", want, strings.Join(hosts, ", "), certificateTimeout)
+		deadline := time.Now().Add(certificateTimeout)
+		for _, name := range hosts {
+			for {
+				if cert, verr, err := servedCertificate(ip, name); err == nil && accept(cert, verr) {
+					fmt.Fprintf(stdout, "%s: issued by %s, valid until %s.\n", name, cert.Issuer.CommonName, cert.NotAfter.Format("2 Jan 2006"))
+					break
+				}
+				if time.Now().After(deadline) {
+					return fail("No %s certificate for %s after %s. See docker logs %s-traefik-1, fix the cause and run devkit setup again.",
+						want, name, certificateTimeout, proxyProject)
+				}
+				time.Sleep(certificatePoll)
+			}
+		}
+		return nil
 	}
 	trusted := func(_ *x509.Certificate, verr error) bool { return verr == nil }
 	if cert, verr, err := servedCertificate(ip, host); err == nil && verr == nil {

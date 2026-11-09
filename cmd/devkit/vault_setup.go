@@ -101,6 +101,27 @@ func checkVaultInitStorage() error {
 	}
 	return nil
 }
+
+// Creating the mount can finish before its versioned storage is ready. Retry only
+// the explicit initialization response, with both a local bound and caller cancellation.
+func configureVaultKV(ctx context.Context, c *vaultClient) error {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	for {
+		err := c.call(ctx, "POST", "kv/config", map[string]any{"max_versions": 1000, "cas_required": true, "delete_version_after": "0s"}, nil)
+		if !errors.Is(err, errVaultMountInitializing) {
+			return err
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
 func provisionVault(ctx context.Context, root *vaultClient, password string) error {
 	if len(password) < 12 {
 		return fail("Human administrator password needs at least 12 characters")
@@ -112,7 +133,7 @@ func provisionVault(ctx context.Context, root *vaultClient, password string) err
 		} `json:"data"`
 	}
 	if e := root.call(ctx, "GET", "sys/mounts", nil, &mounts); e != nil {
-		return e
+		return fmt.Errorf("Inspect KV mount: %w", e)
 	}
 	if m, ok := mounts.Data["kv/"]; ok {
 		if m.Type != "kv" || m.Options["version"] != "2" {
@@ -121,8 +142,8 @@ func provisionVault(ctx context.Context, root *vaultClient, password string) err
 	} else if e := root.call(ctx, "POST", "sys/mounts/kv", map[string]any{"type": "kv", "options": map[string]string{"version": "2"}}, nil); e != nil {
 		return e
 	}
-	if e := root.call(ctx, "POST", "kv/config", map[string]any{"max_versions": 1000, "cas_required": true, "delete_version_after": "0s"}, nil); e != nil {
-		return e
+	if e := configureVaultKV(ctx, root); e != nil {
+		return fmt.Errorf("Configure KV engine: %w", e)
 	}
 	var audit struct {
 		Data map[string]struct {
@@ -165,7 +186,7 @@ path "sys/storage/raft/snapshot" { capabilities = ["read"] }`
 	if e := root.call(ctx, "PUT", "sys/policies/acl/devkit-human-admin", map[string]string{"policy": `path "*" { capabilities = ["create", "read", "update", "delete", "list", "sudo"] }`}, nil); e != nil {
 		return e
 	}
-	if e := root.call(ctx, "POST", "auth/userpass/users/devkit-admin", map[string]any{"password": password, "policies": []string{"devkit-human-admin"}}, nil); e != nil {
+	if e := root.call(ctx, "POST", "auth/userpass/users/admin", map[string]any{"password": password, "policies": []string{"devkit-human-admin"}}, nil); e != nil {
 		return e
 	}
 	var login struct {
@@ -173,7 +194,7 @@ path "sys/storage/raft/snapshot" { capabilities = ["read"] }`
 			Token string `json:"client_token"`
 		} `json:"auth"`
 	}
-	if e := root.call(ctx, "POST", "auth/userpass/login/devkit-admin", map[string]string{"password": password}, &login); e != nil {
+	if e := root.call(ctx, "POST", "auth/userpass/login/admin", map[string]string{"password": password}, &login); e != nil {
 		return e
 	}
 	if login.Auth.Token == "" {
@@ -350,6 +371,8 @@ func vaultCLI(args []string) (int, error) {
 		fmt.Fprintln(stdout, "Initialized. Unseal, then provision the restricted backend and human administrator.")
 		return 0, nil
 	case "unseal", "provision":
+		// Human input time is not part of the API operation deadline.
+		cancel()
 		f, e := humanTerminal()
 		if e != nil {
 			return 1, e
@@ -361,8 +384,10 @@ func vaultCLI(args []string) (int, error) {
 			if e != nil {
 				return 1, e
 			}
+			requestCtx, requestCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer requestCancel()
 			var s vaultStatus
-			if e = c.call(ctx, "POST", "sys/unseal", map[string]string{"key": key}, &s); e != nil {
+			if e = c.call(requestCtx, "POST", "sys/unseal", map[string]string{"key": key}, &s); e != nil {
 				return 1, e
 			}
 			if s.Sealed {
@@ -376,15 +401,17 @@ func vaultCLI(args []string) (int, error) {
 		if e != nil {
 			return 1, e
 		}
-		password, e := terminalSecret(f, r, "New native UI password for devkit-admin (12+ characters)")
+		password, e := terminalSecret(f, r, "New native UI password for admin (12+ characters)")
 		if e != nil {
 			return 1, e
 		}
 		c.token = root
-		if e = provisionVault(ctx, c, password); e != nil {
+		requestCtx, requestCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer requestCancel()
+		if e = provisionVault(requestCtx, c, password); e != nil {
 			return 1, e
 		}
-		fmt.Fprintln(stdout, "Backend configured; bootstrap root revoked. Native UI login: userpass / devkit-admin.")
+		fmt.Fprintln(stdout, "Backend configured; bootstrap root revoked. Native UI login: userpass / admin.")
 		return 0, nil
 	}
 	return 2, fail("Unknown vault operation")

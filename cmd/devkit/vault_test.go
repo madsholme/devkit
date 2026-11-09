@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestVaultSetupPreservesDataAndRejectsUnknownStorage(t *testing.T) {
@@ -74,7 +75,27 @@ func TestVaultProvisionRestrictedIdentity(t *testing.T) {
 	var policy string
 	var revoked bool
 	rejectBackend := true
+	configCalls, backendLookups := 0, 0
+	adminCreated, adminLoggedIn := false, false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v1/auth/userpass/users/") {
+			var body struct {
+				Password string   `json:"password"`
+				Policies []string `json:"policies"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+			}
+			adminCreated = r.URL.Path == "/v1/auth/userpass/users/admin" && body.Password == "human-password-123" && len(body.Policies) == 1 && body.Policies[0] == "devkit-human-admin"
+		}
+		if r.URL.Path == "/v1/kv/config" {
+			configCalls++
+			if configCalls == 1 {
+				w.WriteHeader(400)
+				w.Write([]byte(`{"errors":["Upgrading from non-versioned to versioned data. This backend will be unavailable for a brief period and will resume service shortly."]}`))
+				return
+			}
+		}
 		if r.URL.Path == "/v1/sys/mounts" {
 			w.Write([]byte(`{"data":{}}`))
 			return
@@ -93,6 +114,7 @@ func TestVaultProvisionRestrictedIdentity(t *testing.T) {
 			policy = b["policy"]
 		}
 		if r.URL.Path == "/v1/auth/token/lookup-self" {
+			backendLookups++
 			if rejectBackend {
 				w.WriteHeader(403)
 			} else {
@@ -104,7 +126,12 @@ func TestVaultProvisionRestrictedIdentity(t *testing.T) {
 			w.Write([]byte(`{"auth":{"client_token":"restricted-child"}}`))
 			return
 		}
-		if r.URL.Path == "/v1/auth/userpass/login/devkit-admin" {
+		if r.URL.Path == "/v1/auth/userpass/login/admin" {
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+			}
+			adminLoggedIn = body["password"] == "human-password-123"
 			w.Write([]byte(`{"auth":{"client_token":"human-session"}}`))
 			return
 		}
@@ -117,6 +144,12 @@ func TestVaultProvisionRestrictedIdentity(t *testing.T) {
 	c, _ := newVaultClient(server.URL, "bootstrap-root")
 	if e := provisionVault(context.Background(), c, "human-password-123"); e == nil || revoked {
 		t.Fatal("bootstrap revoked before verifying backend identity")
+	}
+	if !adminCreated || !adminLoggedIn {
+		t.Fatal("Provisioning must create and verify admin with the chosen password and human administrator policy")
+	}
+	if configCalls != 2 || backendLookups != 1 {
+		t.Fatal("Transient KV initialization prevented backend identity verification")
 	}
 	rejectBackend = false
 	if e := provisionVault(context.Background(), c, "human-password-123"); e != nil {
@@ -186,5 +219,45 @@ func TestVaultInitRecognizesOwnedFreshRaftFiles(t *testing.T) {
 	}
 	if e := checkVaultInitStorage(); e != nil {
 		t.Fatal(e)
+	}
+}
+
+func TestVaultProvisionDoesNotRetryPermanentConfigErrorsOrWaitPastDeadline(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		code      int
+		message   string
+		transient bool
+	}{
+		{"invalid", 400, "sensitive-server-message", false},
+		{"denied", 403, "sensitive-server-message", false},
+		{"initialization deadline", 400, "Upgrading from non-versioned to versioned data. This backend will be unavailable for a brief period and will resume service shortly.", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/v1/sys/mounts" {
+					w.Write([]byte(`{"data":{"kv/":{"type":"kv","options":{"version":"2"}}}}`))
+					return
+				}
+				if r.URL.Path != "/v1/kv/config" {
+					t.Error("Provisioning advanced past failed KV configuration")
+				}
+				calls++
+				w.WriteHeader(test.code)
+				json.NewEncoder(w).Encode(map[string]any{"errors": []string{test.message}})
+			}))
+			defer server.Close()
+			c, _ := newVaultClient(server.URL, "synthetic-root")
+			ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+			defer cancel()
+			err := provisionVault(ctx, c, "human-password-123")
+			if err == nil || calls != 1 || strings.Contains(err.Error(), "sensitive-server-message") {
+				t.Fatal("Failed KV config was retried unsafely, leaked, or ignored")
+			}
+			if test.transient && !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal("Initialization retry did not honor caller deadline")
+			}
+		})
 	}
 }

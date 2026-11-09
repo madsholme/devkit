@@ -251,7 +251,7 @@ func TestVaultRuntimeBindRestartAndSnapshot(t *testing.T) {
 			Token string `json:"client_token"`
 		} `json:"auth"`
 	}
-	if e = c.call(ctx, "POST", "auth/userpass/login/devkit-admin", map[string]string{"password": "runtime-human-password-strong"}, &login); e != nil {
+	if e = c.call(ctx, "POST", "auth/userpass/login/admin", map[string]string{"password": "runtime-human-password-strong"}, &login); e != nil {
 		t.Fatal(e)
 	}
 	req, _ = http.NewRequestWithContext(ctx, "POST", cfg.Address+"/v1/sys/storage/raft/snapshot-force", bytes.NewReader(snapshot))

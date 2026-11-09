@@ -265,7 +265,7 @@ func vaultRuntimeEncryptedRecovery(t *testing.T, cfg vaultConfig, source *vaultC
 			Token string `json:"client_token"`
 		} `json:"auth"`
 	}
-	if err = target.call(ctx, "POST", "auth/userpass/login/devkit-admin", map[string]string{"password": "runtime-human-password-strong"}, &login); err != nil {
+	if err = target.call(ctx, "POST", "auth/userpass/login/admin", map[string]string{"password": "runtime-human-password-strong"}, &login); err != nil {
 		t.Fatal(err)
 	}
 	if login.Auth.Token == "" {

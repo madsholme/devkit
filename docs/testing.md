@@ -186,6 +186,7 @@ pnpm --dir frontend test:ui
 # Build into a disposable path, not the running host binary:
 go build -o /tmp/devkit-secrets-acceptance ./cmd/devkit
 python3 tests/agent_secrets_acceptance.py --devkit /tmp/devkit-secrets-acceptance
+python3 tests/vault_terminal_acceptance.py --devkit /tmp/devkit-secrets-acceptance
 DEVKIT_OPENBAO_RUNTIME_TEST=1 python3 tests/openbao_runtime_acceptance.py
 # Also requires age and age-keygen (Fedora: sudo dnf install age;
 # Debian/Ubuntu: sudo apt-get install age):
@@ -193,6 +194,11 @@ DEVKIT_OPENBAO_RUNTIME_TEST=1 DEVKIT_OPENBAO_ENCRYPTED_TEST=1 python3 tests/open
 # Includes encrypted recovery of the pre-upgrade backup:
 DEVKIT_OPENBAO_RUNTIME_TEST=1 DEVKIT_OPENBAO_UPGRADE_TEST=1 python3 tests/openbao_runtime_acceptance.py
 ```
+
+The terminal acceptance test uses a real PTY and a synthetic loopback API. It waits
+31 seconds at hidden input, then verifies that unseal still reaches the API and
+credential input is not echoed. Unit tests cover bounded KV-readiness retries and
+permanent-error rejection.
 
 The OpenBao runner requires Docker, pulls the pinned image if absent, and uses a
 unique test Compose project, private temporary bind directory and loopback ports.
@@ -241,3 +247,24 @@ Repeat with a sealed vault and cleanup off; neither agent should use plaintext
 fallback or change retention. Record each actual agent/version/result, plus LAN
 and remote Tailscale client DNS/TLS/native-login results. Unavailable environments
 remain pending. Respect any instruction prohibiting agent subprocesses.
+
+For an explicitly authorized workflow test on an already-used host, keep the trial
+binary, config/state, project root, dashboard port and user-service unit separate.
+A dashboard connected to the host Docker socket may run share expiry even when
+pruning is disabled. Set its `DOCKER_HOST` to a nonexistent private socket and unset
+`DOCKER_CONTEXT` to test secrets without giving that dashboard container access;
+Docker inventory/launches are then intentionally unavailable. Use a loopback SSH
+tunnel and an isolated browser profile. Preserve and restore trial login/cleanup
+settings, and use disposable credentials only. If the host has no Git identity,
+provide a temporary `GIT_CONFIG_GLOBAL` file for project creation rather than
+changing the user's global settings.
+
+The controlled 2026-11-09 Devbox run passed CLI/UI save and generate round trips,
+Reveal/Copy equality, anonymous denial, navigation/signout clearing, scope
+inheritance, cleanup off/never through a real maintenance cycle, retirement
+restoration, and explicit project purge. Secret values were absent from metadata,
+history, audit logs and container configuration. Remove test worktrees using Git,
+release active branch references before confirmed project-secret purge, stop the
+trial dashboard, restore settings and verify the original services afterward.
+This workflow acceptance does not substitute for fresh-agent discovery or remote
+Tailscale-client validation.
