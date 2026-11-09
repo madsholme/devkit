@@ -1,10 +1,10 @@
 # ADR 0013: OpenBao authorization on a trusted development host
 
 Status: **Lite guide and configurable-cleanup amendment replace the initial-build
-design, 2026-11-08. Retained decisions below apply; plan v9 adds the user-approved guided setup.**
+design, 2026-11-08. Retained decisions below apply; plan v10 adds user-approved scoped external-client access.**
 Implementation authorized on 2026-11-08. The v8 branch build is deployed on Devbox; v9 setup changes are local only; detailed acceptance and remaining work are recorded in the current plan and archived v7.
 
-Current plan: [OpenBao Lite v9](../plans/2026-11-09-openbao-v9.md).
+Current plan: [OpenBao Lite v10](../plans/2026-11-09-openbao-v10.md).
 Current specification: [Lite guide](../plans/Devkit_OpenBao_Lite_Implementation_Guide.md),
 with the later user amendment making retention configurable and automatic cleanup optional.
 Previous proposals: [archived v5](../plans/archive/2026-11-08-openbao-v5.md), [archived v4](../plans/archive/2026-11-08-openbao-v4.md),

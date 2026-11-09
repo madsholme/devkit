@@ -156,3 +156,10 @@ Agent assets are embedded from `cmd/devkit/agent-assets`; preserve edited assets
 and instruction blocks. `docs/secrets.md` documents operations/recovery.
 Use disposable homes/config/state in tests; the opt-in runtime runner must never
 target the deployed `devkit-vault` Compose project.
+
+External secrets clients use `/api/secrets/v1` through `secret_api.go` and hashed,
+revocable context-bound tokens in `secret_tokens.go`. Authorize under the secret-state
+lock; preserve scope/branch identity, permission allowlists, HTTPS/loopback checks,
+metadata filtering and confirmation semantics. API tokens never grant host administration.
+Token hashes are host authorization state outside vault backups; recovery must not
+resurrect revoked tokens. See `docs/secrets-api.md` for both Devkit and native OpenBao APIs.

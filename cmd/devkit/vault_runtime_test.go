@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -219,6 +220,72 @@ func TestVaultRuntimeBindRestartAndSnapshot(t *testing.T) {
 		t.Fatal("Login restore lost password")
 	}
 	t.Log("Verified paired login CLI stdin, rotation, field reveals, child injection and recoverable deletion")
+	// External applications use the same managed secret path through HTTPS.
+	tokenFile := filepath.Join(root, "runtime-api-token")
+	issued := cliRun("", "secrets", "tokens", "create", "runtime-api", "--scope", "worktree", "--permissions", "read,write,cleanup", "--output", tokenFile)
+	var apiIdentity secretAPIToken
+	if json.Unmarshal(issued, &apiIdentity) != nil || apiIdentity.ID == "" || apiIdentity.Hash != "" {
+		t.Fatal("Invalid public token metadata")
+	}
+	tokenBytes, err := os.ReadFile(tokenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bearer := strings.TrimSpace(string(tokenBytes))
+	if bytes.Contains(issued, []byte(bearer)) {
+		t.Fatal("Token leaked to ordinary CLI output")
+	}
+	tokenInfo, err := os.Stat(tokenFile)
+	if err != nil || tokenInfo.Mode().Perm() != 0600 {
+		t.Fatal("Token output file is not private")
+	}
+	apiServer := httptest.NewTLSServer(http.HandlerFunc(secretsAPIHandler))
+	defer apiServer.Close()
+	apiCall := func(q secretRequest, want int) secretResponse {
+		t.Helper()
+		body, _ := json.Marshal(q)
+		request, err := http.NewRequestWithContext(ctx, "POST", apiServer.URL+"/api/secrets/v1", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+bearer)
+		response, err := apiServer.Client().Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != want {
+			t.Fatalf("API %s status %d, want %d", q.Operation, response.StatusCode, want)
+		}
+		var out secretResponse
+		if want == 200 && json.NewDecoder(response.Body).Decode(&out) != nil {
+			t.Fatal("Invalid API response")
+		}
+		return out
+	}
+	if got := apiCall(secretRequest{Operation: "get", Key: "PASSWORD", Reveal: true}, 200).Value; got != sentinel {
+		t.Fatal("API inherited read failed")
+	}
+	apiCall(secretRequest{Operation: "generate", Key: "EXTERNAL_PASSWORD", Length: 32}, 200)
+	if got := apiCall(secretRequest{Operation: "get", Key: "EXTERNAL_PASSWORD", Reveal: true}, 200).Value; len(got) != 32 {
+		t.Fatal("API generation failed")
+	}
+	apiCall(secretRequest{Operation: "set", Scope: "project", Key: "ESCAPE", Value: "wrong"}, 403)
+	apiDelete := apiCall(secretRequest{Operation: "delete", Key: "EXTERNAL_PASSWORD"}, 200)
+	if apiDelete.Confirmation == "" {
+		t.Fatal("API deletion lacked preview")
+	}
+	apiCall(secretRequest{Operation: "delete", Key: "EXTERNAL_PASSWORD", Confirm: apiDelete.Confirmation}, 200)
+	apiRestore := apiCall(secretRequest{Operation: "restore", Key: "EXTERNAL_PASSWORD"}, 200)
+	apiCall(secretRequest{Operation: "restore", Key: "EXTERNAL_PASSWORD", Confirm: apiRestore.Confirmation}, 200)
+	cliRun("", "secrets", "tokens", "revoke", apiIdentity.ID)
+	apiCall(secretRequest{Operation: "list"}, 401)
+	tokenStore, err := os.ReadFile(filepath.Join(vaultDir(), "api-tokens.json"))
+	if err != nil || bytes.Contains(tokenStore, []byte(bearer)) {
+		t.Fatal("Token persistence leaked bearer")
+	}
+	t.Log("Verified external HTTPS token CLI issuance, inherited reads, generation, context refusal, confirmed delete/restore and immediate revocation")
+
 	runSecret(secretRequest{Operation: "set", Scope: "worktree", Key: "TEMP_PASSWORD", Value: "temporary-v1"})
 	runSecret(secretRequest{Operation: "update", Scope: "worktree", Key: "TEMP_PASSWORD", Value: "temporary-v2", Expected: 1})
 	confirmed(secretRequest{Operation: "delete", Scope: "worktree", Key: "TEMP_PASSWORD"})

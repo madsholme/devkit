@@ -30,6 +30,7 @@ Login entries: --type login; hidden prompts or --stdin JSON with username/passwo
        get KEY --field username|password --reveal returns one field.
        --username-env NAME --password-env NAME maps both fields; --no-env removes mappings.
 Selectors: --project ID --branch ID --worktree ID. Values use stdin or hidden prompt, never argv.
+External apps: devkit secrets tokens --help (scoped bearer credentials).
 Changes to cleanup settings and destructive operations return a preview confirmation first.
 `
 
@@ -154,6 +155,9 @@ func parseSecretsArgs(args []string) (q secretRequest, values map[string]string,
 	return
 }
 func secretsCLI(args []string) (int, error) {
+	if len(args) > 0 && args[0] == "tokens" {
+		return secretTokensCLI(args[1:])
+	}
 	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Fprint(stdout, secretsUsage)
 		return 0, nil

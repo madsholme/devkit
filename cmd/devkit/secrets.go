@@ -66,6 +66,9 @@ type secretResponse struct {
 var secretsNow = time.Now
 
 func secretAudit(operation, resource, key string) error {
+	return secretAuditActor(operation, resource, key, "host-owner")
+}
+func secretAuditActor(operation, resource, key, actor string) error {
 	if e := privateDir(secretStateDir()); e != nil {
 		return e
 	}
@@ -75,7 +78,7 @@ func secretAudit(operation, resource, key string) error {
 	}
 	f := os.NewFile(uintptr(fd), "audit")
 	defer f.Close()
-	b, _ := json.Marshal(map[string]any{"at": secretsNow().UTC(), "operation": operation, "resource": resource, "key": key, "actor": "host-owner"})
+	b, _ := json.Marshal(map[string]any{"at": secretsNow().UTC(), "operation": operation, "resource": resource, "key": key, "actor": actor})
 	if _, e = f.Write(append(b, '\n')); e != nil {
 		return fail("Secret audit unavailable")
 	}
@@ -83,6 +86,11 @@ func secretAudit(operation, resource, key string) error {
 }
 func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error) {
 	out := secretResponse{Records: []secretRecord{}}
+	credential, external := ctx.Value(secretTokenContextKey{}).(secretTokenCredential)
+	var externalToken secretAPIToken
+	if external && tokenOperationPermission(q.Operation) == "" {
+		return out, errSecretTokenScope
+	}
 	if operatorSecretOperation(q.Operation) && !strings.HasPrefix(q.Operation, "cleanup-") {
 		return executeSecretOperator(ctx, q)
 	}
@@ -94,6 +102,24 @@ func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error)
 	r, e := loadSecretRegistry()
 	if e != nil {
 		return out, e
+	}
+	if external {
+		token, err := authorizeSecretToken(credential, &r, &q)
+		externalToken = token
+		if err != nil {
+			return out, err
+		}
+		client, err := managedVaultClient()
+		if err != nil {
+			return out, errSecretAPIUnavailable
+		}
+		status, err := client.status(ctx)
+		if err != nil || status.State != "ready" {
+			return out, errSecretAPIUnavailable
+		}
+		if err := secretAuditActor("api-"+q.Operation, contextResources(token.Context, token.Scope)[0], q.Key, "api-token:"+token.ID); err != nil {
+			return out, err
+		}
 	}
 	if strings.HasPrefix(q.Operation, "cleanup-") {
 		return executeCleanup(ctx, &r, q)
@@ -127,10 +153,21 @@ func executeSecret(ctx context.Context, q secretRequest) (secretResponse, error)
 	if e != nil {
 		return out, e
 	}
+	if external {
+		if out.Context.Project != externalToken.Context.Project || (q.Scope != "project" && out.Context.Branch != externalToken.Context.Branch) || (q.Scope == "worktree" && out.Context.Worktree != externalToken.Context.Worktree) {
+			return secretResponse{}, errSecretTokenScope
+		}
+		if q.Scope == "project" {
+			out.Context.Branch = ""
+			out.Context.Worktree = ""
+		} else if q.Scope == "branch" {
+			out.Context.Worktree = ""
+		}
+	}
 	if q.Operation == "context" || q.Operation == "resources" {
 		out.Counts = map[string]int{}
 		for _, v := range r.Resources {
-			if v.Project == out.Context.Project {
+			if v.Project == out.Context.Project && (!external || v.ID == out.Context.Project || v.ID == out.Context.Branch || v.ID == out.Context.Worktree) {
 				out.Resources = append(out.Resources, v)
 				if v.State == "active" {
 					out.Counts[v.ID] = 0

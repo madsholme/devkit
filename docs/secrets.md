@@ -4,6 +4,12 @@ Devkit stores development passwords in a managed OpenBao instance. An agent can 
 
 This is a trusted single-user development host. Project operations validate scope and cannot address system credentials. An unrestricted process running as your user, or with Docker access, is still trusted; this is not isolation between hostile agents. Existing T3, Codex, Claude Code, Git and SSH workflows remain in place.
 
+## How the vault and Devkit work together
+
+OpenBao owns encrypted KV versions and persistent Raft data. Devkit keeps a private metadata registry mapping projects, branches and worktrees to those entries; its CLI, dashboard and external secrets API all use that registry for inheritance, version checks and cleanup. A paired login stores username/password together in one entry; ordinary values remain supported. Devkit's own DNS/integration/session credentials use separate system paths.
+
+External applications can use [scoped Devkit API tokens](secrets-api.md) to get the same project inheritance and cleanup behavior. The native OpenBao HTTPS API is also available for separately managed app-owned paths, with independent OpenBao authentication. Direct native writes to Devkit-owned paths are unsupported because they bypass its registry. The API guide includes issuance/revocation, permissions, request examples, a Python client and a native OpenBao policy example. Both routes use existing LAN/Tailscale HTTPS access; no public exposure is enabled.
+
 ## Storage and first setup
 
 OpenBao uses a **bind-mounted directory**, not a Docker named volume:

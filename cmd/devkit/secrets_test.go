@@ -25,6 +25,10 @@ func secretFixture(t *testing.T) {
 	data := map[string]entry{}
 	var mu sync.Mutex
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/sys/seal-status" {
+			fmt.Fprint(w, `{"initialized":true,"sealed":false}`)
+			return
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		p := strings.TrimPrefix(r.URL.Path, "/v1/kv/")

@@ -122,11 +122,17 @@ not start services. Only explicit project creation makes an initial commit; Git 
 separate explicit command. The kit does not merge or install system software; `devkit setup`
 configures the rest of the host from your answers.
 
+External applications can use scoped, expiring Devkit API tokens to read or manage
+project secrets with the same inheritance and cleanup as the CLI. Native OpenBao
+API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
+[external secrets clients](docs/secrets-api.md) for authentication and examples.
+
 | Command | Behavior |
 |---|---|
 | `devkit setup` | Configure this host step by step; safe to run again (see [Host setup](docs/setup.md)) |
 | `devkit vault` | Manage OpenBao setup, manual unseal, encrypted backups and explicit updates |
 | `devkit secrets` | Save/generate development passwords with scoped inheritance and configurable cleanup |
+| `devkit secrets tokens` | Create/list/revoke scoped API tokens for external applications |
 | `devkit integrations` | Store integration credentials and bind exact Git HTTPS remotes |
 | `devkit agents skills` | Install/status/repair Codex and Claude Code secret guidance |
 | `devkit doctor` | Check the host and say how to fix what is missing |
@@ -166,6 +172,7 @@ Run lifecycle commands inside the owning Git repository; `ls` works anywhere. Se
 
 ## Documentation
 
+- [External secrets APIs](docs/secrets-api.md): scoped Devkit tokens preserve inheritance and cleanup; native OpenBao access supports app-owned storage over LAN/Tailscale HTTPS.
 - [Development secrets](docs/secrets.md): OpenBao with bind-mounted data, password capture, cleanup off/never, updates and recovery.
 
 - [Host setup](docs/setup.md): requirements, `bootstrap.sh`, `devkit setup`, the host config,

@@ -161,6 +161,10 @@ func newHandler() (http.Handler, error) {
 			send(w, http.StatusOK, a.body, a.kind, a.cache)
 			return
 		}
+		if r.URL.Path == "/api/secrets/v1" {
+			secretsAPIHandler(w, r)
+			return
+		}
 		if r.URL.Path == "/api/secrets" {
 			secretsWebHandler(w, r)
 			return
