@@ -202,7 +202,7 @@ See OpenBao's [Raft storage API and snapshot recovery](https://openbao.org/api-d
 
 ## Agent guidance and diagnostics
 
-Managed setup installs the embedded versioned `devkit-secrets` skill into `~/.agents/skills/devkit-secrets` for Codex and `~/.claude/skills/devkit-secrets` for Claude Code. New project templates include bounded guidance. Existing projects opt in explicitly:
+Managed setup installs the embedded versioned `devkit-secrets` skill into `~/.agents/skills/devkit-secrets` for Codex and `~/.claude/skills/devkit-secrets` for Claude Code. New project templates include bounded guidance. Existing projects opt in explicitly. After upgrading Devkit, rerun the project installation command below to refresh unedited managed blocks in both `AGENTS.md` and `CLAUDE.md`; updating the template does not change existing repositories:
 
 ```sh
 devkit agents skills install --project /absolute/path/to/checkout

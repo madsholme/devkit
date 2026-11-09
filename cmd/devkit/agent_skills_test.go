@@ -72,6 +72,29 @@ func TestAgentInstructionsPreserveSurroundingContent(t *testing.T) {
 	}
 }
 
+func TestAgentInstructionsUpgradePreservesProjectRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "AGENTS.md")
+	oldBody := "Use the devkit-secrets skill for development credentials.\n"
+	before := "# Project rules\nKeep these.\n\n<!-- devkit-secrets begin sha256:" + skillHash([]byte(oldBody)) + " -->\n" + oldBody + secretsInstructionEnd + "\nCustom trailing rules.\n"
+	if err := os.WriteFile(path, []byte(before), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := installSecretsInstructions(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), secretsInstructionBody) || !strings.HasPrefix(string(data), "# Project rules\nKeep these.\n") || !strings.HasSuffix(string(data), "\nCustom trailing rules.\n") {
+		t.Fatal("upgrade did not preserve surrounding project rules")
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatal("upgrade did not preserve permissions", err)
+	}
+}
+
 func TestAgentDoctorChecksProjectContextAndGuidance(t *testing.T) {
 	secretFixture(t)
 	repo := newGitRepo(t)
