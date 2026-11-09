@@ -92,7 +92,7 @@ cd devkit
 ./bootstrap.sh                      # Docker, Tailscale and lingering, with sudo; open the Tailscale link it prints
 # log out and back in, so Docker works without sudo
 install -D devkit ~/.local/bin/devkit
-devkit setup                        # vault-first credentials, domain, certificate, dashboard and T3 Code
+devkit setup                        # guided OpenBao initialization, credentials, certificate, dashboard and T3 Code
 ```
 
 Then open `https://devkit.<your domain>` from a device on your tailnet, and set a dashboard

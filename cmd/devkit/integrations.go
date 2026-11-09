@@ -226,13 +226,5 @@ func setupSecretsProvider(p *prompter, requested string, raw map[string]any) err
 	if e = startVault(cfg); e != nil {
 		return e
 	}
-	c, e := managedVaultClient()
-	if e != nil {
-		return e
-	}
-	status, e := c.status(context.Background())
-	if e != nil || status.State != "ready" {
-		return fail("OpenBao is not ready. Run vault init/unseal/provision, then rerun setup; no DNS credentials collected")
-	}
-	return nil
+	return setupVaultGuided(p, cfg)
 }

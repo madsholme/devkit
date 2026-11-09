@@ -138,6 +138,9 @@ func TestVaultRuntimeBindRestartAndSnapshot(t *testing.T) {
 	if e := c.call(ctx, "GET", "auth/token/lookup-self", nil, nil); e == nil {
 		t.Fatal("bootstrap root remained usable")
 	}
+	if e := setupVaultGuided(&prompter{yes: true}, cfg); e != nil {
+		t.Fatalf("Guided ready-vault resume: %v", e)
+	}
 	backend, e := managedVaultClient()
 	if e != nil {
 		t.Fatal(e)

@@ -242,8 +242,10 @@ next started (`devkit start`, `live` or `review`).
 ## Managed development secrets
 
 Fresh setup defaults to OpenBao, with owner-only bind storage at
-`~/.local/state/devkit/secrets/openbao/data`. Initialization/unseal is a human terminal
-step before DNS credentials are collected; rerun setup afterward. Existing hosts
+`~/.local/state/devkit/secrets/openbao/data`. Setup guides initialization, recovery-material custody, hidden unseal input and admin
+provisioning in one terminal session before collecting DNS credentials, then continues
+automatically. Rerun setup to resume an interrupted session; completed steps are skipped.
+`--yes` refuses steps requiring human input. Existing hosts
 keep their current provider unless selected explicitly. `--secrets-provider local`
 preserves local credentials and disables managed project secrets. See
 [Development secrets](secrets.md) for verified import, LAN/Tailscale DNS, manual

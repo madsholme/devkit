@@ -21,13 +21,9 @@ Fresh setup defaults to OpenBao. Existing hosts retain their current provider un
 
 ```sh
 devkit setup --secrets-provider openbao
-# Setup stops before collecting credentials when human initialization is needed.
-devkit vault status --json
-devkit vault init --shares 1 --threshold 1
-devkit vault unseal
-devkit vault provision
-devkit setup --secrets-provider openbao
 ```
+
+Setup asks for share count/threshold (defaults 1/1), confirms that you saved recovery material off-host, then prompts for unseal shares, the bootstrap token and your chosen admin password. No separate commands or setup restart are needed. Rerun setup after interruption to resume from live state. `--yes` stops when human input is required. Standalone `vault init`, `vault unseal` and `vault provision` remain available for recovery.
 
 Choose your own share count/threshold. One share is the simple single-user option; losing it loses recovery access. Init writes recovery material only to the controlling terminal. Store it outside this host. Unseal and provisioning use hidden terminal prompts, not command arguments or web jobs. Provisioning establishes a human `userpass` login (`admin`), a restricted renewable backend identity, and revokes the bootstrap token. Devkit does not save unseal keys or the bootstrap token. Existing installations retain their previously provisioned username (`devkit-admin` on earlier versions); updating Devkit does not rename accounts or change passwords. Native administrator password custody is yours. API timeouts start after credential entry, so taking time at a hidden prompt does not expire the request. Provisioning briefly retries the known KV initialization response on first startup; other KV configuration failures stop with a stage-specific error. If provisioning stops before completion, retry it with the original bootstrap token—do not initialize the vault again. Root is revoked only after backend verification succeeds.
 
