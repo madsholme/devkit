@@ -311,7 +311,7 @@ building the binary.
 
 Choose Single value or Login when creating an entry. A login stores its username and password together, with separate reveal/copy controls and optional environment-variable mappings. The tab counts each login once; metadata does not expose either field.
 
-Project tabs show counts for Documents (files in the selected checkout) and Secrets (active saved entries across all project scopes). Worktree Secrets badges count entries owned by that worktree. Secret counts require sign-in; unavailable counts show a dash. The Secrets panel identifies the selected branch and checkout path, reveals values within their own rows, and provides copy icons without displaying values.
+Project tabs show counts for Documents (files in the selected checkout) and Secrets (active saved entries across all project scopes). Worktree Secrets badges count entries owned by that worktree. Secret counts require sign-in; unavailable counts show a dash. The Secrets panel provides separate scope and worktree/branch dropdowns (including a single checkout), explains project → branch → worktree inheritance, and identifies the selected branch and checkout path. Worktree-owned secrets stay local to that checkout; they do not appear in the parent branch even when both are labelled `main`. Per-secret History opens a dismissible modal with version timestamps/status and no values. The panel reveals values within their own rows, and provides copy icons without displaying values.
 
 Project/worktree **Secrets** panels and **Settings → Secrets** require sign-in for
 metadata and values. Reveal/copy requests are transient responses outside retained

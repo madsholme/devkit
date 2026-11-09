@@ -59,7 +59,7 @@ it('identifies the selected branch and checkout and switches to the chosen workt
   await flushPromises()
   expect(view.get('[aria-label="Selected secret context"]').text()).toContain('main')
   expect(view.get('[aria-label="Selected secret context"]').text()).toContain('/repo')
-  await view.get('select[aria-label="Checkout"]').setValue('/repo-feature')
+  await view.get('select[aria-label="Worktree"]').setValue('/repo-feature')
   await flushPromises()
   expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ operation: 'list', root: '/repo-feature', scope: 'worktree' }))
   expect(view.get('[aria-label="Selected secret context"]').text()).toContain('feature/login')
@@ -92,5 +92,28 @@ it('creates a paired login and copies/reveals only the selected field', async ()
   expect(request).toHaveBeenCalledWith(expect.objectContaining({ operation: 'set', type: 'login', username: 'new-user', password: 'new-password', key: 'new-login', scope: 'worktree' }))
   expect((view.get('input[aria-label="Username"]').element as HTMLInputElement).value).toBe('')
   expect((view.get('input[aria-label="Password"]').element as HTMLInputElement).value).toBe('')
+  view.unmount()
+})
+
+it('keeps a single worktree selectable and explains the scope boundary', async () => {
+  const view = mount(ProjectSecrets, { props: { root: '/repo', defaultScope: 'worktree', checkouts: [{ path: '/repo', branch: 'main' }] } })
+  await flushPromises()
+  expect(view.get('select[aria-label="Worktree"]').text()).toContain('/repo')
+  expect(view.text()).toContain('Worktree-only secrets are not shared back to the branch.')
+  view.unmount()
+})
+it('selects a registered branch by ID without changing the checkout', async () => {
+  request.mockImplementation(async q => ({ context: { project: 'p', branch: q.branch || 'b-main', root: q.root }, records: [], resources: [
+    { id: 'b-main', name: 'main', kind: 'branch', state: 'active' },
+    { id: 'b-feature', name: 'feature/login', kind: 'branch', state: 'active' },
+  ] }))
+  const view = mount(ProjectSecrets, { props: { root: '/repo', defaultScope: 'branch', checkouts: [{ path: '/repo', branch: 'main' }] } })
+  await flushPromises()
+  await view.get('select[aria-label="Branch"]').setValue('b-feature'); await flushPromises()
+  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ operation: 'list', root: '/repo', branch: 'b-feature', scope: 'branch' }))
+  expect(view.get('[aria-label="Selected secret context"]').text()).toContain('feature/login')
+  await view.get('select[aria-label="Scope"]').setValue('worktree'); await flushPromises()
+  expect(view.get('[aria-label="Selected secret context"]').text()).toContain('main')
+  expect(request).toHaveBeenLastCalledWith({ operation: 'list', root: '/repo', scope: 'worktree' })
   view.unmount()
 })

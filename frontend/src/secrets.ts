@@ -4,11 +4,15 @@ export interface SecretRecord { type?: 'value' | 'login'; username_env?: string;
 export interface SecretResource { id: string; kind: string; name: string; state: string; path?: string; deadline?: string }
 export interface CleanupConfig { automatic: boolean; branch: string; worktree: string; project: string; resume_after?: string }
 export interface BackupConfig { recipient: string; directory: string; daily: boolean; retain: number }
+export interface SecretHistory {
+  current_version: number
+  versions: Record<string, { created_time: string; deletion_time: string; destroyed: boolean }>
+}
 export interface SecretReply {
   counts?: Record<string, number>
   context: { project: string; branch?: string; worktree?: string; root: string }
   records: SecretRecord[] | null; resources?: SecretResource[]; value?: string
-  confirmation?: string; message?: string; cleanup?: CleanupConfig; history?: unknown
+  confirmation?: string; message?: string; cleanup?: CleanupConfig; history?: SecretHistory
   management?: { agents?: Record<string, string>; status?: { state: string; version?: string }; config?: { provider: string; image: string; backup: BackupConfig }; url?: string; maintenance?: string; integrations?: { service: string; key: string; source: string }[] }
 }
 export type SecretRequest = { operation: string; [key: string]: unknown }
