@@ -268,3 +268,21 @@ release active branch references before confirmed project-secret purge, stop the
 trial dashboard, restore settings and verify the original services afterward.
 This workflow acceptance does not substitute for fresh-agent discovery or remote
 Tailscale-client validation.
+
+Fresh direct-CLI checks on Devbox on 2026-11-09 used Codex 0.166.0 and Claude Code
+2.1.317 with project-local copies of the bundled skill and an independent disposable
+vault. Codex discovered the skill from an ordinary password request, checked
+context/list, saved in worktree scope and verified runtime injection without
+printing values. A fresh sealed-vault request stopped with an unseal request and no
+plaintext fallback, Git edits or cleanup-policy changes. Claude discovered the skill
+in its runtime inventory but exited before task execution because it was not logged
+in; the user deferred its behavioral checks on 2026-11-09. Resume after explicit
+authorization and login. These results do not claim T3-adapter
+launch coverage or global skill installation on that host.
+
+For isolated live tests, verify CLI resolution using the agent's actual login shell:
+Devbox's Zsh startup selected the installed Devkit instead of a PATH-prepended trial
+wrapper. A task-local `ZDOTDIR` can keep the test wrapper selected without editing
+user startup files. Preserve original traces and inspect completed mutations before
+rerunning an agent; successful generation must not be repeated merely to repair
+launch bookkeeping. Stop and remove the disposable test processes/vault afterward.
