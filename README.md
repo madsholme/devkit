@@ -102,6 +102,22 @@ password with `devkit web password` to act from it. For a first project, configu
 in the new folder; see
 [Project recipe](docs/projects.md) for your own apps and [Host setup](docs/setup.md) for details.
 
+To create a private GitHub repository with the project, first follow
+[GitHub token setup](docs/secrets.md#github-token-for-project-creation): create a
+fine-grained token for the intended owner with **All repositories** access,
+**Repository creation: Read and write** (or **Administration: Read and write**) and
+**Contents: Read and write**. Save it in **Secrets → Integrations** as service `github`,
+key `token`. Then enable **Create GitHub repository**, enter the owner/repository name,
+and select **Push initial commit**. Keep **Public repository** unchecked for a private repo.
+
+```sh
+devkit project create my-app --github-owner YOUR_USER_OR_ORG --github-repo my-app --github-push
+```
+
+Owner and push are chosen per project. Without `--github-push`, the initial commit stays
+local. `devkit integrations github status --verify` checks credential acceptance; it does
+not verify every creation/write grant or perform a test push.
+
 For headless or graphical QEMU VMs, `./bootstrap.sh --qemu` adds the optional Fedora/Ubuntu prerequisites.
 Set `"projects_dir": "~/Work"` in the [host config](docs/setup.md#host-config) to discover
 project folders automatically. The dashboard's **Projects** tree groups main checkouts,
@@ -118,8 +134,8 @@ Start a live preview whenever you want a longer back-and-forth session.
 devkit does not create or delete worktrees. Your tools (T3 Code, Orca, or plain
 `git worktree add`) own them; devkit only manages the environment (containers,
 volumes, preview URL) of whichever worktree it runs in. Creating a worktree does
-not start services. Only explicit project creation makes an initial commit; Git push is a
-separate explicit command. The kit does not merge or install system software; `devkit setup`
+not start services. Only explicit project creation makes an initial commit. Git push is explicit: select
+initial push during GitHub project creation, or run a separate push command afterward. The kit does not merge or install system software; `devkit setup`
 configures the rest of the host from your answers.
 
 External applications can use scoped, expiring Devkit API tokens to read or manage

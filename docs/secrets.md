@@ -170,6 +170,74 @@ devkit integrations git unbind --url https://git.example.com/team/repo.git --yes
 
 Bindings match protocol, host, port, repository path and username. They reset helpers only for that URL, enable `useHttpPath`, and preserve unrelated/global helpers. Tokens never enter Git config/URLs/argv. Existing URL-specific settings block binding. A failed bound lookup tells Git to stop rather than consult stale helpers. `store`/`erase` do not silently write or delete vault credentials. A moved checkout or changed helper configuration needs explicit rebinding/repair; operator GitHub credentials are not silently shared with projects.
 
+## GitHub token for project creation
+
+The host GitHub integration lets **Create Project** create a private repository and,
+when selected, push its initial commit. The owner and push option are chosen per
+project; saving a token does not set a default owner or enable automatic pushing.
+
+### Create the token
+
+Sign in to GitHub as the account that will create the repositories, then open
+[Generate a fine-grained personal access token](https://github.com/settings/personal-access-tokens/new).
+Give it a descriptive name such as `Devkit server` and an expiration, such as 90 days.
+
+| Setting | Value |
+|---|---|
+| Resource owner | Your personal account, or the organization where you will create repositories |
+| Repository access | **All repositories**, so the token covers newly created repositories |
+| Repository creation | **Read and write**; if this permission is unavailable, use **Administration: Read and write** |
+| Contents | **Read and write**, needed for the initial push |
+| Metadata | Keep the automatically included **Read-only** permission |
+
+All-repository access also grants these permissions on the owner's existing repositories.
+Organization policy may require approval or restrict token use. GitHub documents the
+accepted creation permissions in its [repository API reference](https://docs.github.com/en/rest/repos/repos#create-a-repository-for-the-authenticated-user)
+and token setup in its [personal access token guide](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+A classic token with the `repo` scope is an alternative, but grants broader access to
+repositories the account can access.
+
+### Save it in devkit
+
+Generate the token and copy it directly into **Secrets → Integrations** on your devkit
+host. Set **Service** to `github`, **Key** to `token`, paste the value into **Token**,
+and select **Save credential**. This stores the credential in OpenBao and configures
+`integrations.github.token`. Keep the token out of project files, chat and shell arguments.
+
+The equivalent host CLI command prompts for hidden input:
+
+```sh
+devkit integrations github configure
+devkit integrations github status --verify
+```
+
+Verification checks that GitHub accepts the stored credential; it does not create a
+repository or push a commit. A successful identity/read check, including a repository
+response showing `permissions.push`, does not prove the fine-grained token has every
+required creation/write grant. A successful create-and-push operation is the definitive
+end-to-end check. Replace an expired or revoked token through the same integration form,
+or use `devkit integrations github rotate-token` to save an already issued replacement.
+
+### Create a private repository and push
+
+In **Projects → Create Project**, enable **Create GitHub repository**, enter the owner
+matching your token's resource owner and a new repository name, leave **Public repository**
+unchecked, and select **Push initial commit**. For a personal account, the authenticated
+GitHub user must match the owner. Organization access remains subject to GitHub permissions.
+
+The equivalent CLI is:
+
+```sh
+devkit project create my-app --github-owner YOUR_USER_OR_ORG --github-repo my-app --github-push
+```
+
+The initial push includes the starter files and additional agent instructions. Omitting
+`--github-push` leaves the commit local and creates an empty remote. The host token is
+used only for creation and the optional initial push; later Git operations need their
+own configured credentials. See [project creation](projects.md#create-a-project) for
+partial-failure recovery and the existing integration section above for exact project
+Git credential bindings.
+
 ## Backups and updates
 
 Install `age` and `age-keygen` (`sudo dnf install age` on Fedora, or `sudo apt-get install age` on Debian/Ubuntu). Create its recovery key outside Devkit and retain the private key separately; Devkit stores only the public recipient. Choose an absolute mounted off-host backup directory:

@@ -117,7 +117,10 @@ remote only sets origin locally. Alternatively, **Create GitHub repository** acc
 user/organization owner and repository name. Repositories start private; **Public
 repository** is explicit. **Push initial commit** starts unchecked and uploads the
 starter files and appended instructions only when selected. The host GitHub integration
-must be configured first. Existing destinations are refused; validation errors
+must be configured first under **Secrets → Integrations**, service `github`, key `token`.
+Follow [GitHub token setup](secrets.md#github-token-for-project-creation) for permissions,
+safe storage and verification limits. Owner and push are selected for each project.
+Existing destinations are refused; validation errors
 keep your entries in the form. Successful jobs refresh the project catalog and global
 counts. See [project creation](projects.md#create-a-project) for CLI usage and failure handling.
 

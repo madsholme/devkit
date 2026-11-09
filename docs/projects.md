@@ -71,15 +71,19 @@ agent instructions. The dashboard repository name defaults to the project name.
 CLI owner and repository name are both required. GitHub options cannot be combined
 with `--remote`; GitHub Enterprise is not supported by this flow.
 
-Configure the host's GitHub integration under **Secrets → Integrations** or run
-`devkit integrations github configure` first. Creation reads `integrations.github.token`
-from host config using the existing secret sources (OpenBao, private file, environment,
-or command). A sealed/unavailable source fails closed before local reservation.
-The credential must identify your user and permit repository creation for the selected
-personal account or organization. GitHub enforces organization policies and token
-permissions; a classic PAT needs `repo` for private repositories. Fine-grained tokens
-need the applicable repository Administration permission and, for initial push, Contents
-write access to the new repository. See [GitHub's repository API documentation](https://docs.github.com/en/rest/repos/repos#create-a-repository-for-the-authenticated-user).
+Follow [GitHub token setup](secrets.md#github-token-for-project-creation) before using
+this option. Create a fine-grained token for the intended owner with **All repositories**
+access, **Repository creation: Read and write** (or **Administration: Read and write**)
+and **Contents: Read and write** for the initial push. Save it under **Secrets →
+Integrations**, service `github`, key `token`, or run `devkit integrations github configure`.
+The owner and push option are per-project choices, not global integration settings.
+
+Creation reads `integrations.github.token` from host config using the existing secret
+sources (OpenBao, private file, environment or command). A sealed/unavailable source
+fails closed before local reservation. `devkit integrations github status --verify`
+checks credential acceptance, not the exact creation/write grants; only a successful
+create-and-push operation verifies the full workflow. GitHub enforces organization
+policies and token permissions.
 
 Creation never adopts an existing repository. It creates an empty remote only after
 the local initial commit succeeds, then sets an HTTPS origin. Initial push uses the
