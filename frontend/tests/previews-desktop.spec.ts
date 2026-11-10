@@ -101,10 +101,13 @@ test('preview Secrets action refuses missing or ambiguous checkout associations'
 
 test('preview secrets overlay fits desktop/mobile and clears values and delayed reveals on close', async ({ page, context }) => {
   await context.addCookies([{ name: 'fixture', value: 'signed', url: 'http://127.0.0.1:4178' }])
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  const calls: Record<string, unknown>[] = []
   let delayReveal = false
   let releaseReveal: (() => void) | undefined
   await page.route('**/api/secrets', async route => {
     const q = route.request().postDataJSON()
+    calls.push(q)
     if (q.operation === 'get' && delayReveal) await new Promise<void>(resolve => { releaseReveal = resolve })
     await route.fulfill({ json: {
       context: { project: 'project1', branch: 'branch1', worktree: 'tree1', root: q.root },
@@ -126,6 +129,12 @@ test('preview secrets overlay fits desktop/mobile and clears values and delayed 
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 })
     await open()
+    await expect(dialog.getByRole('combobox')).toHaveCount(0)
+    await expect(dialog.getByRole('textbox')).toHaveCount(0)
+    await expect(dialog.getByRole('button', { name: /Register|Generate|Save|Rotate|Delete|Restore|History|retiring/ })).toHaveCount(0)
+    await dialog.getByRole('button', { name: 'Copy password: PASSWORD', exact: true }).click()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('synthetic-overlay-secret')
+    await expect(dialog.locator('output')).toHaveCount(0)
     const box = await dialog.boundingBox()
     expect(box!.x).toBeGreaterThanOrEqual(0)
     expect(box!.x + box!.width).toBeLessThanOrEqual(width)
@@ -156,4 +165,6 @@ test('preview secrets overlay fits desktop/mobile and clears values and delayed 
     await expect(page).toHaveURL(/\/previews$/)
     await page.keyboard.press('Escape')
   }
+  expect(calls.every(q => ['context', 'list', 'get'].includes(String(q.operation)))).toBe(true)
+  expect(calls.every(q => q.root === '/home/demo/Work/atlas' && q.scope === 'worktree')).toBe(true)
 })

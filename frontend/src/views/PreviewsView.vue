@@ -398,7 +398,7 @@ function timeLeft(expires: string) {
       </DialogHeader>
       <ProjectSecrets v-if="secretsPreview && selectedSecretsCheckout && state.session.signed_in"
         :key="selectedSecretsCheckout.path" :root="selectedSecretsCheckout.path"
-        :checkouts="[selectedSecretsCheckout]" default-scope="worktree" />
+        :checkouts="[selectedSecretsCheckout]" default-scope="worktree" quick-access />
     </DialogContent>
   </Dialog>
 </template>

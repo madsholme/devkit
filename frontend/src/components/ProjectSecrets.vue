@@ -6,7 +6,7 @@ import { Input } from '@madsholme/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@madsholme/ui/dialog'
 import { state } from '../dashboard'
 import { secretRequest, transientSecret, type SecretRecord, type SecretReply, type SecretRequest } from '../secrets'
-const props = withDefaults(defineProps<{ root: string; defaultScope?: string; checkouts?: { path: string; branch?: string }[] }>(), { defaultScope: 'project' })
+const props = withDefaults(defineProps<{ root: string; quickAccess?: boolean; defaultScope?: string; checkouts?: { path: string; branch?: string }[] }>(), { defaultScope: 'project' })
 const emit = defineEmits<{ context: [reply: SecretReply] }>()
 const checkoutRoot = ref(props.root)
 const entryType = ref<'value' | 'login'>('value'), username = ref(''), mapEnvironment = ref(false), usernameEnv = ref(''), passwordEnv = ref('')
@@ -18,6 +18,7 @@ const historyName = ref(''), historyError = ref(''), historyLoading = ref(false)
 let historyGeneration = 0
 const historyVersions = computed(() => Object.entries(history.value?.versions || {}).sort(([a], [b]) => Number(b) - Number(a)))
 const effectiveCount = computed(() => records.value.filter(r => r.effective && !r.deleted).length)
+const visibleRecords = computed(() => props.quickAccess ? records.value.filter(row => row.effective && !row.deleted) : records.value)
 const checkoutOptions = computed(() => props.checkouts?.length ? props.checkouts : [{ path: props.root }])
 const pending = ref<{ request: SecretRequest; reply: SecretReply }>()
 const { value: revealed, clear, reveal } = transientSecret()
@@ -117,9 +118,10 @@ onDeactivated(reset); onBeforeUnmount(reset)
 </script>
 <template>
   <section class="secrets-panel workspace-surface" aria-label="Project secrets">
-    <header><div><h2>Secrets</h2><p>Save a credential once, then find and use it here.</p></div><Button variant="outline" :disabled="busy" @click="load">Refresh</Button></header>
+    <header><div v-if="!quickAccess"><h2>Secrets</h2><p>Save a credential once, then find and use it here.</p></div><p v-else>{{ busy ? 'Loading secrets…' : error ? 'Secrets unavailable' : `${effectiveCount} ${effectiveCount === 1 ? 'secret' : 'secrets'} · includes inherited values` }}</p><Button variant="outline" :disabled="busy" @click="load">Refresh</Button></header>
     <p v-if="!state.session.signed_in">Sign in to view or manage secrets.</p>
     <template v-else>
+      <template v-if="!quickAccess">
       <div class="controls scope-controls">
         <label>Scope <select v-model="scope" aria-label="Scope"><option value="project">Project</option><option value="branch">Branch</option><option value="worktree">Worktree</option></select></label>
         <label v-if="scope === 'worktree'" class="checkout-select">Worktree <select v-model="checkoutRoot" aria-label="Worktree"><option v-for="checkout in checkoutOptions" :key="checkout.path" :value="checkout.path">{{ checkout.branch || 'Detached HEAD' }} · {{ checkout.path }}</option></select></label>
@@ -135,7 +137,9 @@ onDeactivated(reset); onBeforeUnmount(reset)
       <p class="scope-help" v-if="scope === 'worktree'">This checkout inherits project and branch secrets. Worktree-only secrets are not shared back to the branch.</p>
       <p class="scope-help" v-else-if="scope === 'branch'">Shared by worktrees on this branch, with project secrets inherited. Secrets saved only in a worktree do not appear here.</p>
       <p class="scope-help" v-else>Shared by all branches and worktrees. Each can override a shared secret without changing it here.</p>
+      </template>
       <p v-if="error" role="alert">{{ error }}</p><p v-if="message" role="status">{{ message }}</p>
+      <template v-if="!quickAccess">
       <h3 class="editor-title">Save a secret</h3>
       <form class="controls secret-editor" @submit.prevent="save(false)">
         <label>Entry type <select v-model="entryType" aria-label="Entry type" :disabled="Boolean(existingRecord)"><option value="value">Single value</option><option value="login">Login (username + password)</option></select></label>
@@ -150,8 +154,9 @@ onDeactivated(reset); onBeforeUnmount(reset)
         </div>
       </form>
       <p class="editor-help">Saving an inherited name creates an override in the selected scope. Rotation changes the stored value; update the consuming application separately.</p>
+      </template>
       <div class="secret-table" role="region" aria-label="Secret values" tabindex="0"><table><thead><tr><th>Name</th><th>Source</th><th>Updated</th><th>Actions</th></tr></thead><tbody>
-        <tr v-for="row in records" :key="`${row.resource}/${row.name}`"><td class="secret-name"><code>{{ row.name }}</code><small v-if="row.deleted">Recoverable deletion</small><div v-if="row.type !== 'login' && revealed && revealedRow === rowID(row)" class="row-reveal"><output :aria-label="`Value for ${row.name}`">{{ revealed }}</output><small>Hidden automatically after 30 seconds.</small></div><div v-if="row.type === 'login'" class="login-fields">
+        <tr v-for="row in visibleRecords" :key="`${row.resource}/${row.name}`"><td class="secret-name"><code>{{ row.name }}</code><small v-if="row.deleted">Recoverable deletion</small><div v-if="row.type !== 'login' && revealed && revealedRow === rowID(row)" class="row-reveal"><output :aria-label="`Value for ${row.name}`">{{ revealed }}</output><small>Hidden automatically after 30 seconds.</small></div><div v-if="row.type === 'login'" class="login-fields">
           <div v-for="field in loginFields" :key="field" class="login-field">
             <span class="field-label"><component :is="field === 'username' ? UserRound : KeyRound" :size="14" aria-hidden="true" />{{ field === 'username' ? 'Username' : 'Password' }}</span>
             <output v-if="revealed && revealedRow === rowID(row) && revealedField === field" :aria-label="`${field} for ${row.name}`">{{ revealed }}</output><span v-else class="masked-value" aria-label="Hidden">••••••••</span>
@@ -162,11 +167,11 @@ onDeactivated(reset); onBeforeUnmount(reset)
           <small>{{ row.username_env ? `${row.username_env} / ${row.password_env}` : 'Not mapped to environment variables' }}</small>
         </div></td><td>{{ sourceName(row) }}<small>{{ row.inherited ? 'inherited' : 'owned' }}</small> <small>{{ row.deleted ? 'deleted' : row.effective ? 'effective' : 'overridden' }}</small></td><td class="secret-updated">{{ new Date(row.updated).toLocaleString() }}</td><td><div class="controls row-actions">
           <template v-if="row.type !== 'login'"><Button variant="outline" :disabled="busy || row.deleted || !row.effective" @click="show(row)">{{ revealed && revealedRow === rowID(row) ? 'Hide' : 'Reveal' }}</Button><Button variant="outline" size="icon" :aria-label="copyLabel(row)" :title="copiedRow === fieldID(row) ? 'Copied' : copyLabel(row)" :disabled="busy || row.deleted || !row.effective" @click="copyValue(row)"><Check v-if="copiedRow === fieldID(row)" aria-hidden="true" /><Copy v-else aria-hidden="true" /></Button></template>
-          <Button variant="outline" :disabled="busy || row.deleted || !row.effective" @click="showHistory(row)">History</Button>
-          <Button variant="outline" :disabled="busy || row.inherited || row.deleted" @click="action({ operation: 'rotate', key: row.name, expected: row.version })">{{ row.type === 'login' ? 'Rotate password' : 'Rotate' }}</Button>
-          <Button variant="outline" :disabled="busy || row.inherited" @click="action({ operation: row.deleted ? 'restore' : 'delete', key: row.name })">{{ row.deleted ? 'Restore' : 'Delete' }}</Button>
+          <Button v-if="!quickAccess" variant="outline" :disabled="busy || row.deleted || !row.effective" @click="showHistory(row)">History</Button>
+          <Button v-if="!quickAccess" variant="outline" :disabled="busy || row.inherited || row.deleted" @click="action({ operation: 'rotate', key: row.name, expected: row.version })">{{ row.type === 'login' ? 'Rotate password' : 'Rotate' }}</Button>
+          <Button v-if="!quickAccess" variant="outline" :disabled="busy || row.inherited" @click="action({ operation: row.deleted ? 'restore' : 'delete', key: row.name })">{{ row.deleted ? 'Restore' : 'Delete' }}</Button>
         </div></td></tr>
-        <tr v-if="!records.length"><td colspan="4" class="empty-state">{{ busy ? 'Loading secrets…' : error ? 'Secrets could not be loaded. Try Refresh.' : 'No secrets in this context yet.' }}</td></tr>
+        <tr v-if="!visibleRecords.length"><td colspan="4" class="empty-state">{{ busy ? 'Loading secrets…' : error ? 'Secrets could not be loaded. Try Refresh.' : 'No secrets in this context yet.' }}</td></tr>
       </tbody></table></div>
       <Dialog :open="Boolean(historyName)" @update:open="!$event && closeHistory()">
         <DialogContent class="secret-history-dialog">
@@ -184,7 +189,7 @@ onDeactivated(reset); onBeforeUnmount(reset)
           <DialogFooter><Button variant="outline" @click="closeHistory">Close</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-      <footer class="scope-footer"><Button variant="ghost" :disabled="busy || !resource" @click="action({ operation: 'cleanup-retire', resource })">Preview retiring this secret scope</Button></footer>
+      <footer v-if="!quickAccess" class="scope-footer"><Button variant="ghost" :disabled="busy || !resource" @click="action({ operation: 'cleanup-retire', resource })">Preview retiring this secret scope</Button></footer>
       <div v-if="pending" class="confirmation" role="dialog" aria-label="Confirm secret change"><h3>Review secret change</h3><p>{{ pending.reply.message }}</p><ul><li v-for="row in pending.reply.records || []" :key="`${row.resource}/${row.name}`">{{ row.name }} — {{ row.scope }}</li><li v-for="item in pending.reply.resources || []" :key="item.id">{{ item.name }} — {{ item.deadline ? `retained until ${new Date(item.deadline).toLocaleString()}` : 'no expiry shown' }}</li></ul><Button :disabled="busy" @click="action({ ...pending.request, confirm: pending.reply.confirmation })">Confirm</Button> <Button variant="outline" @click="pending = undefined">Cancel</Button></div>
     </template>
   </section>
