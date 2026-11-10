@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   ChevronRight,
   ExternalLink,
@@ -27,7 +27,8 @@ import FilterSelect from '../components/FilterSelect.vue'
 import ActionButton from '../components/ActionButton.vue'
 import type { Preview } from '../types'
 import { projectInventories } from '../projects'
-import { projectLocation } from '../project-inventory'
+import ProjectSecrets from '../components/ProjectSecrets.vue'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@madsholme/ui/dialog'
 const expanded = reactive(new Set<string>())
 const router = useRouter()
 const rows = computed(() =>
@@ -57,14 +58,19 @@ const recent = (preview: string) => state.history.filter((e) => e.preview === pr
 function toggleDetails(name: string) {
   expanded.has(name) ? expanded.delete(name) : expanded.add(name)
 }
-function secretsLocation(preview: Preview) {
+function secretsCheckout(preview: Preview) {
   const owners = projectInventories.value.filter(inventory =>
     inventory.checkouts.some(checkout => checkout.path === preview.worktree)
   )
   return owners.length === 1
-    ? projectLocation(owners[0]!.project.path, 'worktrees', preview.worktree, 'secrets')
+    ? owners[0]!.checkouts.find(checkout => checkout.path === preview.worktree)
     : undefined
 }
+const secretsPreview = ref<Preview>()
+const selectedSecretsCheckout = computed(() => secretsPreview.value && secretsCheckout(secretsPreview.value))
+watch(() => [state.session.signed_in, selectedSecretsCheckout.value], () => {
+  if (!state.session.signed_in || !selectedSecretsCheckout.value) secretsPreview.value = undefined
+})
 function allEvents(preview: string) {
   filters.history = preview
   void router.push('/history')
@@ -257,10 +263,9 @@ function timeLeft(expires: string) {
                       ><MoreHorizontal :size="16" />Actions</Button
                     ></DropdownMenuTrigger
                   ><DropdownMenuContent align="end"
-                    ><DropdownMenuItem v-if="secretsLocation(preview)" as-child
-                      ><RouterLink :to="secretsLocation(preview)!">Secrets</RouterLink>
-                    </DropdownMenuItem
-                    ><DropdownMenuItem v-else disabled title="The preview checkout is unavailable or ambiguous">Secrets</DropdownMenuItem
+                    > <DropdownMenuItem :disabled="!secretsCheckout(preview)"
+                      :title="!secretsCheckout(preview) ? 'The preview checkout is unavailable or ambiguous' : undefined"
+                      @select="secretsPreview = preview">Secrets</DropdownMenuItem
                     ><DropdownMenuItem
                       @select="
                         act({
@@ -385,9 +390,28 @@ function timeLeft(expires: string) {
       </p>
     </div>
   </div>
+  <Dialog :open="Boolean(secretsPreview)" @update:open="!$event && (secretsPreview = undefined)">
+    <DialogContent class="preview-secrets-dialog">
+      <DialogHeader>
+        <DialogTitle>Preview secrets</DialogTitle>
+        <DialogDescription>{{ secretsPreview?.name }} · Values stay hidden until you reveal or copy them.</DialogDescription>
+      </DialogHeader>
+      <ProjectSecrets v-if="secretsPreview && selectedSecretsCheckout && state.session.signed_in"
+        :key="selectedSecretsCheckout.path" :root="selectedSecretsCheckout.path"
+        :checkouts="[selectedSecretsCheckout]" default-scope="worktree" />
+    </DialogContent>
+  </Dialog>
 </template>
 
 <style scoped>
+:global(.preview-secrets-dialog) {
+  width: calc(100vw - 2rem);
+  max-width: 72rem;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+:global(.preview-secrets-dialog [data-slot="dialog-description"]) { overflow-wrap: anywhere; }
+
 .preview-name {
   min-width: 0;
   white-space: normal;
