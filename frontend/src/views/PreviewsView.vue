@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import {
   ChevronRight,
   ExternalLink,
@@ -26,6 +26,8 @@ import CopyButton from '../components/CopyButton.vue'
 import FilterSelect from '../components/FilterSelect.vue'
 import ActionButton from '../components/ActionButton.vue'
 import type { Preview } from '../types'
+import { projectInventories } from '../projects'
+import { projectLocation } from '../project-inventory'
 const expanded = reactive(new Set<string>())
 const router = useRouter()
 const rows = computed(() =>
@@ -52,6 +54,17 @@ const rows = computed(() =>
 const orphans = computed(() => (state.overview?.repositories || []).filter((r) => r.orphans.length))
 const gone = computed(() => new Set(orphans.value.flatMap((r) => r.orphans.map((o) => o.name))))
 const recent = (preview: string) => state.history.filter((e) => e.preview === preview)
+function toggleDetails(name: string) {
+  expanded.has(name) ? expanded.delete(name) : expanded.add(name)
+}
+function secretsLocation(preview: Preview) {
+  const owners = projectInventories.value.filter(inventory =>
+    inventory.checkouts.some(checkout => checkout.path === preview.worktree)
+  )
+  return owners.length === 1
+    ? projectLocation(owners[0]!.project.path, 'worktrees', preview.worktree, 'secrets')
+    : undefined
+}
 function allEvents(preview: string) {
   filters.history = preview
   void router.push('/history')
@@ -138,23 +151,17 @@ function timeLeft(expires: string) {
                   variant="ghost"
                   :aria-label="`Show containers for ${preview.name}`"
                   :aria-expanded="expanded.has(preview.name)"
-                  @click="
-                    expanded.has(preview.name)
-                      ? expanded.delete(preview.name)
-                      : expanded.add(preview.name)
-                  "
+                  @click="toggleDetails(preview.name)"
                   ><ChevronRight
                     :size="16"
                     :class="{ rotated: expanded.has(preview.name) }" /></Button
                 ><Badge variant="secondary">{{ preview.mode }}</Badge
-                ><a
-                  v-if="up(preview.status) && safeURL(preview.url)"
-                  :href="safeURL(preview.url)"
-                  target="_blank"
-                  rel="noopener"
-                  class="text-link font-semibold"
-                  >{{ preview.name }}</a
-                ><strong v-else>{{ preview.name }}</strong>
+                ><button
+                  type="button"
+                  class="preview-name text-link font-semibold"
+                  :aria-expanded="expanded.has(preview.name)"
+                  @click="toggleDetails(preview.name)"
+                  >{{ preview.name }}</button>
               </div>
               <p class="path table-path">{{ home(preview.worktree) }}</p>
               <Badge v-if="gone.has(preview.name)" variant="warning"
@@ -250,6 +257,10 @@ function timeLeft(expires: string) {
                       ><MoreHorizontal :size="16" />Actions</Button
                     ></DropdownMenuTrigger
                   ><DropdownMenuContent align="end"
+                    ><DropdownMenuItem v-if="secretsLocation(preview)" as-child
+                      ><RouterLink :to="secretsLocation(preview)!">Secrets</RouterLink>
+                    </DropdownMenuItem
+                    ><DropdownMenuItem v-else disabled title="The preview checkout is unavailable or ambiguous">Secrets</DropdownMenuItem
                     ><DropdownMenuItem
                       @select="
                         act({
@@ -377,6 +388,44 @@ function timeLeft(expires: string) {
 </template>
 
 <style scoped>
+.preview-name {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  cursor: pointer;
+}
+.preview-name:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+@media (min-width: 768px) {
+  .previews-inventory :deep(table) {
+    table-layout: fixed;
+    width: 100%;
+  }
+  .previews-inventory :deep(td) {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .previews-inventory :deep(.preview-table > thead > tr > th:nth-child(1)) { width: 28%; }
+  .previews-inventory :deep(.preview-table > thead > tr > th:nth-child(2)) { width: 22%; }
+  .previews-inventory :deep(.preview-table > thead > tr > th:nth-child(3)) { width: 23%; }
+  .previews-inventory :deep(.preview-table > thead > tr > th:nth-child(4)) { width: 8%; }
+  .previews-inventory :deep(.preview-table > thead > tr > th:nth-child(5)) { width: 19%; }
+  .preview-identity .resource-identity {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+  .previews-inventory .table-path {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
 /* Desktop keeps the shared inventory table. Phones use the same controls in stacked rows. */
 @media (max-width: 767px) {
   .previews-inventory .workspace-toolbar {

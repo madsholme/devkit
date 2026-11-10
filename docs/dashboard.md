@@ -63,7 +63,7 @@ Missing projects or worktrees show a return link instead of selecting another ta
 
 The remaining global views are:
 
-- **Previews**: mode, health, branch/commit, uptime and URL. Below 768px, previews stack into compact entries with actions directly beneath their metadata, so no sideways scrolling is needed. Expanded service details stack with labels and wrap long paths and image names. Desktop keeps the table layout. A live preview shows its
+- **Previews**: mode, health, branch/commit, uptime and URL. Below 768px, previews stack into compact entries with actions directly beneath their metadata, so no sideways scrolling is needed. Expanded service details stack with labels and wrap long paths and image names. Desktop keeps a bounded table with wrapping health summaries and metadata so Actions stay on screen. Click a preview name or its arrow to expand the same service information; use the external-open icon to visit the running app. Signed-in **Actions → Secrets** opens that preview’s exact checkout secret context, including inherited values; it is disabled if the checkout is missing or ambiguous. Navigation never reveals secret values automatically. A live preview shows its
   worktree's current commit and uncommitted changes, a review how far its worktree has
   moved on. Expand one for all its containers with ports (a routed port lists where it
   answers: paths such as `/api` as links, subdomain routes as `*.<preview>`), a details view (health,
