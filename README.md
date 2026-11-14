@@ -124,7 +124,8 @@ project folders automatically. The dashboard's **Projects** tree groups main che
 worktrees, container previews and VMs, with launch controls after sign-in.
 The dashboard groups VMs by project using [VM mappings](docs/projects.md#virtual-machines),
 with unmatched guests under Other VMs. Opt-in launcher/libvirt controls add start, stop and restart,
-including stopped managed VMs. See [VM connections](docs/dashboard.md#virtual-machines).
+including stopped managed VMs. VM connections prefer SPICE and show separate SSH-tunnel
+and direct LAN/Tailscale details. New launchers must support [both connection methods](docs/projects.md#vm-connection-rule). See [VM connections](docs/dashboard.md#virtual-machines).
 
 ## Commands
 

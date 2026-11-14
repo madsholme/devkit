@@ -1,0 +1,40 @@
+import { test, expect } from '@playwright/test'
+for (const width of [1440, 390]) {
+ test(`VM connections group protocols and methods at ${width}px`, async ({ page, context }) => {
+  await page.setViewportSize({ width, height: 1000 })
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.goto('/#/vms')
+  await page.getByText('Connections for atlas-lab', { exact: true }).click()
+  const panel = page.locator('.connection-panel')
+  await expect(panel.getByRole('heading', { name: 'SPICE', exact: true })).toBeVisible()
+  const tunnel = panel.getByRole('region', { name: 'SSH tunnel', exact: true })
+  const direct = panel.getByRole('region', { name: 'Direct connection', exact: true })
+  await expect(tunnel).toContainText('1. Open the tunnel')
+  await expect(direct).toContainText('spice://192.168.1.20:5931')
+  await direct.getByRole('button', { name: 'Copy direct connection command' }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("remote-viewer 'spice://192.168.1.20:5931'")
+  await page.getByLabel('Connection type for atlas-lab').selectOption('vnc:5944:127.0.0.1')
+  await expect(direct).toContainText('bound to loopback')
+  await expect(tunnel).toContainText('remote-viewer vnc://127.0.0.1:5944')
+  await page.getByLabel('Connection type for atlas-lab').selectOption('spice:5931:192.168.1.20')
+  const t = await tunnel.boundingBox(), d = await direct.boundingBox()
+  if (width === 390) expect(d!.y).toBeGreaterThanOrEqual(t!.y + t!.height - 1)
+  else expect(Math.abs(t!.y - d!.y)).toBeLessThan(2)
+  expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+  const bounds = await panel.boundingBox()
+  expect(bounds!.width).toBeLessThan(width)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: `/tmp/devkit-vm-connections-${width}.png`, fullPage: true })
+  expect(errors).toEqual([])
+ })
+}
+
+test('project VM connections use the same default and direct details', async ({ page }) => {
+ await page.goto('/#/projects/' + encodeURIComponent('/home/demo/Work/atlas') + '/vms')
+ await page.getByText('Connections for atlas-lab', { exact: true }).click()
+ const panel = page.locator('.connection-panel')
+ await expect(panel.getByRole('heading', { name: 'SPICE', exact: true })).toBeVisible()
+ await expect(panel.getByRole('region', { name: 'Direct connection', exact: true })).toContainText('192.168.1.20')
+})

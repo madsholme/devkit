@@ -40,7 +40,7 @@ test('six views, filters, details, safe anonymous controls and legacy hash links
   await expect(page.getByRole('dialog')).not.toContainText('POSTGRES_PASSWORD')
   await page.keyboard.press('Escape')
   await page.getByRole('link', { name: /^Virtual machines \(/ }).click()
-  await page.getByText('Connect privately', { exact: true }).click()
+  await page.getByText('Connections for atlas-lab', { exact: true }).click()
   await expect(
     page.getByText('remote-viewer spice://127.0.0.1:5931', { exact: true })
   ).toBeVisible()

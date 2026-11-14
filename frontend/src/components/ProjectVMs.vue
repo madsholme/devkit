@@ -24,7 +24,7 @@ const filtered = computed(() =>
 )
 </script>
 <template>
-  <div class="workspace-surface" data-inventory>
+  <div class="workspace-surface vm-inventory" data-inventory>
     <div class="workspace-toolbar">
       <div class="search-field">
         <Search :size="16" /><Input

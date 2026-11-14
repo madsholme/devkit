@@ -165,3 +165,15 @@ lock; preserve scope/branch identity, permission allowlists, HTTPS/loopback chec
 metadata filtering and confirmation semantics. API tokens never grant host administration.
 Token hashes are host authorization state outside vault backups; recovery must not
 resurrect revoked tokens. See `docs/secrets-api.md` for both Devkit and native OpenBao APIs.
+
+## QEMU connection rule
+
+Graphical QEMU launchers default to SPICE; VNC is an optional fallback. Every VM must
+support both an SSH tunnel and direct access on a trusted private LAN/Tailscale
+address (headless guests use SSH). Bind to an explicit reachable private address,
+reserve per-VM ports, retain authentication, and record the protocol, host, port,
+client command/URI and matching tunnel destination. Never expose a public listener
+or disable authentication to meet this rule. Devkit only discovers these settings;
+do not modify running VMs during inventory/UI work. Existing launcher migration is
+explicit work, and VM restarts require approval. See docs/projects.md in the devkit
+repository for the VM connection rule and examples.

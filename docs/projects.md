@@ -585,20 +585,43 @@ managed VMs remain listed and can use their existing start adapter.
 
 ### VNC and SPICE viewers
 
-Both protocols are supported, independently or together. **Connect privately** shows
-only the listeners actually discovered on that VM, with a separate SSH tunnel and
-viewer command for each. A dual-protocol VM is labeled **VNC + SPICE** regardless of
-argument order. For example, after opening its displayed tunnel:
+SPICE is the default graphical connection in **Connections** when the VM exposes it.
+VNC remains available through **Connection type**. Each protocol shows its own
+**SSH tunnel** and **Direct (LAN / Tailscale)** sections, with exact host, port,
+viewer URI and commands. A dual-protocol VM is labeled **VNC + SPICE** regardless
+of argument order. A VNC-only VM still needs SPICE enabled in its launcher before
+SPICE can be selected. TLS/socket configurations retain their manual client guidance.
+
+### VM connection rule
+
+When creating or changing a QEMU launcher for a devkit project:
+
+- Default graphical guests to **SPICE**; keep VNC only as an optional compatibility
+  fallback. Headless guests use guest SSH instead of an invented display endpoint.
+- Make each VM reachable **both through an SSH tunnel and directly** on a trusted
+  private LAN or Tailscale network. Bind the display/guest-SSH listener to an explicit
+  private host address the client can reach. Both methods can use that same listener;
+  the tunnel destination must match its bind address. Loopback-only is insufficient
+  for direct access. Do not bind publicly or disable authentication to satisfy this rule.
+- Reserve distinct ports per VM and document the protocol, private host address, port,
+  client URI/command, SSH destination and tunnel. Configure the private firewall path
+  explicitly as part of authorized host setup. Preserve existing guest/viewer credentials.
+- Keep running guests unchanged during inventory/UI work. Migrate old localhost-only
+  or VNC-only launchers explicitly, and obtain approval before restarting their VMs.
+
+Devkit discovers these settings; it does not rewrite launchers, open firewall ports,
+create a new network proxy or restart guests to enforce the rule. A nonconforming
+existing guest shows its available connection and an explanation. For example, with
+an authenticated SPICE listener at `192.168.1.20:5931`:
 
 ```sh
+# Direct from a client with access to that private network:
+remote-viewer 'spice://192.168.1.20:5931'
+# Or terminal 1 (keep open), using your existing host SSH account:
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:5931:192.168.1.20:5931 operator@192.168.1.20
+# Terminal 2:
 remote-viewer spice://127.0.0.1:5931
-remote-viewer vnc://127.0.0.1:5944
 ```
-
-These are examples, not interchangeable endpoints. A VNC-only VM needs SPICE enabled
-in its existing launcher before a SPICE connection can appear. Devkit does not add
-listeners or restart guests to change their display protocol. Existing TLS/socket
-configurations keep their documented client-configuration fallback.
 
 ## Project credentials
 

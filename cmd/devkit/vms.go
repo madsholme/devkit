@@ -21,12 +21,21 @@ import (
 )
 
 // Only allowlisted metadata crosses the API boundary. Paths and raw arguments stay private.
+type vmDirectConnection struct {
+	Host    string `json:"host"`
+	URI     string `json:"uri,omitempty"`
+	Command string `json:"command"`
+}
+
 type vmConnection struct {
-	Kind    string `json:"kind"`
-	Port    int    `json:"port,omitempty"`
-	Tunnel  string `json:"tunnel,omitempty"`
-	Command string `json:"command,omitempty"`
-	host    string
+	Listen     string               `json:"listen,omitempty"`
+	Direct     []vmDirectConnection `json:"direct,omitempty"`
+	DirectNote string               `json:"direct_note,omitempty"`
+	Kind       string               `json:"kind"`
+	Port       int                  `json:"port,omitempty"`
+	Tunnel     string               `json:"tunnel,omitempty"`
+	Command    string               `json:"command,omitempty"`
+	host       string
 }
 
 type vmDisk struct{ path, format string }
@@ -157,6 +166,15 @@ func vmPort(s string) int {
 	return n
 }
 
+// Private addresses include the shared address range used by Tailscale.
+func vmPrivateIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	v4 := ip.To4()
+	return ip.IsPrivate() || (v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127)
+}
+
 func vmListener(s string) (string, bool) {
 	if s == "" || s == "0.0.0.0" {
 		return "127.0.0.1", true
@@ -165,16 +183,72 @@ func vmListener(s string) (string, bool) {
 		return "::1", true
 	}
 	ip := net.ParseIP(s)
-	return s, ip != nil && ip.IsLoopback()
+	return s, ip != nil && (ip.IsLoopback() || vmPrivateIP(ip))
 }
 
 func addVMEndpoint(vm *virtualMachine, kind, host, port string) {
 	h, ok := vmListener(host)
 	p := vmPort(port)
 	if ok && p != 0 {
-		vm.Connections = append(vm.Connections, vmConnection{Kind: kind, Port: p, host: h})
+		vm.Connections = append(vm.Connections, vmConnection{Kind: kind, Port: p, Listen: orDefault(host, "0.0.0.0"), host: h})
 	} else {
-		vm.ConnectionNote = "Display uses an unsupported address, socket or TLS-only port; use its existing client configuration."
+		vm.ConnectionNote = "Connection uses an unsupported address, socket or TLS-only port; use its existing client configuration."
+	}
+}
+
+var vmInterfaceAddrs = net.InterfaceAddrs
+
+func vmDirectHosts(listen string) []string {
+	ip := net.ParseIP(listen)
+	if ip == nil || ip.IsLoopback() {
+		return nil
+	}
+	if vmPrivateIP(ip) {
+		return []string{ip.String()}
+	}
+	if !ip.IsUnspecified() {
+		return nil
+	}
+	addresses, err := vmInterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	unique := map[string]bool{}
+	for _, address := range addresses {
+		candidate, _, err := net.ParseCIDR(address.String())
+		if err == nil && vmPrivateIP(candidate) && (ip.To4() != nil) == (candidate.To4() != nil) {
+			unique[candidate.String()] = true
+		}
+	}
+	hosts := make([]string, 0, len(unique))
+	for host := range unique {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+func addVMDirectCommands(c *vmConnection) {
+	c.Direct = nil
+	c.DirectNote = ""
+	for _, host := range vmDirectHosts(c.Listen) {
+		direct := vmDirectConnection{Host: host}
+		if c.Kind == "ssh" {
+			direct.Command = fmt.Sprintf("printf 'Guest username: '; read -r guest_user; ssh -p %d -l \"$guest_user\" '%s'", c.Port, host)
+		} else {
+			direct.URI = c.Kind + "://" + net.JoinHostPort(host, strconv.Itoa(c.Port))
+			direct.Command = "remote-viewer '" + direct.URI + "'"
+		}
+		c.Direct = append(c.Direct, direct)
+	}
+	if len(c.Direct) == 0 {
+		if c.Listen == "" {
+			c.DirectNote = "The listener address was not reported. Use the SSH tunnel or check the VM launcher before connecting directly."
+		} else if ip := net.ParseIP(c.Listen); ip != nil && ip.IsLoopback() {
+			c.DirectNote = "This listener is bound to loopback. Use the SSH tunnel; direct access requires a private LAN or Tailscale listener in the VM launcher."
+		} else {
+			c.DirectNote = "No private host address is available for this listener. Use the SSH tunnel or check the host network configuration."
+		}
 	}
 }
 
@@ -521,7 +595,13 @@ func parseDomain(raw, uri string) (virtualMachine, error) {
 			if unsupported {
 				vm.ConnectionNote = "Display uses TLS, a Unix socket or has no listener; use its existing client configuration."
 			} else {
+				before := len(vm.Connections)
 				addVMEndpoint(&vm, g.Type, listen, g.Port)
+				if listen == "" && len(vm.Connections) > before {
+					// libvirt defaults depend on daemon configuration, unlike QEMU's
+					// omitted wildcard. Preserve the existing tunnel fallback only.
+					vm.Connections[before].Listen = ""
+				}
 			}
 		}
 	}
@@ -713,6 +793,23 @@ func diskCapacity(ctx context.Context, disks []vmDisk) *uint64 {
 }
 
 func addVMCommands(vm *virtualMachine, username, host string) {
+	// Prefer SPICE independently of QEMU argument or libvirt XML order.
+	priority := func(kind string) int {
+		switch kind {
+		case "spice":
+			return 0
+		case "vnc":
+			return 1
+		case "ssh":
+			return 2
+		default:
+			return 3
+		}
+	}
+	sort.SliceStable(vm.Connections, func(i, j int) bool { return priority(vm.Connections[i].Kind) < priority(vm.Connections[j].Kind) })
+	for i := range vm.Connections {
+		addVMDirectCommands(&vm.Connections[i])
+	}
 	if !vmUser.MatchString(username) || (!vmHost.MatchString(host) && net.ParseIP(host) == nil) {
 		vm.ConnectionNote = "SSH destination unavailable; use your devkit host's SSH address."
 		return
@@ -875,7 +972,15 @@ func listVMs(asJSON bool) error {
 			if c.Tunnel != "" {
 				fmt.Fprintln(stdout, "  tunnel:", c.Tunnel)
 			}
-			fmt.Fprintln(stdout, "  connect:", c.Command)
+			if c.Command != "" {
+				fmt.Fprintln(stdout, "  connect:", c.Command)
+			}
+			for _, direct := range c.Direct {
+				fmt.Fprintf(stdout, "  direct %s %s: %s\n", c.Kind, net.JoinHostPort(direct.Host, strconv.Itoa(c.Port)), direct.Command)
+			}
+			if c.DirectNote != "" {
+				fmt.Fprintln(stdout, "  direct:", c.DirectNote)
+			}
 		}
 		if vm.ConnectionNote != "" {
 			fmt.Fprintln(stdout, "  "+vm.ConnectionNote)

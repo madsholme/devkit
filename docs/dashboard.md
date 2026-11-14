@@ -80,7 +80,7 @@ The remaining global views are:
   visible warning and Refresh button. The tab refreshes while visible.
 - **Virtual machines**: active standalone QEMU and libvirt VMs grouped by project, with display/headless icons,
   allocated RAM/vCPUs, disk capacity, graphics and host CPU/resident-memory usage. Expand
-  **Connect privately** for SSH tunnels and remote-viewer or guest SSH commands. See below.
+  **Connections** for separate SSH tunnel and direct connection details, with SPICE preferred. See below.
 - **Worktrees**: each repository's worktrees with their last commit, uncommitted
   changes, upstream distance and preview.
 - **History**: what devkit did, newest first and grouped by day (see below). The tab
@@ -271,11 +271,36 @@ usernames, keys or bridged guest IPs. A headless libvirt guest also offers a ser
 console through `ssh -t ... virsh --connect ... console <uuid>`; this requires a
 configured guest serial console and libvirt permission. Ctrl+] leaves that console.
 
-Only loopback or wildcard display/SSH listeners get automatic tunnel instructions.
-Other addresses, Unix display sockets and TLS-enabled SPICE need the existing client
-configuration. No display port is opened, no VM is modified, and VM connections
-are not published through Cloudflare. Anyone who can read the dashboard can read
-this sanitized inventory; connecting still requires SSH and guest authentication.
+Open **Connections for <VM name>**. SPICE is selected by default when discovered;
+choose VNC or Guest SSH in **Connection type** when available. The two sections keep
+SSH tunnel steps separate from direct host, port, URI and copyable commands. This
+same panel appears in project VM lists.
+
+**Direct (LAN / Tailscale)** requires a listener reachable from your computer. For
+example, a SPICE listener bound to `192.168.1.20:5931` shows:
+
+```sh
+remote-viewer 'spice://192.168.1.20:5931'
+```
+
+The SSH tunnel for that same VM forwards to `192.168.1.20:5931` on the host,
+so both methods reach the same listener. Direct guest SSH likewise uses the discovered
+private host address and forwarded port, prompting for the guest username.
+
+Discovery accepts loopback, wildcard, private LAN IPv4/IPv6 and Tailscale's shared
+address range. An explicit private listener shows its exact address. A wildcard
+listener shows matching-family private addresses assigned to the host (IPv4 for
+`0.0.0.0` or an omitted QEMU address, IPv6 for `::`); bridge/VPN addresses may require
+additional client routing. An omitted libvirt listener address does not advertise direct access. Reachability is not probed or guaranteed: select an address
+your client can route to and allow the connection in the host firewall. Loopback-only
+listeners remain tunnel-only and explain the launcher change required for direct access.
+
+Public/link-local addresses, Unix display sockets and TLS-enabled SPICE retain manual
+client-configuration guidance. No display port is opened, no VM is modified, and VM
+connections are not published through Cloudflare. Direct displays require a trusted
+private network (Tailscale encrypts traffic); keep viewer authentication enabled.
+Devkit never reads display passwords or SSH keys. Anyone who can read the dashboard
+can read this sanitized connection inventory. See the [VM launcher rule](projects.md#vm-connection-rule).
 
 ### VM lifecycle controls
 
@@ -303,8 +328,8 @@ the resource and uses the CLI job flow; VM/project and container inventory refre
 when the job finishes. Anonymous users see a sign-in hint. Unsupported/paused resources
 show their reason. This does not grant container log/detail access outside managed
 previews or introduce deletion/force-off controls. See [projects](projects.md#turn-off-an-individual-vm-or-container).
-VNC and SPICE can both appear under Connect privately, each with its own tunnel and
-remote-viewer URI; the VM must actually expose the selected protocol.
+VNC and SPICE can both appear under Connections, each with its own tunnel and
+direct details; the VM must actually expose the selected protocol.
 
 ## Building the dashboard
 

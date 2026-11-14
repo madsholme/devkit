@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -254,5 +255,104 @@ func TestExitedQEMUZombieDoesNotBlockInventory(t *testing.T) {
 	rows, warnings := processVMs()
 	if len(rows) != 0 || len(warnings) != 0 {
 		t.Fatalf("exited guest treated as unreadable: %v %v", rows, warnings)
+	}
+}
+
+func TestVMDirectConnections(t *testing.T) {
+	swap(t, &vmInterfaceAddrs, func() ([]net.Addr, error) {
+		var result []net.Addr
+		for _, address := range []string{"127.0.0.1/8", "192.168.1.20/24", "100.64.0.9/32", "fd00::20/64", "fe80::1/64", "203.0.113.1/24", "192.168.1.20/24"} {
+			ip, network, _ := net.ParseCIDR(address)
+			network.IP = ip
+			result = append(result, network)
+		}
+		return result, nil
+	})
+	for _, tc := range []struct {
+		listen string
+		direct []string
+		target string
+	}{
+		{"127.0.0.1", nil, "127.0.0.1"}, {"::1", nil, "[::1]"},
+		{"192.168.1.20", []string{"192.168.1.20"}, "192.168.1.20"},
+		{"100.64.0.9", []string{"100.64.0.9"}, "100.64.0.9"},
+		{"fd00::20", []string{"fd00::20"}, "[fd00::20]"},
+		{"0.0.0.0", []string{"100.64.0.9", "192.168.1.20"}, "127.0.0.1"},
+		{"", []string{"100.64.0.9", "192.168.1.20"}, "127.0.0.1"},
+		{"::", []string{"fd00::20"}, "[::1]"},
+	} {
+		t.Run(tc.listen, func(t *testing.T) {
+			vm := parseQEMU(1, []string{"qemu-kvm", "-spice", "addr=" + tc.listen + ",port=5931,password=PRIVATE"})
+			addVMCommands(&vm, "demo", "100.64.0.9")
+			if len(vm.Connections) != 1 {
+				t.Fatalf("missing endpoint: %+v", vm)
+			}
+			c := vm.Connections[0]
+			if !strings.Contains(c.Tunnel, ":"+tc.target+":5931") || len(c.Direct) != len(tc.direct) {
+				t.Fatalf("connection: %+v", c)
+			}
+			for i, host := range tc.direct {
+				uri := "spice://" + net.JoinHostPort(host, "5931")
+				if c.Direct[i].Host != host || c.Direct[i].URI != uri || c.Direct[i].Command != "remote-viewer '"+uri+"'" {
+					t.Fatalf("direct: %+v", c.Direct)
+				}
+			}
+			if len(tc.direct) == 0 && !strings.Contains(c.DirectNote, "loopback") {
+				t.Fatalf("unexplained: %+v", c)
+			}
+			encoded, _ := json.Marshal(c)
+			if strings.Contains(string(encoded), "PRIVATE") {
+				t.Fatal("credential leak")
+			}
+		})
+	}
+}
+
+func TestVMDirectUnavailableAndSSHIndependent(t *testing.T) {
+	swap(t, &vmInterfaceAddrs, func() ([]net.Addr, error) { return nil, errors.New("private error") })
+	vm := parseQEMU(1, []string{"qemu-kvm", "-spice", "port=5931"})
+	addVMCommands(&vm, "demo", "100.64.0.9")
+	if len(vm.Connections[0].Direct) != 0 || vm.Connections[0].DirectNote == "" {
+		t.Fatalf("invented endpoint: %+v", vm)
+	}
+	vm = parseQEMU(1, []string{"qemu-kvm", "-nic", "user,hostfwd=tcp:192.168.1.20:2222-:22"})
+	addVMCommands(&vm, "bad;user", "bad;host")
+	if len(vm.Connections) != 1 || len(vm.Connections[0].Direct) != 1 || vm.Connections[0].Tunnel != "" {
+		t.Fatalf("direct requires host SSH: %+v", vm)
+	}
+	c := vm.Connections[0].Direct[0]
+	if !strings.Contains(c.Command, `ssh -p 2222 -l "$guest_user" '192.168.1.20'`) || c.URI != "" {
+		t.Fatalf("guest SSH: %+v", c)
+	}
+}
+
+func TestVMPrivateLibvirtAndSPICEPreference(t *testing.T) {
+	vm, err := parseDomain(`<domain><name>desktop</name><uuid>11111111-1111-1111-1111-111111111111</uuid><devices><graphics type="vnc" port="5944" listen="192.168.1.20"/><graphics type="spice" port="5931"><listen type="address" address="fd00::20"/></graphics></devices></domain>`, "qemu:///system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addVMCommands(&vm, "demo", "100.64.0.9")
+	if len(vm.Connections) != 2 || vm.Connections[0].Kind != "spice" || vm.Connections[1].Kind != "vnc" || len(vm.Connections[0].Direct) != 1 {
+		t.Fatalf("preference/libvirt: %+v", vm)
+	}
+	for _, address := range []string{"8.8.8.8", "169.254.1.1", "fe80::1", "224.0.0.1", "evil;host", "fd00::1%eth0"} {
+		vm := parseQEMU(1, []string{"qemu-kvm", "-spice", "addr=" + address + ",port=5931"})
+		if len(vm.Connections) != 0 || vm.ConnectionNote == "" {
+			t.Fatalf("unsupported address accepted: %s", address)
+		}
+	}
+}
+
+func TestVMUnknownLibvirtBindDoesNotInventDirect(t *testing.T) {
+	swap(t, &vmInterfaceAddrs, func() ([]net.Addr, error) {
+		return []net.Addr{&net.IPNet{IP: net.ParseIP("192.168.1.20"), Mask: net.CIDRMask(24, 32)}}, nil
+	})
+	vm, err := parseDomain(`<domain><name>desktop</name><uuid>11111111-1111-1111-1111-111111111111</uuid><devices><graphics type="spice" port="5931"/></devices></domain>`, "qemu:///system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addVMCommands(&vm, "demo", "100.64.0.9")
+	if len(vm.Connections) != 1 || len(vm.Connections[0].Direct) != 0 || vm.Connections[0].DirectNote == "" {
+		t.Fatalf("invented direct bind: %+v", vm)
 	}
 }

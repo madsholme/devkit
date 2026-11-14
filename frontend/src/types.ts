@@ -69,7 +69,15 @@ export interface VM {
   actions?: string[]
   control_note?: string
   connection_note?: string
-  connections: { kind: string; tunnel?: string; command?: string }[]
+  connections: {
+    kind: string
+    port?: number
+    listen?: string
+    tunnel?: string
+    command?: string
+    direct?: { host: string; uri?: string; command: string }[]
+    direct_note?: string
+  }[]
 }
 export interface Port {
   port: number

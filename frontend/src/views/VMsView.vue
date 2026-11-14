@@ -27,7 +27,7 @@ const rows = computed(() =>
 </script>
 <template>
   <InventoryNotice :text="state.vms?.warnings.join(' ')" />
-  <div class="workspace-surface" data-inventory>
+  <div class="workspace-surface vm-inventory" data-inventory>
     <div class="workspace-toolbar">
       <div class="search-field">
         <Search :size="16" /><Input
@@ -94,7 +94,7 @@ const rows = computed(() =>
           ></TableRow>
           <TableRow
             v-if="
-              vm.connections.some((c) => c.command) ||
+              vm.connections.some((c) => c.command || c.direct?.length) ||
               vm.control_note ||
               vm.project_note ||
               vm.connection_note

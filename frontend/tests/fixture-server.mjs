@@ -114,9 +114,13 @@ const vm = {
   control_id: 'qmp:atlas-lab',
   actions: ['stop', 'restart'],
   connections: [
+    { kind: 'vnc', port: 5944, listen: '127.0.0.1', tunnel: 'ssh -N -L 127.0.0.1:5944:127.0.0.1:5944 demo@devhost', command: 'remote-viewer vnc://127.0.0.1:5944', direct_note: 'This listener is bound to loopback. Use the SSH tunnel; direct access requires a private LAN or Tailscale listener in the VM launcher.' },
     {
       kind: 'spice',
-      tunnel: 'ssh -N -L 127.0.0.1:5931:127.0.0.1:5931 demo@devhost',
+      port: 5931,
+      listen: '192.168.1.20',
+      direct: [{ host: '192.168.1.20', uri: 'spice://192.168.1.20:5931', command: "remote-viewer 'spice://192.168.1.20:5931'" }],
+      tunnel: 'ssh -N -L 127.0.0.1:5931:192.168.1.20:5931 demo@devhost',
       command: 'remote-viewer spice://127.0.0.1:5931',
     },
   ],
