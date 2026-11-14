@@ -155,7 +155,9 @@ Keep values out of metadata, history and job output; fail closed when sealed.
 Cleanup configuration supports durations, `never`, automatic off and a confirmed
 overdue-resume barrier. Existing tools retain Git/worktree lifecycle ownership.
 Agent assets are embedded from `cmd/devkit/agent-assets`; preserve edited assets
-and instruction blocks. `docs/secrets.md` documents operations/recovery.
+and instruction blocks. The shared catalog distributes secrets, VM, preview and
+troubleshooting skills and their project blocks. See `docs/agent-skills.md` for
+distribution and `docs/secrets.md` for secret operations/recovery.
 Use disposable homes/config/state in tests; the opt-in runtime runner must never
 target the deployed `devkit-vault` Compose project.
 

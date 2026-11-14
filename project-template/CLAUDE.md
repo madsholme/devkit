@@ -20,3 +20,15 @@ Use the devkit-secrets skill whenever creating, generating, saving or using deve
 
 Use the devkit-vms skill whenever creating, changing, starting or connecting to QEMU/libvirt VMs on this host. Default new graphical guests to SPICE without a display password unless the user requests one, with fixed per-VM ports and both direct access and optional SSH tunnels. Preserve existing display passwords unless removal is explicitly authorized. Discover actual host addresses and show separate At home (LAN) and Away (Tailscale/VPN) connection details; a public dashboard URL is not a VM route. Prefer explicit private binds. A wildcard serving both networks requires a verified private-interface/source/destination firewall guard before opening any listener; never expose public ports or disable guest SSH authentication. Use devkit-secrets when display credentials are requested. Preserve running VMs during discovery/UI work; launcher changes take effect on the next QEMU start, and restarts require explicit authorization unless already given. Preserve project-specific instructions and report untested client routes honestly.
 <!-- devkit-vms end -->
+
+<!-- devkit-previews begin sha256:70112a2a7bb5fe45e4d681efb6b71a858b8bfe58c7895449928fa76df3c749a4 -->
+## Preview workflows with Devkit
+
+Use the devkit-previews skill for development, testing, review and preview lifecycle work. Confirm the owning checkout and exact preview; run project tools through devkit exec and use bounded logs. Resuming a preview does not rebuild images or reread saved Compose. Preserve data when recreation is needed. Review the intended committed revision and report its URL, full SHA and checks. Public sharing, publishing and destructive cleanup need explicit authorization unless already given; development work does not grant Git or host-maintenance authority. Honor project-specific commands and user constraints.
+<!-- devkit-previews end -->
+
+<!-- devkit-troubleshooting begin sha256:82e1ef7105bf6bf0398f3ded917c9ddb9c2ecc085ff13e44152fe81733e70c04 -->
+## Troubleshooting with Devkit
+
+Use the devkit-troubleshooting skill for unavailable, unhealthy or stale previews, dashboard/private URLs and agent integration failures. Begin with bounded read-only evidence: version, preview identity, status, logs, history and doctor. Distinguish application/container failures from DNS, TLS, proxy and client LAN/VPN routing. Preserve HTTPS hostname verification and keep credentials out of output. Diagnostics alone do not authorize restarts, host/firewall changes or data deletion; continue repairs already authorized by the user. Verify the affected behavior and report untested routes honestly. Use devkit-vms and devkit-secrets for their respective boundaries.
+<!-- devkit-troubleshooting end -->

@@ -539,12 +539,17 @@ dashboard scripts and sets the CRT logo as the project icon.
 
 ## Agent integration
 
-`project-template/AGENTS.md` is an example of the instructions an agent needs: run
-project commands with `devkit exec`, start `devkit live` when needed, commit and
-`devkit review HEAD` to hand work over (reporting the URL and SHA), never `logs -f`, and
-ask before anything that deletes data, goes public or deploys. Copy its "Previews with
-devkit" section into your project's AGENTS.md (the template's `CLAUDE.md` imports it for
-Claude Code) and fill in the project's own part.
+Use `devkit agents skills install --project /absolute/path/to/checkout` to install
+managed guidance for previews, troubleshooting, VMs and secrets in AGENTS.md and
+CLAUDE.md. The new-project template includes the same blocks. Start a fresh agent
+session after installation; see [Agent skills](agent-skills.md) for versioning and
+preservation of custom instructions.
+
+The preview skill covers `devkit exec`, live previews, bounded logs, exact-commit
+review handoff and data-aware lifecycle work. Troubleshooting separates application,
+container and private-network failures before repair. Keep the project's own test,
+reload and data-retention instructions alongside the managed guidance. Installation
+does not authorize public exposure, destructive cleanup or unsolicited host changes.
 
 Use Git worktree commands to discover existing workspaces, regardless of which
 harness created them. The harness stays on localhost behind Traefik at

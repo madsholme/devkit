@@ -106,7 +106,7 @@ func TestAgentCLIInstallsBothProjectGuides(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, marker := range []string{"<!-- devkit-secrets begin", "<!-- devkit-vms begin"} {
+		for _, marker := range []string{"<!-- devkit-secrets begin", "<!-- devkit-vms begin", "<!-- devkit-previews begin", "<!-- devkit-troubleshooting begin"} {
 			if strings.Count(string(data), marker) != 1 {
 				t.Fatalf("%s missing/duplicated %s", name, marker)
 			}
@@ -120,14 +120,66 @@ func TestAgentCLIInstallsBothProjectGuides(t *testing.T) {
 	if info.Mode().Perm() != 0600 {
 		t.Fatal("mode changed")
 	}
-	edited := strings.Replace(string(data), "Use the devkit-vms skill", "My VM policy", 1)
-	os.WriteFile(path, []byte(edited), 0600)
-	if _, err := agentsSkillsCLI([]string{"skills", "repair", "--project", repo.root}); err == nil {
-		t.Fatal("edited VM guidance overwritten")
+	for _, skill := range bundledAgentSkills() {
+		edited := strings.Replace(string(data), "Use the "+skill.name+" skill", "My custom policy", 1)
+		if edited == string(data) {
+			t.Fatal("edit fixture did not match", skill.name)
+		}
+		os.WriteFile(path, []byte(edited), 0600)
+		if _, err := agentsSkillsCLI([]string{"skills", "repair", "--project", repo.root}); err == nil {
+			t.Fatal("edited guidance overwritten", skill.name)
+		}
+		after, _ := os.ReadFile(path)
+		if string(after) != edited {
+			t.Fatal("edited guidance changed", skill.name)
+		}
 	}
-	after, _ := os.ReadFile(path)
-	if string(after) != edited {
-		t.Fatal("edited guidance changed")
+}
+
+func TestWorkflowSkillsAreInstalledAndProtected(t *testing.T) {
+	for _, name := range []string{"devkit-previews", "devkit-troubleshooting"} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			if _, err := managedAgentSkills("install"); err != nil {
+				t.Fatal(err)
+			}
+			for _, agent := range []string{".agents", ".claude"} {
+				data, err := os.ReadFile(filepath.Join(home, agent, "skills", name, "SKILL.md"))
+				if err != nil {
+					t.Fatal("workflow skill missing", err)
+				}
+				if !strings.HasPrefix(string(data), "---\nname: "+name+"\ndescription: Use when ") {
+					t.Fatal("installed discovery metadata is invalid", name)
+				}
+			}
+			path := filepath.Join(home, ".agents", "skills", name, "SKILL.md")
+			original, _ := os.ReadFile(path)
+			os.Remove(path)
+			status, err := managedAgentSkills("status")
+			if err != nil || status["codex"] != "missing" || status["claude"] != "current" {
+				t.Fatal(status, err)
+			}
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatal("status repaired a file")
+			}
+			if _, err := managedAgentSkills("repair"); err != nil {
+				t.Fatal(err)
+			}
+			repaired, _ := os.ReadFile(path)
+			if string(repaired) != string(original) {
+				t.Fatal("repair differs from bundled skill")
+			}
+			edited := append(original, []byte("\nUser workflow customization\n")...)
+			os.WriteFile(path, edited, 0600)
+			if _, err := managedAgentSkills("repair"); err == nil {
+				t.Fatal("edited workflow skill overwritten")
+			}
+			after, _ := os.ReadFile(path)
+			if string(after) != string(edited) {
+				t.Fatal("custom workflow lost")
+			}
+		})
 	}
 }
 
@@ -171,15 +223,20 @@ func TestVMSkillUpgradeAndSelectedAgent(t *testing.T) {
 	}
 }
 
-func TestProjectTemplatesContainCurrentVMGuidance(t *testing.T) {
+func TestProjectTemplatesContainCurrentGuidance(t *testing.T) {
 	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
 		data, err := projecttemplate.Files.ReadFile(name)
-		if err != nil || !strings.Contains(string(data), vmInstructionBody) {
-			t.Fatal(name, "VM template differs from installed guidance", err)
+		if err != nil {
+			t.Fatal(err)
 		}
-		marker := "<!-- devkit-vms begin sha256:" + skillHash([]byte(vmInstructionBody)) + " -->"
-		if !strings.Contains(string(data), marker) {
-			t.Fatal(name, "invalid managed block")
+		for _, skill := range bundledAgentSkills() {
+			if !strings.Contains(string(data), skill.instructions) {
+				t.Fatal(name, skill.name, "template differs from installed guidance")
+			}
+			marker := "<!-- " + skill.name + " begin sha256:" + skillHash([]byte(skill.instructions)) + " -->"
+			if strings.Count(string(data), marker) != 1 {
+				t.Fatal(name, skill.name, "invalid managed block")
+			}
 		}
 	}
 }
@@ -292,6 +349,26 @@ func TestAgentDoctorChecksProjectContextAndGuidance(t *testing.T) {
 	for _, c := range agentProjectChecks(repo.root) {
 		if c.Status != "ok" {
 			t.Fatal(c.Name, c.Detail)
+		}
+	}
+	path := filepath.Join(repo.root, "AGENTS.md")
+	data, _ := os.ReadFile(path)
+	for _, name := range []string{"devkit-previews", "devkit-troubleshooting"} {
+		start := strings.Index(string(data), "<!-- "+name+" begin")
+		endMarker := "<!-- " + name + " end -->"
+		end := strings.Index(string(data), endMarker) + len(endMarker)
+		if start < 0 || end < start {
+			t.Fatal("invalid block fixture")
+		}
+		os.WriteFile(path, append(append([]byte{}, data[:start]...), data[end:]...), 0644)
+		missing := false
+		for _, c := range agentProjectChecks(repo.root) {
+			if c.Name == "AGENTS.md" && c.Status != "ok" {
+				missing = true
+			}
+		}
+		if !missing {
+			t.Fatal("doctor missed absent workflow block", name)
 		}
 	}
 }

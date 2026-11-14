@@ -34,12 +34,13 @@ code, builds both and publishes them with checksums. For a host without Go, `./b
 LICENSE. Copy it over, unpack it, run `./bootstrap.sh`, then `install -D devkit ~/.local/bin/devkit`
 and `devkit setup`.
 
-Setup also installs the versioned `devkit-secrets` and `devkit-vms` skills for Codex
-and Claude, independently of vault configuration. After upgrading an existing host,
+Setup also installs the versioned secrets, VM, preview and troubleshooting skills
+for Codex and Claude, independently of vault configuration. See [Agent skills](agent-skills.md)
+for the bundle and its triggers. After upgrading an existing host,
 run `devkit agents skills install --project /absolute/checkout` for each project
 checkout needing current AGENTS.md/CLAUDE.md guidance. Modified skills and instruction
 blocks are preserved. Restart agent sessions to refresh skill discovery; use
-`devkit doctor --agents` to check both skills and project guidance.
+`devkit doctor --agents` to check all bundled skills and project guidance.
 
 `devkit setup` asks for each setting, offering the current one as default, and can be run
 again at any time to change something or repair the host. It:
