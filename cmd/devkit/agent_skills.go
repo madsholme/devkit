@@ -91,6 +91,21 @@ func installProjectAgentInstructions(path string) error {
 	return installAgentInstructions(path, "devkit-vms", vmInstructionBody)
 }
 
+func projectAgentInstructionPath(root, name string) string {
+	path := filepath.Join(root, name)
+	// Share the verified sibling for this conventional alias. Never follow an
+	// arbitrary symlink or replace the CLAUDE.md alias itself.
+	if name == "CLAUDE.md" {
+		if target, err := os.Readlink(path); err == nil && target == "AGENTS.md" {
+			sibling := filepath.Join(root, "AGENTS.md")
+			if info, err := os.Lstat(sibling); err == nil && info.Mode().IsRegular() {
+				return sibling
+			}
+		}
+	}
+	return path
+}
+
 func installAgentInstructions(path, name, instructionBody string) error {
 	// Lock the directory, preserve permissions and reject symlinks/concurrent changes.
 	dir, e := os.Open(filepath.Dir(path))
@@ -209,7 +224,7 @@ func agentsSkillsCLI(args []string) (int, error) {
 			return 1, e
 		}
 		for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
-			if e = installProjectAgentInstructions(filepath.Join(checkout.Root, name)); e != nil {
+			if e = installProjectAgentInstructions(projectAgentInstructionPath(checkout.Root, name)); e != nil {
 				return 1, e
 			}
 		}
@@ -314,7 +329,7 @@ func agentProjectChecks(root string) []check {
 		checks = append(checks, ok("agent-context", "project %s, worktree %s", context.Project, context.Worktree))
 	}
 	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
-		path := filepath.Join(checkout.Root, name)
+		path := projectAgentInstructionPath(checkout.Root, name)
 		info, e := os.Lstat(path)
 		if e != nil || !info.Mode().IsRegular() || info.Size() > 256<<10 {
 			checks = append(checks, warn(name, "Missing/unsafe guidance; use agents skills install --project PATH"))

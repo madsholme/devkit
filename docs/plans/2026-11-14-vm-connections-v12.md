@@ -49,3 +49,8 @@ confirmed the new no-password private-only default, optional password/vault fail
 behavior, existing-listener preservation, restart authority and missing VPN route
 reporting. No frontend source/assets changed. Main push, matching deployment and
 host guidance installation follow; host deployment receipts record final evidence.
+
+Host installation exposed SwiftDesign's existing `CLAUDE.md -> AGENTS.md` alias.
+Added bounded support for that exact sibling alias, preserving the link and writing
+only the regular AGENTS.md through the existing no-follow/concurrency guards.
+Regression coverage rejects external aliases; no VM operation is involved.

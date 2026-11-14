@@ -183,6 +183,42 @@ func TestProjectTemplatesContainCurrentVMGuidance(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectGuidancePreservesClaudeSiblingAlias(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repo := newGitRepo(t)
+	alias := filepath.Join(repo.root, "CLAUDE.md")
+	os.Remove(alias)
+	if err := os.Symlink("AGENTS.md", alias); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agentsSkillsCLI([]string{"skills", "install", "--project", repo.root}); err != nil {
+		t.Fatal(err)
+	}
+	if link, err := os.Readlink(alias); err != nil || link != "AGENTS.md" {
+		t.Fatal("alias changed", link, err)
+	}
+	data, _ := os.ReadFile(filepath.Join(repo.root, "AGENTS.md"))
+	if !strings.Contains(string(data), vmInstructionBody) {
+		t.Fatal("missing shared VM guidance")
+	}
+	for _, check := range agentProjectChecks(repo.root) {
+		if check.Name == "CLAUDE.md" && check.Status != "ok" {
+			t.Fatal(check)
+		}
+	}
+	os.Remove(alias)
+	outside := filepath.Join(t.TempDir(), "AGENTS.md")
+	os.WriteFile(outside, []byte("outside"), 0600)
+	os.Symlink(outside, alias)
+	if _, err := agentsSkillsCLI([]string{"skills", "install", "--project", repo.root}); err == nil {
+		t.Fatal("external symlink accepted")
+	}
+	data, _ = os.ReadFile(outside)
+	if string(data) != "outside" {
+		t.Fatal("external instructions changed")
+	}
+}
 func TestAgentInstructionsPreserveSurroundingContent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "AGENTS.md")
 	if e := os.WriteFile(path, []byte("# User rules\nKeep these.\n"), 0644); e != nil {
