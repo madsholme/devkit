@@ -356,3 +356,52 @@ func TestVMUnknownLibvirtBindDoesNotInventDirect(t *testing.T) {
 		t.Fatalf("invented direct bind: %+v", vm)
 	}
 }
+
+func TestVMHomeAndAwayTunnelCommands(t *testing.T) {
+	swap(t, &vmInterfaceAddrs, func() ([]net.Addr, error) {
+		return []net.Addr{
+			&net.IPNet{IP: net.ParseIP("192.168.0.198"), Mask: net.CIDRMask(24, 32)},
+			&net.IPNet{IP: net.ParseIP("100.126.112.0"), Mask: net.CIDRMask(32, 32)},
+			&net.IPNet{IP: net.ParseIP("fd7a:115c:a1e0::1"), Mask: net.CIDRMask(128, 128)},
+		}, nil
+	})
+	vm := parseQEMU(1, []string{"qemu-kvm", "-spice", "addr=127.0.0.1,port=5931"})
+	addVMCommands(&vm, "demo", "100.126.112.0")
+	c := vm.Connections[0]
+	if len(c.Tunnels) != 3 || c.Tunnels[0].Network != "lan" {
+		t.Fatalf("home/away tunnels: %+v", c)
+	}
+	found := map[string]bool{}
+	for _, tunnel := range c.Tunnels {
+		found[tunnel.Network+":"+tunnel.Host] = true
+		if !strings.Contains(tunnel.Command, "127.0.0.1:5931:127.0.0.1:5931") {
+			t.Fatalf("tunnel target changed: %+v", tunnel)
+		}
+	}
+	if !found["lan:192.168.0.198"] || !found["tailscale:100.126.112.0"] || !found["tailscale:fd7a:115c:a1e0::1"] {
+		t.Fatalf("wrong networks: %v", found)
+	}
+	vm = parseQEMU(1, []string{"qemu-kvm", "-spice", "port=5931"})
+	addVMCommands(&vm, "demo", "100.126.112.0")
+	console, err := parseDomain(`<domain><name>headless</name><uuid>11111111-1111-1111-1111-111111111111</uuid><devices/></domain>`, "qemu:///system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addVMCommands(&console, "demo", "100.126.112.0")
+	if len(console.Connections) != 1 || len(console.Connections[0].Tunnels) != 3 {
+		t.Fatalf("console routes: %+v", console)
+	}
+	for _, route := range console.Connections[0].Tunnels {
+		if !strings.Contains(route.Command, "virsh --connect qemu:///system console "+console.UUID) {
+			t.Fatalf("bad console route: %+v", route)
+		}
+	}
+	for _, endpoint := range vm.Connections[0].Direct {
+		if endpoint.Host == "192.168.0.198" && endpoint.Network != "lan" {
+			t.Fatalf("not LAN: %+v", endpoint)
+		}
+		if endpoint.Host == "100.126.112.0" && endpoint.Network != "tailscale" {
+			t.Fatalf("not away: %+v", endpoint)
+		}
+	}
+}

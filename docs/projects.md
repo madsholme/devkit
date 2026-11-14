@@ -604,7 +604,8 @@ When creating or changing a QEMU launcher for a devkit project:
   the tunnel destination must match its bind address. Loopback-only is insufficient
   for direct access. Do not bind publicly or disable authentication to satisfy this rule.
 - Reserve distinct ports per VM and document the protocol, private host address, port,
-  client URI/command, SSH destination and tunnel. Configure the private firewall path
+  client URI/command, and both **At home (LAN)** and **Away (Tailscale/VPN)**
+  SSH destinations/tunnels. External access uses Tailscale, not a public display port. Configure the private firewall path
   explicitly as part of authorized host setup. Preserve existing guest/viewer credentials.
 - Keep running guests unchanged during inventory/UI work. Migrate old localhost-only
   or VNC-only launchers explicitly, and obtain approval before restarting their VMs.

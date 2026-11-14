@@ -22,3 +22,9 @@ This extends the original tunnel-only boundary without making discovery a provis
 system. The cost is that old launchers need a separately authorized migration before
 they can meet the direct-access rule. Multiple wildcard private addresses may include
 bridge/VPN addresses; the client must select a reachable route.
+
+The user's subsequent clarification requires explicit home/away variants. Show LAN
+and Tailscale SSH host destinations separately, with network labels on direct endpoints.
+Both SSH variants forward to the actual VM listener, including loopback-only guests.
+External access is Tailscale/VPN only. Exclude inactive and conventional Docker/libvirt
+bridge/veth interfaces from host address suggestions; retain explicit VM bind addresses.

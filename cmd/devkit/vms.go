@@ -21,13 +21,21 @@ import (
 )
 
 // Only allowlisted metadata crosses the API boundary. Paths and raw arguments stay private.
+type vmTunnelConnection struct {
+	Network string `json:"network"`
+	Host    string `json:"host"`
+	Command string `json:"command"`
+}
+
 type vmDirectConnection struct {
+	Network string `json:"network"`
 	Host    string `json:"host"`
 	URI     string `json:"uri,omitempty"`
 	Command string `json:"command"`
 }
 
 type vmConnection struct {
+	Tunnels    []vmTunnelConnection `json:"tunnels,omitempty"`
 	Listen     string               `json:"listen,omitempty"`
 	Direct     []vmDirectConnection `json:"direct,omitempty"`
 	DirectNote string               `json:"direct_note,omitempty"`
@@ -196,7 +204,84 @@ func addVMEndpoint(vm *virtualMachine, kind, host, port string) {
 	}
 }
 
-var vmInterfaceAddrs = net.InterfaceAddrs
+// Skip common container/guest-only networks when offering client destinations.
+// Explicit VM bind addresses remain available even on those networks.
+var vmInterfaceAddrs = func() ([]net.Addr, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	var addresses []net.Addr
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 ||
+			strings.HasPrefix(iface.Name, "docker") || strings.HasPrefix(iface.Name, "br-") ||
+			strings.HasPrefix(iface.Name, "virbr") || strings.HasPrefix(iface.Name, "veth") {
+			continue
+		}
+		found, err := iface.Addrs()
+		if err == nil {
+			addresses = append(addresses, found...)
+		}
+	}
+	return addresses, nil
+}
+
+func vmConnectionNetwork(host string) string {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return "host"
+	}
+	v4 := ip.To4()
+	if (v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127) ||
+		strings.HasPrefix(ip.String(), "fd7a:115c:a1e0:") {
+		return "tailscale"
+	}
+	if ip.IsPrivate() {
+		return "lan"
+	}
+	return "host"
+}
+
+func vmSSHHosts(defaultHost string) []string {
+	hosts := append(vmDirectHosts("0.0.0.0"), vmDirectHosts("::")...)
+	found := false
+	for _, host := range hosts {
+		if host == defaultHost {
+			found = true
+		}
+	}
+	if !found {
+		hosts = append(hosts, defaultHost)
+	}
+	priority := func(host string) int {
+		switch vmConnectionNetwork(host) {
+		case "lan":
+			return 0
+		case "tailscale":
+			return 1
+		default:
+			return 2
+		}
+	}
+	sort.SliceStable(hosts, func(i, j int) bool {
+		if priority(hosts[i]) != priority(hosts[j]) {
+			return priority(hosts[i]) < priority(hosts[j])
+		}
+		v4i, v4j := net.ParseIP(hosts[i]).To4() != nil, net.ParseIP(hosts[j]).To4() != nil
+		if v4i != v4j {
+			return v4i
+		}
+		return hosts[i] < hosts[j]
+	})
+	return hosts
+}
+
+func vmSSHDestination(username, host string) string {
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return "'" + username + "@" + host + "'"
+}
 
 func vmDirectHosts(listen string) []string {
 	ip := net.ParseIP(listen)
@@ -232,7 +317,7 @@ func addVMDirectCommands(c *vmConnection) {
 	c.Direct = nil
 	c.DirectNote = ""
 	for _, host := range vmDirectHosts(c.Listen) {
-		direct := vmDirectConnection{Host: host}
+		direct := vmDirectConnection{Host: host, Network: vmConnectionNetwork(host)}
 		if c.Kind == "ssh" {
 			direct.Command = fmt.Sprintf("printf 'Guest username: '; read -r guest_user; ssh -p %d -l \"$guest_user\" '%s'", c.Port, host)
 		} else {
@@ -814,10 +899,8 @@ func addVMCommands(vm *virtualMachine, username, host string) {
 		vm.ConnectionNote = "SSH destination unavailable; use your devkit host's SSH address."
 		return
 	}
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
-	dest := "'" + username + "@" + host + "'"
+	dest := vmSSHDestination(username, host)
+	sshHosts := vmSSHHosts(host)
 	for i := range vm.Connections {
 		c := &vm.Connections[i]
 		target := c.host
@@ -825,6 +908,13 @@ func addVMCommands(vm *virtualMachine, username, host string) {
 			target = "[" + target + "]"
 		}
 		c.Tunnel = fmt.Sprintf("ssh -N -o ExitOnForwardFailure=yes -L '127.0.0.1:%d:%s:%d' %s", c.Port, target, c.Port, dest)
+		c.Tunnels = nil
+		for _, sshHost := range sshHosts {
+			c.Tunnels = append(c.Tunnels, vmTunnelConnection{
+				Network: vmConnectionNetwork(sshHost), Host: sshHost,
+				Command: fmt.Sprintf("ssh -N -o ExitOnForwardFailure=yes -L '127.0.0.1:%d:%s:%d' %s", c.Port, target, c.Port, vmSSHDestination(username, sshHost)),
+			})
+		}
 		if c.Kind == "ssh" {
 			c.Command = fmt.Sprintf("printf 'Guest username: '; read -r guest_user; ssh -p %d -l \"$guest_user\" 127.0.0.1", c.Port)
 		} else {
@@ -832,7 +922,14 @@ func addVMCommands(vm *virtualMachine, username, host string) {
 		}
 	}
 	if vm.Display == "headless" && strings.HasPrefix(vm.Source, "qemu:///") && vmUUID.MatchString(vm.UUID) {
-		vm.Connections = append(vm.Connections, vmConnection{Kind: "console", Command: fmt.Sprintf("ssh -t %s virsh --connect %s console %s", dest, vm.Source, vm.UUID)})
+		console := vmConnection{Kind: "console", Command: fmt.Sprintf("ssh -t %s virsh --connect %s console %s", dest, vm.Source, vm.UUID)}
+		for _, sshHost := range sshHosts {
+			console.Tunnels = append(console.Tunnels, vmTunnelConnection{
+				Network: vmConnectionNetwork(sshHost), Host: sshHost,
+				Command: fmt.Sprintf("ssh -t %s virsh --connect %s console %s", vmSSHDestination(username, sshHost), vm.Source, vm.UUID),
+			})
+		}
+		vm.Connections = append(vm.Connections, console)
 	}
 	if len(vm.Connections) == 0 && vm.ConnectionNote == "" {
 		vm.ConnectionNote = "No supported connection discovered. Use the VM's existing SSH address or console; devkit does not change guest networking."
@@ -969,7 +1066,11 @@ func listVMs(asJSON bool) error {
 			fmt.Fprintln(stdout, "  graphics:", strings.Join(vm.Graphics, ", "))
 		}
 		for _, c := range vm.Connections {
-			if c.Tunnel != "" {
+			if len(c.Tunnels) > 0 {
+				for _, tunnel := range c.Tunnels {
+					fmt.Fprintf(stdout, "  %s SSH (%s): %s\n", tunnel.Network, tunnel.Host, tunnel.Command)
+				}
+			} else if c.Tunnel != "" {
 				fmt.Fprintln(stdout, "  tunnel:", c.Tunnel)
 			}
 			if c.Command != "" {

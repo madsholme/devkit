@@ -287,11 +287,20 @@ The SSH tunnel for that same VM forwards to `192.168.1.20:5931` on the host,
 so both methods reach the same listener. Direct guest SSH likewise uses the discovered
 private host address and forwarded port, prompting for the guest username.
 
+The SSH section explicitly shows **At home · LAN** and **Away · Tailscale** variants.
+Choose a LAN destination while on the home network; while away, connect your computer
+to Tailscale and choose its destination. Both forward to the VM's actual listener;
+the second viewer/guest-SSH command is the same. Serial consoles also show both SSH
+destinations. Direct endpoints carry the same network labels. A LAN-only direct
+listener can still be reached from away through the Tailscale SSH tunnel, without
+opening the display port publicly. A loopback-only listener uses a tunnel in either
+location. No public-internet endpoint or router forwarding is created.
+
 Discovery accepts loopback, wildcard, private LAN IPv4/IPv6 and Tailscale's shared
 address range. An explicit private listener shows its exact address. A wildcard
 listener shows matching-family private addresses assigned to the host (IPv4 for
-`0.0.0.0` or an omitted QEMU address, IPv6 for `::`); bridge/VPN addresses may require
-additional client routing. An omitted libvirt listener address does not advertise direct access. Reachability is not probed or guaranteed: select an address
+`0.0.0.0` or an omitted QEMU address, IPv6 for `::`); common Docker/libvirt guest-bridge/veth and inactive interfaces are excluded from
+host destination suggestions. Other bridge/VPN addresses may require client routing. An omitted libvirt listener address does not advertise direct access. Reachability is not probed or guaranteed: select an address
 your client can route to and allow the connection in the host firewall. Loopback-only
 listeners remain tunnel-only and explain the launcher change required for direct access.
 

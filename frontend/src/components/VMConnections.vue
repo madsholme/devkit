@@ -5,6 +5,7 @@ import CopyButton from './CopyButton.vue'
 const props = defineProps<{ vm: VM }>()
 type Connection = VM['connections'][number]
 const selected = ref('')
+const networkLabel = (network?: string) => network === 'tailscale' ? 'Away · Tailscale' : network === 'lan' ? 'At home · LAN' : 'Host SSH'
 const rank = (kind: string) => ({ spice: 0, vnc: 1, ssh: 2, console: 3 }[kind] ?? 4)
 const key = (c: Connection) => `${c.kind}:${c.port || 0}:${c.listen || ''}`
 const title = (c: Connection) => c.kind === 'ssh' ? 'Guest SSH' : c.kind === 'console' ? 'Serial console' : c.kind.toUpperCase()
@@ -31,18 +32,30 @@ const active = computed(() => connections.value.find((c) => key(c) === selected.
       </header>
       <template v-if="active.kind === 'console'">
         <p class="note">Run on your computer using SSH access to this host.</p>
-        <div class="command"><code>{{ active.command }}</code><CopyButton :text="active.command!" label="Copy serial console command" /></div>
+        <template v-if="active.tunnels?.length">
+          <div v-for="route in active.tunnels" :key="route.host" class="connection-console-route">
+            <p class="connection-network-label">{{ networkLabel(route.network) }} <span>{{ route.host }}</span></p>
+            <div class="command"><code>{{ route.command }}</code><CopyButton :text="route.command" :label="`Copy serial console command · ${networkLabel(route.network)}`" /></div>
+          </div>
+        </template>
+        <div v-else class="command"><code>{{ active.command }}</code><CopyButton :text="active.command!" label="Copy serial console command" /></div>
         <p class="note">Requires a configured guest serial console and libvirt permission. Press Ctrl+] to leave.</p>
       </template>
       <div v-else class="connection-methods">
         <section class="connection-method" aria-label="SSH tunnel">
           <h4>SSH tunnel</h4>
-          <p class="note">Connect through the devkit host using your existing SSH access.</p>
+          <p class="note">At home, use the LAN address. Away from home, connect your computer to Tailscale first.</p>
           <template v-if="active.tunnel && active.command">
             <div class="connection-step">
               <p class="connection-step-label">1. Open the tunnel</p>
-              <div class="command"><code>{{ active.tunnel }}</code><CopyButton :text="active.tunnel" label="Copy SSH tunnel" /></div>
-              <p class="note">Run on your computer and leave this terminal open.</p>
+              <template v-if="active.tunnels?.length">
+                <div v-for="route in active.tunnels" :key="route.host" class="connection-tunnel-route">
+                  <p class="connection-network-label">{{ networkLabel(route.network) }} <span>{{ route.host }}</span></p>
+                  <div class="command"><code>{{ route.command }}</code><CopyButton :text="route.command" :label="`Copy SSH tunnel · ${networkLabel(route.network)}`" /></div>
+                </div>
+              </template>
+              <div v-else class="command"><code>{{ active.tunnel }}</code><CopyButton :text="active.tunnel" label="Copy SSH tunnel" /></div>
+              <p class="note">Choose one address, run its command on your computer and leave this terminal open.</p>
             </div>
             <div class="connection-step">
               <p class="connection-step-label">2. Connect to the VM</p>
@@ -56,10 +69,11 @@ const active = computed(() => connections.value.find((c) => key(c) === selected.
           <p v-else class="note">Host SSH details are unavailable. Use your host's SSH account and address.</p>
         </section>
         <section class="connection-method" aria-label="Direct connection">
-          <h4>Direct <span class="connection-method-context">LAN / Tailscale</span></h4>
+          <h4>Direct <span class="connection-method-context">No SSH tunnel</span></h4>
           <template v-if="active.direct?.length">
             <p class="note">No tunnel needed. Use an address your computer can reach; routing and firewall rules still apply.</p>
             <div v-for="endpoint in active.direct" :key="endpoint.host" class="connection-endpoint">
+              <p class="connection-network-label">{{ networkLabel(endpoint.network || 'lan') }}</p>
               <dl class="connection-address">
                 <div><dt>Host</dt><dd>{{ endpoint.host }}</dd></div>
                 <div><dt>Port</dt><dd>{{ active.port }}</dd></div>
@@ -67,6 +81,7 @@ const active = computed(() => connections.value.find((c) => key(c) === selected.
               </dl>
               <div class="command"><code>{{ endpoint.command }}</code><CopyButton :text="endpoint.command" label="Copy direct connection command" /></div>
             </div>
+            <p v-if="!active.direct.some((endpoint) => endpoint.network === 'tailscale')" class="note">No direct Tailscale listener was reported. Away from home, use the Tailscale SSH tunnel.</p>
           </template>
           <p v-else class="note">{{ active.direct_note || 'No direct endpoint was reported. Use the SSH tunnel or check the VM launcher.' }}</p>
         </section>

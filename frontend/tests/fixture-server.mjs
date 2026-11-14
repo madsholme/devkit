@@ -119,7 +119,11 @@ const vm = {
       kind: 'spice',
       port: 5931,
       listen: '192.168.1.20',
-      direct: [{ host: '192.168.1.20', uri: 'spice://192.168.1.20:5931', command: "remote-viewer 'spice://192.168.1.20:5931'" }],
+      direct: [{ network: 'lan', host: '192.168.1.20', uri: 'spice://192.168.1.20:5931', command: "remote-viewer 'spice://192.168.1.20:5931'" }],
+      tunnels: [
+        { network: 'lan', host: '192.168.1.20', command: "ssh -N -o ExitOnForwardFailure=yes -L '127.0.0.1:5931:192.168.1.20:5931' 'demo@192.168.1.20'" },
+        { network: 'tailscale', host: '100.64.0.9', command: "ssh -N -o ExitOnForwardFailure=yes -L '127.0.0.1:5931:192.168.1.20:5931' 'demo@100.64.0.9'" },
+      ],
       tunnel: 'ssh -N -L 127.0.0.1:5931:192.168.1.20:5931 demo@devhost',
       command: 'remote-viewer spice://127.0.0.1:5931',
     },

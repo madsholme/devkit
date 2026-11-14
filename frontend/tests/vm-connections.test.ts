@@ -38,3 +38,17 @@ it('explains loopback-only access and preserves the serial console flow', () => 
  expect(consoleView.text()).toContain('Ctrl+]')
  expect(consoleView.find('[aria-label="Direct connection"]').exists()).toBe(false)
 })
+
+it('shows labeled home and away SSH commands even for loopback-only guests', () => {
+ const view = mount(VMConnections, { props: { vm: vm([{ ...spice, direct: [], direct_note: 'Loopback only', tunnels: [
+  { network: 'lan', host: '192.168.0.198', command: 'ssh home' },
+  { network: 'tailscale', host: '100.126.112.0', command: 'ssh away' },
+ ] }]) } })
+ const tunnel=view.get('[aria-label="SSH tunnel"]')
+ expect(tunnel.text()).toContain('At home · LAN')
+ expect(tunnel.text()).toContain('Away · Tailscale')
+ expect(tunnel.text()).toContain('192.168.0.198')
+ expect(tunnel.text()).toContain('100.126.112.0')
+ expect(tunnel.text()).toContain('ssh home')
+ expect(tunnel.text()).toContain('ssh away')
+})

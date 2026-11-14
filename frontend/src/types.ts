@@ -75,7 +75,8 @@ export interface VM {
     listen?: string
     tunnel?: string
     command?: string
-    direct?: { host: string; uri?: string; command: string }[]
+    direct?: { network?: string; host: string; uri?: string; command: string }[]
+    tunnels?: { network: string; host: string; command: string }[]
     direct_note?: string
   }[]
 }
