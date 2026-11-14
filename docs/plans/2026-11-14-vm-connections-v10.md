@@ -44,3 +44,24 @@ data; restarting that task-owned server resolved the harness issue without code 
 Single-agent review and screenshot inspection complete. Reuse v9 disposable QEMU and
 unchanged dashboard/project flow evidence. Main integration and guarded live deployment
 are the remaining operations; the supplied LAN SSH address is verified reachable.
+
+
+## Completed rollout
+
+Implemented/integrated/pushed as e4ad5e6 (following f5a20c5). Deployed static binary
+SHA-256 `2dd47d954d5e8000eb1f1d0e3f6142344da7f6af9a69900be874ed53ad686041`
+to the LAN host on 2026-11-14 using its existing guarded deployment runner, extended
+with VM PID/start-tick preservation. Only devkit-web restarted. Exact executable,
+trusted HTTPS commit and three entry assets verified; inventory APIs healthy. All five
+running QEMU identities, 17 running container start identities, T3 PID, host config
+and secret registry were unchanged; vault remains ready/unsealed. No VM launchers changed.
+
+Live read-only browser verification passed on the requested VM route: SPICE default,
+LAN and Tailscale addresses/commands, seven inventory rows and no page errors.
+Existing loopback listeners correctly remain tunnel-only. Direct client sessions from
+a separate machine were not attempted; external access requires Tailscale connectivity.
+
+Host receipt/rollback directory:
+`~/.local/state/devkit/deployments/vm-connections-e4ad5e6-20261114/`.
+Host STATUS.md records the rollout. This completion note changes documentation only;
+the deployed code revision is e4ad5e6. Task worktree cleanup follows integration.
