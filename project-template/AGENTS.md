@@ -70,15 +70,8 @@ Use the devkit-secrets skill whenever creating, generating, saving or using deve
 
 ## This project
 
-## QEMU connection rule
+<!-- devkit-vms begin sha256:53f89cfcf87dbe1b055ac111eaa5eb0ea4b2e5f0a2c50786485ca90f620bea62 -->
+## VM connections with Devkit
 
-Graphical QEMU launchers default to SPICE; VNC is an optional fallback. Every VM must
-support both an SSH tunnel and direct access on a trusted private LAN/Tailscale
-address (headless guests use SSH). Bind to an explicit reachable private address,
-reserve per-VM ports, retain authentication, and record the protocol, host, port,
-client command/URI and matching tunnel destinations for both at-home LAN and away
-Tailscale/VPN access. Label the two network contexts explicitly. Never expose a public listener
-or disable authentication to meet this rule. Devkit only discovers these settings;
-do not modify running VMs during inventory/UI work. Existing launcher migration is
-explicit work, and VM restarts require approval. See docs/projects.md in the devkit
-repository for the VM connection rule and examples.
+Use the devkit-vms skill whenever creating, changing, starting or connecting to QEMU/libvirt VMs on this host. Default new graphical guests to SPICE without a display password unless the user requests one, with fixed per-VM ports and both direct access and optional SSH tunnels. Preserve existing display passwords unless removal is explicitly authorized. Discover actual host addresses and show separate At home (LAN) and Away (Tailscale/VPN) connection details; a public dashboard URL is not a VM route. Prefer explicit private binds. A wildcard serving both networks requires a verified private-interface/source/destination firewall guard before opening any listener; never expose public ports or disable guest SSH authentication. Use devkit-secrets when display credentials are requested. Preserve running VMs during discovery/UI work; launcher changes take effect on the next QEMU start, and restarts require explicit authorization unless already given. Preserve project-specific instructions and report untested client routes honestly.
+<!-- devkit-vms end -->

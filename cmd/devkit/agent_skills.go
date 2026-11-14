@@ -14,7 +14,7 @@ import (
 	"syscall"
 )
 
-//go:embed agent-assets/devkit-secrets/SKILL.md
+//go:embed agent-assets/*/SKILL.md
 var secretsSkillAssets embed.FS
 
 const secretsSkillVersion = "2"
@@ -30,6 +30,9 @@ func canonicalSecretsSkill() []byte {
 	return b
 }
 func secretsSkillStatus(dir string) string {
+	return agentSkillStatus(dir, secretsSkillVersion, canonicalSecretsSkill())
+}
+func agentSkillStatus(dir, version string, content []byte) string {
 	b, e := readPrivate(filepath.Join(dir, "SKILL.md"), 128<<10)
 	if os.IsNotExist(e) {
 		return "missing"
@@ -45,13 +48,16 @@ func secretsSkillStatus(dir string) string {
 	if skillHash(b) != manifest.Hash {
 		return "edited"
 	}
-	if manifest.Version != secretsSkillVersion || !bytes.Equal(b, canonicalSecretsSkill()) {
+	if manifest.Version != version || !bytes.Equal(b, content) {
 		return "outdated"
 	}
 	return "current"
 }
 func installSecretsSkill(dir string) error {
-	status := secretsSkillStatus(dir)
+	return installAgentSkill(dir, secretsSkillVersion, canonicalSecretsSkill())
+}
+func installAgentSkill(dir, version string, content []byte) error {
+	status := agentSkillStatus(dir, version, content)
 	if status == "current" {
 		return nil
 	}
@@ -61,11 +67,11 @@ func installSecretsSkill(dir string) error {
 	if e := privateDir(dir); e != nil {
 		return e
 	}
-	b := canonicalSecretsSkill()
+	b := content
 	if e := writePrivate(filepath.Join(dir, "SKILL.md"), b); e != nil {
 		return e
 	}
-	manifest, _ := json.Marshal(secretsSkillManifest{secretsSkillVersion, skillHash(b)})
+	manifest, _ := json.Marshal(secretsSkillManifest{version, skillHash(b)})
 	return writePrivate(filepath.Join(dir, ".devkit-managed.json"), manifest)
 }
 
@@ -73,6 +79,19 @@ const secretsInstructionBody = "## Development credentials with Devkit\n\nUse th
 const secretsInstructionEnd = "<!-- devkit-secrets end -->"
 
 func installSecretsInstructions(path string) error {
+	return installAgentInstructions(path, "devkit-secrets", secretsInstructionBody)
+}
+
+const vmInstructionBody = "## VM connections with Devkit\n\nUse the devkit-vms skill whenever creating, changing, starting or connecting to QEMU/libvirt VMs on this host. Default new graphical guests to SPICE without a display password unless the user requests one, with fixed per-VM ports and both direct access and optional SSH tunnels. Preserve existing display passwords unless removal is explicitly authorized. Discover actual host addresses and show separate At home (LAN) and Away (Tailscale/VPN) connection details; a public dashboard URL is not a VM route. Prefer explicit private binds. A wildcard serving both networks requires a verified private-interface/source/destination firewall guard before opening any listener; never expose public ports or disable guest SSH authentication. Use devkit-secrets when display credentials are requested. Preserve running VMs during discovery/UI work; launcher changes take effect on the next QEMU start, and restarts require explicit authorization unless already given. Preserve project-specific instructions and report untested client routes honestly.\n"
+
+func installProjectAgentInstructions(path string) error {
+	if err := installSecretsInstructions(path); err != nil {
+		return err
+	}
+	return installAgentInstructions(path, "devkit-vms", vmInstructionBody)
+}
+
+func installAgentInstructions(path, name, instructionBody string) error {
 	// Lock the directory, preserve permissions and reject symlinks/concurrent changes.
 	dir, e := os.Open(filepath.Dir(path))
 	if e != nil {
@@ -106,13 +125,14 @@ func installSecretsInstructions(path string) error {
 		return e
 	}
 	text := string(before)
-	start := "<!-- devkit-secrets begin sha256:"
-	block := start + skillHash([]byte(secretsInstructionBody)) + " -->\n" + secretsInstructionBody + secretsInstructionEnd
+	start := "<!-- " + name + " begin sha256:"
+	endMarker := "<!-- " + name + " end -->"
+	block := start + skillHash([]byte(instructionBody)) + " -->\n" + instructionBody + endMarker
 	if i := strings.Index(text, start); i >= 0 {
 		suffix := text[i:]
 		headerEnd := strings.Index(suffix, " -->\n")
-		end := strings.Index(suffix, secretsInstructionEnd)
-		if headerEnd < 0 || end < headerEnd || strings.Count(text, start) != 1 || strings.Count(text, secretsInstructionEnd) != 1 {
+		end := strings.Index(suffix, endMarker)
+		if headerEnd < 0 || end < headerEnd || strings.Count(text, start) != 1 || strings.Count(text, endMarker) != 1 {
 			return fail("Malformed managed instruction block; preserving it")
 		}
 		want := suffix[len(start):headerEnd]
@@ -120,9 +140,9 @@ func installSecretsInstructions(path string) error {
 		if skillHash([]byte(body)) != want {
 			return fail("Managed instruction block was edited; preserving it")
 		}
-		text = text[:i] + block + suffix[end+len(secretsInstructionEnd):]
+		text = text[:i] + block + suffix[end+len(endMarker):]
 	} else {
-		if strings.Contains(text, secretsInstructionEnd) {
+		if strings.Contains(text, endMarker) {
 			return fail("Incomplete managed instruction block")
 		}
 		text = strings.TrimRight(text, "\n") + "\n\n" + block + "\n"
@@ -179,23 +199,9 @@ func agentsSkillsCLI(args []string) (int, error) {
 	if selected != "both" && selected != "codex" && selected != "claude" {
 		return 2, fail("Select codex, claude or both")
 	}
-	home, e := os.UserHomeDir()
+	results, e := managedAgentSkillsFor(op, selected)
 	if e != nil {
 		return 1, e
-	}
-	paths := map[string]string{"codex": filepath.Join(home, ".agents", "skills", "devkit-secrets"), "claude": filepath.Join(home, ".claude", "skills", "devkit-secrets")}
-	results := map[string]string{}
-	for _, agent := range []string{"codex", "claude"} {
-		if selected != "both" && selected != agent {
-			continue
-		}
-		path := paths[agent]
-		if op != "status" {
-			if e = installSecretsSkill(path); e != nil {
-				return 1, e
-			}
-		}
-		results[agent] = secretsSkillStatus(path)
 	}
 	if root := v["--project"]; root != "" && op != "status" {
 		checkout, e := inspectSecretCheckout(root)
@@ -203,13 +209,13 @@ func agentsSkillsCLI(args []string) (int, error) {
 			return 1, e
 		}
 		for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
-			if e = installSecretsInstructions(filepath.Join(checkout.Root, name)); e != nil {
+			if e = installProjectAgentInstructions(filepath.Join(checkout.Root, name)); e != nil {
 				return 1, e
 			}
 		}
 	}
 	if op != "status" {
-		happened("agents skills "+op, selected, "version "+secretsSkillVersion+"; user edits preserved")
+		happened("agents skills "+op, selected, "devkit-secrets and devkit-vms; user edits preserved")
 	}
 	return 0, json.NewEncoder(stdout).Encode(results)
 }
@@ -220,10 +226,12 @@ func doctorAgents() (int, error) {
 	}
 	code := 0
 	for _, agent := range []string{".agents", ".claude"} {
-		status := secretsSkillStatus(filepath.Join(home, agent, "skills", "devkit-secrets"))
-		fmt.Fprintf(stdout, "%s: %s (devkit agents skills install|repair)\n", agent, status)
-		if status != "current" {
-			code = 1
+		for _, skill := range bundledAgentSkills() {
+			status := agentSkillStatus(filepath.Join(home, agent, "skills", skill.name), skill.version, skill.content)
+			fmt.Fprintf(stdout, "%s/%s: %s (devkit agents skills install|repair)\n", agent, skill.name, status)
+			if status != "current" {
+				code = 1
+			}
 		}
 	}
 	if path, e := exec.LookPath("devkit"); e != nil {
@@ -243,20 +251,48 @@ func doctorAgents() (int, error) {
 	return code, nil
 }
 
+type bundledAgentSkill struct {
+	name, version string
+	content       []byte
+}
+
+func bundledAgentSkills() []bundledAgentSkill {
+	vm, _ := secretsSkillAssets.ReadFile("agent-assets/devkit-vms/SKILL.md")
+	return []bundledAgentSkill{
+		{"devkit-secrets", secretsSkillVersion, canonicalSecretsSkill()},
+		{"devkit-vms", "1", vm},
+	}
+}
 func managedAgentSkills(operation string) (map[string]string, error) {
+	return managedAgentSkillsFor(operation, "both")
+}
+func managedAgentSkillsFor(operation, selected string) (map[string]string, error) {
 	home, e := os.UserHomeDir()
 	if e != nil {
 		return nil, e
 	}
 	result := map[string]string{}
-	for agent, folder := range map[string]string{"codex": ".agents", "claude": ".claude"} {
-		path := filepath.Join(home, folder, "skills", "devkit-secrets")
-		if operation == "install" || operation == "repair" {
-			if e = installSecretsSkill(path); e != nil {
-				return nil, e
+	for _, agent := range []string{"codex", "claude"} {
+		if selected != "both" && selected != agent {
+			continue
+		}
+		folder := ".agents"
+		if agent == "claude" {
+			folder = ".claude"
+		}
+		result[agent] = "current"
+		for _, skill := range bundledAgentSkills() {
+			path := filepath.Join(home, folder, "skills", skill.name)
+			if operation == "install" || operation == "repair" {
+				if e = installAgentSkill(path, skill.version, skill.content); e != nil {
+					return nil, e
+				}
+			}
+			status := agentSkillStatus(path, skill.version, skill.content)
+			if result[agent] == "current" {
+				result[agent] = status
 			}
 		}
-		result[agent] = secretsSkillStatus(path)
 	}
 	return result, nil
 }
@@ -285,10 +321,10 @@ func agentProjectChecks(root string) []check {
 			continue
 		}
 		b, e := os.ReadFile(path)
-		if e != nil || !strings.Contains(string(b), secretsInstructionBody) {
+		if e != nil || (!strings.Contains(string(b), secretsInstructionBody) || !strings.Contains(string(b), vmInstructionBody)) {
 			checks = append(checks, warn(name, "Managed guidance missing or edited; preserve edits when repairing"))
 		} else {
-			checks = append(checks, ok(name, "Current secrets guidance present"))
+			checks = append(checks, ok(name, "Current secrets and VM guidance present"))
 		}
 	}
 	return checks

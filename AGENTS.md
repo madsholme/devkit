@@ -168,13 +168,22 @@ resurrect revoked tokens. See `docs/secrets-api.md` for both Devkit and native O
 
 ## QEMU connection rule
 
-Graphical QEMU launchers default to SPICE; VNC is an optional fallback. Every VM must
+Use the bundled `devkit-vms` skill for VM work. Setup and `agents skills install|repair`
+distribute it to Codex and Claude; `--project` adds managed guidance to both project
+instruction files. Preserve user edits.
+
+New graphical QEMU launchers default to SPICE without a display password unless
+the user requests one; VNC is an optional fallback. Preserve existing display
+passwords unless their removal is explicitly authorized. Every VM must
 support both an SSH tunnel and direct access on a trusted private LAN/Tailscale
-address (headless guests use SSH). Bind to an explicit reachable private address,
-reserve per-VM ports, retain authentication, and record the protocol, host, port,
+address (headless guests use SSH). Prefer explicit reachable private binds. When a
+single SPICE bind must serve both networks, a wildcard requires a verified
+interface/source/destination-specific private firewall guard before opening the
+listener; fail closed if the guard or expected addresses are unavailable. Reserve
+per-VM ports, retain guest SSH authentication, and record the protocol, host, port,
 client command/URI and matching tunnel destinations for both at-home LAN and away
 Tailscale/VPN access. Label the two network contexts explicitly. Never expose a public listener
-or disable authentication to meet this rule. Devkit only discovers these settings;
+or disable guest SSH authentication to meet this rule. Devkit only discovers these settings;
 do not modify running VMs during inventory/UI work. Existing launcher migration is
 explicit work, and VM restarts require approval. See docs/projects.md in the devkit
 repository for the VM connection rule and examples.

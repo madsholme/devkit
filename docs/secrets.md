@@ -270,7 +270,7 @@ See OpenBao's [Raft storage API and snapshot recovery](https://openbao.org/api-d
 
 ## Agent guidance and diagnostics
 
-Managed setup installs the embedded versioned `devkit-secrets` skill into `~/.agents/skills/devkit-secrets` for Codex and `~/.claude/skills/devkit-secrets` for Claude Code. New project templates include bounded guidance. Existing projects opt in explicitly. After upgrading Devkit, rerun the project installation command below to refresh unedited managed blocks in both `AGENTS.md` and `CLAUDE.md`; updating the template does not change existing repositories:
+Setup installs the embedded versioned `devkit-secrets` and `devkit-vms` skills into `~/.agents/skills/` for Codex and `~/.claude/skills/` for Claude Code, including hosts without a configured vault. New project templates include bounded guidance. Existing projects opt in explicitly. After upgrading Devkit, rerun the project installation command below to refresh unedited managed blocks in both `AGENTS.md` and `CLAUDE.md`; updating the template does not change existing repositories:
 
 ```sh
 devkit agents skills install --project /absolute/path/to/checkout
@@ -280,4 +280,4 @@ devkit doctor --agents
 devkit doctor
 ```
 
-`doctor --agents` checks skill status, CLI availability, current project context and guidance. Installation is idempotent and preserves unrelated instructions. Edited/unmanaged skill files and modified managed instruction blocks are not overwritten. Resolve those changes yourself before reinstalling. Restart an agent session after installation so discovery refreshes. The skill tells agents to check context/list, choose scope, save without printing values, and use runtime injection. Fresh-session discovery still needs validation in the actual Codex and Claude environments; installing a file alone does not prove discovery.
+`doctor --agents` checks each skill, CLI availability, current project context and both guidance blocks. The existing per-agent JSON status fields are `current` only when both skills are current. Installation is idempotent and preserves unrelated instructions. Edited/unmanaged skill files and modified managed instruction blocks are not overwritten. Resolve those changes yourself before reinstalling. Restart an agent session after installation so discovery refreshes. The skill tells agents to check context/list, choose scope, save without printing values, and use runtime injection. Fresh-session discovery still needs validation in the actual Codex and Claude environments; installing a file alone does not prove discovery.

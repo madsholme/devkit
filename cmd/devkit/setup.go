@@ -245,13 +245,9 @@ func setup(opts setupOptions) error {
 			return err
 		}
 	}
-	if vault, e := loadVaultConfig(); e != nil {
+	step("Agent skills")
+	if e := setupAgentSkills(); e != nil {
 		return e
-	} else if vault.Provider == "openbao" {
-		step("Agent skills")
-		if e = setupAgentSkills(); e != nil {
-			return e
-		}
 	}
 	happened("setup", "", "*."+dom)
 

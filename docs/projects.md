@@ -594,19 +594,35 @@ SPICE can be selected. TLS/socket configurations retain their manual client guid
 
 ### VM connection rule
 
+Agents use the bundled `devkit-vms` skill when creating, changing, starting or
+connecting to VMs. Host setup installs it for Codex and Claude, even without a vault.
+After upgrading, run `devkit agents skills install --project /absolute/checkout`
+for each existing checkout that needs managed AGENTS.md/CLAUDE.md guidance. New
+project templates already include the VM block. Restart agent sessions to refresh
+the skill catalog; other machines need their own installation. These are agent
+instructions, not automatic launcher/firewall enforcement.
+
 When creating or changing a QEMU launcher for a devkit project:
 
-- Default graphical guests to **SPICE**; keep VNC only as an optional compatibility
-  fallback. Headless guests use guest SSH instead of an invented display endpoint.
+- Default new graphical guests to **SPICE without a display password** unless the
+  user requests one (`disable-ticketing=on` for this private-only default). Keep VNC
+  only as an optional compatibility fallback. Headless guests use guest SSH instead of an invented display endpoint.
 - Make each VM reachable **both through an SSH tunnel and directly** on a trusted
-  private LAN or Tailscale network. Bind the display/guest-SSH listener to an explicit
-  private host address the client can reach. Both methods can use that same listener;
+  private LAN and Tailscale network. Prefer an explicit private bind the client can
+  reach. QEMU SPICE has one bind address: a wildcard serving both networks requires
+  a verified deny guard for the allocated ports, allowing only the intended private
+  interfaces, source networks and destination addresses, plus loopback for tunnels.
+  Apply the guard before listeners start and fail closed on failure or changed host
+  addresses; disable unprotected address families. Both methods can use the same listener;
   the tunnel destination must match its bind address. Loopback-only is insufficient
-  for direct access. Do not bind publicly or disable authentication to satisfy this rule.
+  for direct access. Never expose public access or disable guest SSH authentication to satisfy this rule.
 - Reserve distinct ports per VM and document the protocol, private host address, port,
   client URI/command, and both **At home (LAN)** and **Away (Tailscale/VPN)**
   SSH destinations/tunnels. External access uses Tailscale, not a public display port. Configure the private firewall path
-  explicitly as part of authorized host setup. Preserve existing guest/viewer credentials.
+  explicitly as part of authorized host setup. Preserve existing guest/viewer credentials
+  unless their change is explicitly authorized. If a display password is requested,
+  store it with devkit-secrets and fail closed if it cannot be loaded; never silently
+  downgrade a password-protected launcher.
 - Keep running guests unchanged during inventory/UI work. Migrate old localhost-only
   or VNC-only launchers explicitly, and obtain approval before restarting their VMs.
 
