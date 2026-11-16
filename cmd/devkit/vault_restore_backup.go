@@ -385,7 +385,7 @@ func validateRestoreContents(c *restoreContents, b restoreBackup) error {
 }
 func validateRestoreACME(b []byte) error {
 	reader := tar.NewReader(bytes.NewReader(b))
-	found := false
+	seen := map[string]bool{}
 	for {
 		h, e := reader.Next()
 		if e == io.EOF {
@@ -394,11 +394,17 @@ func validateRestoreACME(b []byte) error {
 		if e != nil {
 			return fail("Invalid certificate archive")
 		}
-		if h.Name == "./" && h.Typeflag == tar.TypeDir {
+		if (h.Name == "./" || h.Name == ".") && h.Typeflag == tar.TypeDir && h.Size == 0 {
 			continue
 		}
-		if found || (h.Name != "./acme.json" && h.Name != "acme.json") || h.Typeflag != tar.TypeReg || h.Mode != 0600 || h.Size < 1 || h.Size > 16<<20 {
+		name := strings.TrimPrefix(h.Name, "./")
+		if seen[name] || (name != "acme.json" && name != "acme-staging.json") || h.Typeflag != tar.TypeReg || h.Mode != 0600 || h.Size < 0 || h.Size > 16<<20 {
 			return fail("Unsafe certificate archive entry")
+		}
+		seen[name] = true
+		// Traefik initializes an unused production or staging store as an empty 0600 file.
+		if h.Size == 0 {
+			continue
 		}
 		value, e := io.ReadAll(io.LimitReader(reader, (16<<20)+1))
 		if e != nil || len(value) > 16<<20 {
@@ -418,9 +424,8 @@ func validateRestoreACME(b []byte) error {
 				}
 			}
 		}
-		found = true
 	}
-	if !found {
+	if len(seen) == 0 {
 		return fail("Certificate archive is empty")
 	}
 	return nil

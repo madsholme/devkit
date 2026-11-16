@@ -276,7 +276,9 @@ is required; Ctrl-C cancels and restores terminal echo.
 
 Rehearsal requires Linux, `age`, writable tmpfs `/dev/shm`, and a local Docker Unix
 socket with host access to an internal bridge. It checks bounded private files,
-checksums, metadata and optional certificate archives; decrypts only into private
+checksums, metadata and optional certificate archives (both `acme.json` and
+`acme-staging.json`, including empty initialized stores); rejects unknown files,
+duplicate paths, links and unsafe permissions; decrypts only into private
 tmpfs; then restores and unseals a fresh instance using the backup's exact official
 OpenBao image. The instance has a unique internal network with **no published ports**
 or source-vault mounts. It verifies native login, a fresh restricted backend, managed

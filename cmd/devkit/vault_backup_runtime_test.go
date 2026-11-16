@@ -412,6 +412,10 @@ func runtimeACMEFixture(t *testing.T) ([]byte, []byte) {
 	if _, e = w.Write(acme); e != nil {
 		t.Fatal(e)
 	}
+	// Production volumes can retain an empty staging store after staging fallback.
+	if e = w.WriteHeader(&tar.Header{Name: "acme-staging.json", Mode: 0600, Typeflag: tar.TypeReg}); e != nil {
+		t.Fatal(e)
+	}
 	if e = w.Close(); e != nil {
 		t.Fatal(e)
 	}
@@ -430,6 +434,9 @@ func runtimeCheckACMEArchive(t *testing.T, archive, certificate []byte) {
 			t.Fatal("Invalid ACME recovery archive")
 		}
 		if h.Typeflag == tar.TypeDir && h.Name == "./" {
+			continue
+		}
+		if strings.TrimPrefix(h.Name, "./") == "acme-staging.json" && h.Typeflag == tar.TypeReg && h.Mode == 0600 && h.Size == 0 && h.Uid == 0 && h.Gid == 0 {
 			continue
 		}
 		if strings.TrimPrefix(h.Name, "./") != "acme.json" || h.Typeflag != tar.TypeReg || h.Mode != 0600 || h.Uid != 0 || h.Gid != 0 {

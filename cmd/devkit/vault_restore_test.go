@@ -377,3 +377,56 @@ func TestVaultRestorePreservedCandidateStopsGracefully(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestVaultRestoreACMEProductionAndStagingStores(t *testing.T) {
+	type entry struct {
+		name, body string
+		mode       int64
+		kind       byte
+	}
+	valid := `{"dns":{"Certificates":[]}}`
+	cases := []struct {
+		name    string
+		entries []entry
+		accept  bool
+	}{
+		{"production with empty staging", []entry{{"./acme-staging.json", "", 0600, tar.TypeReg}, {"./acme.json", valid, 0600, tar.TypeReg}}, true},
+		{"staging only", []entry{{"acme-staging.json", valid, 0600, tar.TypeReg}}, true},
+		{"initialized empty production", []entry{{"acme.json", "", 0600, tar.TypeReg}}, true},
+		{"both populated", []entry{{"acme.json", valid, 0600, tar.TypeReg}, {"acme-staging.json", valid, 0600, tar.TypeReg}}, true},
+		{"duplicate alias", []entry{{"acme.json", valid, 0600, tar.TypeReg}, {"./acme.json", valid, 0600, tar.TypeReg}}, false},
+		{"unknown file", []entry{{"acme.json", valid, 0600, tar.TypeReg}, {"other.json", valid, 0600, tar.TypeReg}}, false},
+		{"staging traversal", []entry{{"../acme-staging.json", valid, 0600, tar.TypeReg}}, false},
+		{"public staging", []entry{{"acme-staging.json", valid, 0644, tar.TypeReg}}, false},
+		{"staging link", []entry{{"acme-staging.json", "", 0600, tar.TypeSymlink}}, false},
+		{"invalid staging JSON", []entry{{"acme-staging.json", "invalid", 0600, tar.TypeReg}}, false},
+		{"invalid staging certificate", []entry{{"acme-staging.json", `{"dns":{"Certificates":[{"Certificate":"eA==","Key":"eA=="}]}}`, 0600, tar.TypeReg}}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var b bytes.Buffer
+			w := tar.NewWriter(&b)
+			if e := w.WriteHeader(&tar.Header{Name: "./", Mode: 0755, Typeflag: tar.TypeDir}); e != nil {
+				t.Fatal(e)
+			}
+			for _, v := range tc.entries {
+				h := &tar.Header{Name: v.name, Mode: v.mode, Typeflag: v.kind, Size: int64(len(v.body))}
+				if v.kind == tar.TypeSymlink {
+					h.Linkname = "acme.json"
+				}
+				if e := w.WriteHeader(h); e != nil {
+					t.Fatal(e)
+				}
+				if _, e := w.Write([]byte(v.body)); e != nil {
+					t.Fatal(e)
+				}
+			}
+			if e := w.Close(); e != nil {
+				t.Fatal(e)
+			}
+			if e := validateRestoreACME(b.Bytes()); (e == nil) != tc.accept {
+				t.Fatalf("accept=%v, error=%v", tc.accept, e)
+			}
+		})
+	}
+}

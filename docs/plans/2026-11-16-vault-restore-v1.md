@@ -179,3 +179,13 @@ external integration credentials and real DNS/TLS remain operator checks. Curren
 certificates are deliberately preserved; replacement-host mapping and automatic purging
 of retained recovery material are outside this version. No server install, restart,
 SSH access, production snapshot or credential retrieval occurred.
+
+Compatibility correction from real-backup rehearsal: the certificate volume may
+contain both `acme.json` and `acme-staging.json`, including an empty initialized
+store. The original single-file validator incorrectly refused this supported proxy
+layout. Restore now accepts only those two exact filenames, with duplicate, type,
+permission, size and populated certificate/key validation preserved. Synthetic
+regressions and the encrypted Docker recovery profile pass with this layout. The
+real local copy reaches the original-unseal prompt; full real-backup verification
+still requires the operator's private shares and native login. The running server's
+web PID/start identity and vault container/start identity remained unchanged.
