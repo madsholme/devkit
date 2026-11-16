@@ -11,6 +11,11 @@ func operatorSecretOperation(op string) bool {
 	return strings.HasPrefix(op, "cleanup-") || strings.HasPrefix(op, "vault-") || strings.HasPrefix(op, "integration-") || strings.HasPrefix(op, "agents-")
 }
 func executeSecretOperator(ctx context.Context, q secretRequest) (secretResponse, error) {
+	if q.Operation != "vault-status" {
+		if e := vaultRestoreGuard(); e != nil {
+			return secretResponse{}, e
+		}
+	}
 	out := secretResponse{Records: []secretRecord{}, Management: map[string]any{}}
 	cfg, e := loadVaultConfig()
 	if e != nil {

@@ -19,6 +19,17 @@ import (
 )
 
 func lockSecretState() (func(), error) {
+	unlock, e := lockSecretStateForRestore()
+	if e != nil {
+		return nil, e
+	}
+	if e = vaultRestoreGuard(); e != nil {
+		unlock()
+		return nil, e
+	}
+	return unlock, nil
+}
+func lockSecretStateForRestore() (func(), error) {
 	dir := secretStateDir()
 	if e := privateDir(dir); e != nil {
 		return nil, e
@@ -219,6 +230,9 @@ func createVaultBackupLocked() (id string, err error) {
 	return id, nil
 }
 func vaultBackupCLI(args []string) (int, error) {
+	if len(args) > 0 && args[0] == "restore" {
+		return vaultRestoreCLI(args[1:])
+	}
 	op := "create"
 	if len(args) > 0 {
 		op = args[0]
@@ -234,6 +248,9 @@ func vaultBackupCLI(args []string) (int, error) {
 	}
 	switch op {
 	case "configure":
+		if e := vaultRestoreGuard(); e != nil {
+			return 1, e
+		}
 		if len(pos) > 0 {
 			return 2, fail("Unexpected backup argument")
 		}
@@ -286,7 +303,7 @@ func vaultBackupCLI(args []string) (int, error) {
 		}
 		return 0, verifyVaultBackup(cfg, pos[0])
 	}
-	return 2, fail("usage: devkit vault backup create|list|verify ID|configure --directory PATH --recipient AGE_RECIPIENT")
+	return 2, fail("usage: devkit vault backup create|list|verify ID|restore ID [--test|--yes] --identity FILE|configure --directory PATH --recipient AGE_RECIPIENT")
 }
 func verifyVaultBackup(cfg vaultConfig, id string) error {
 	if e := verifyVaultBackupComponents(cfg, id); e != nil {

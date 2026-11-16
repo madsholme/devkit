@@ -155,6 +155,7 @@ API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
 |---|---|
 | `devkit setup` | Configure this host step by step; safe to run again (see [Host setup](docs/setup.md)) |
 | `devkit vault` | Manage OpenBao setup, manual unseal, encrypted backups and explicit updates |
+| `devkit vault backup restore ID` | Plan same-host vault recovery; `--test --identity FILE` rehearses, `--yes --identity FILE` tests then restores |
 | `devkit secrets` | Save/generate development passwords with scoped inheritance and configurable cleanup |
 | `devkit secrets tokens` | Create/list/revoke scoped API tokens for external applications |
 | `devkit integrations` | Store integration credentials and bind exact Git HTTPS remotes |

@@ -18,7 +18,7 @@ Small, single-host preview runner for Git worktrees.
 commands:
   setup [--yes] [--domain D] [--email E] [--harness t3|none|custom]
                        configure this host: settings, credentials, DNS, Traefik and the dashboard
-  vault                managed OpenBao setup, status, unseal, backup and explicit updates
+  vault                managed OpenBao setup, status, unseal, backup/restore and explicit updates
   secrets              contextual secret storage, runtime injection and configurable cleanup
   integrations         Cloudflare/GitHub credentials and exact Git HTTPS bindings
   agents skills        install, inspect or repair bundled Codex/Claude guidance

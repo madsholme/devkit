@@ -124,6 +124,9 @@ var (
 )
 
 func setup(opts setupOptions) error {
+	if e := vaultRestoreGuard(); e != nil {
+		return e
+	}
 	p := &prompter{in: bufio.NewReader(os.Stdin), yes: opts.yes}
 
 	step("Prerequisites")

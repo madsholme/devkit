@@ -8,12 +8,15 @@ import pty
 import select
 import signal
 import tempfile
+import subprocess
+import termios
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--devkit', required=True, type=Path)
+parser.add_argument('--restore-test-binary', type=Path)
 args = parser.parse_args()
 cli = args.devkit.resolve()
 requests = []
@@ -83,3 +86,63 @@ try:
 finally:
     server.shutdown()
     server.server_close()
+
+
+if args.restore_test_binary:
+    binary = args.restore_test_binary.resolve()
+    for mode in ('success', 'cancel', 'no-terminal'):
+        env = dict(os.environ, DEVKIT_VAULT_RESTORE_TERMINAL_TEST=mode)
+        command = [str(binary), '-test.run=^TestVaultRestoreTerminalInput$', '-test.v']
+        if mode == 'no-terminal':
+            result = subprocess.run(command, env=env, start_new_session=True,
+                                    stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
+            if result.returncode or b'--- PASS:' not in result.stdout:
+                raise SystemExit('FAIL: restore accepted missing controlling terminal')
+            continue
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.execve(str(binary), command, env)
+        transcript = b''
+        shares = 0
+        login = False
+        cancelled = False
+        reaped = False
+        deadline = time.monotonic() + 15
+        try:
+            while time.monotonic() < deadline:
+                readable, _, _ = select.select([fd], [], [], 0.05)
+                if readable:
+                    try:
+                        transcript += os.read(fd, 4096)
+                    except OSError:
+                        pass
+                hidden = not (termios.tcgetattr(fd)[3] & termios.ECHO)
+                if hidden and b'Original backup unseal share:' in transcript:
+                    if mode == 'cancel' and not cancelled:
+                        os.kill(pid, signal.SIGTERM)
+                        cancelled = True
+                    elif mode == 'success':
+                        if transcript.count(b'Original backup unseal share:') > shares:
+                            os.write(fd, b'synthetic-restore-share\n')
+                            shares += 1
+                        elif b'Original backup native administrator password:' in transcript and not login:
+                            os.write(fd, b'synthetic-restore-password\n')
+                            login = True
+                done, status = os.waitpid(pid, os.WNOHANG)
+                if done:
+                    reaped = True
+                    if os.waitstatus_to_exitcode(status) != 0 or b'--- PASS:' not in transcript:
+                        raise SystemExit('FAIL: restore terminal case ' + mode)
+                    if b'synthetic-restore-' in transcript:
+                        raise SystemExit('FAIL: restore terminal echoed credentials')
+                    if not (termios.tcgetattr(fd)[3] & termios.ECHO):
+                        raise SystemExit('FAIL: restore did not restore terminal echo')
+                    break
+            else:
+                raise SystemExit('FAIL: restore terminal workflow timed out')
+        finally:
+            os.close(fd)
+            if not reaped:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+    print('PASS: restore multi-share/admin input hidden; cancellation restores echo; no-terminal input refused')

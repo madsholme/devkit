@@ -124,6 +124,9 @@ type secretMaintenanceState struct {
 }
 
 func runSecretsMaintenance(ctx context.Context) {
+	if vaultRestoreGuard() != nil {
+		return
+	}
 	cfg, e := loadVaultConfig()
 	if e != nil || cfg.Provider != "openbao" {
 		return

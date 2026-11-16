@@ -17,6 +17,9 @@ import (
 )
 
 func managedVaultClient() (*vaultClient, error) {
+	if e := vaultRestoreGuard(); e != nil {
+		return nil, e
+	}
 	cfg, e := loadVaultConfig()
 	if e != nil {
 		return nil, e
@@ -46,6 +49,9 @@ func readVaultReference(ref string) (string, error) {
 	return v, e
 }
 func startVault(cfg vaultConfig) error {
+	if e := vaultRestoreGuard(); e != nil {
+		return e
+	}
 	if e := validateVaultConfig(cfg); e != nil {
 		return e
 	}
@@ -258,12 +264,12 @@ func humanTerminal() (*os.File, error) {
 	return f, nil
 }
 func terminalSecret(f *os.File, r *bufio.Reader, prompt string) (string, error) {
-	fmt.Fprint(f, prompt+": ")
 	cmd := exec.Command("stty", "-echo")
 	cmd.Stdin = f
 	if e := cmd.Run(); e != nil {
 		return "", fail("Cannot disable terminal echo")
 	}
+	fmt.Fprint(f, prompt+": ")
 	defer func() { cmd := exec.Command("stty", "echo"); cmd.Stdin = f; _ = cmd.Run(); fmt.Fprintln(f) }()
 	value, e := r.ReadString('\n')
 	if e != nil {
@@ -280,6 +286,11 @@ func vaultCLI(args []string) (int, error) {
 		return 2, fail("usage: devkit vault status|health|setup|init|provision|unseal|ui|backup|update")
 	}
 	op := args[0]
+	if op != "backup" && op != "status" && op != "health" && op != "ui" {
+		if e := vaultRestoreGuard(); e != nil {
+			return 1, e
+		}
+	}
 	if op == "migrate" {
 		return vaultMigrateCLI(args[1:])
 	}

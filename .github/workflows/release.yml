@@ -38,6 +38,7 @@ jobs:
         env:
           DEVKIT_OPENBAO_RUNTIME_TEST: '1'
           DEVKIT_OPENBAO_ENCRYPTED_TEST: '1'
+          DEVKIT_VAULT_RESTORE_RUNTIME_TEST: '1'
         run: python3 tests/openbao_runtime_acceptance.py
 
       - name: Verify backup-gated OpenBao upgrade and recovery

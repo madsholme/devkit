@@ -170,6 +170,9 @@ func vaultRuntimeEncryptedRecovery(t *testing.T, cfg vaultConfig, source *vaultC
 		t.Fatal("Modified ciphertext accepted")
 	}
 	t.Log("Encrypted Raft/registry/cleanup/host/ACME components decrypt; wrong identity and tampered ciphertext fail; source Traefik resumes")
+	if os.Getenv("DEVKIT_VAULT_RESTORE_RUNTIME_TEST") == "1" {
+		runtimeRestoreRehearsal(t, cfg, id, identity, originalKey, source)
+	}
 
 	// A real encryption failure must resume Traefik and leave no partial backup.
 	activeCfg, err := loadVaultConfig()

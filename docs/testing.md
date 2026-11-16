@@ -192,6 +192,12 @@ DEVKIT_OPENBAO_RUNTIME_TEST=1 python3 tests/openbao_runtime_acceptance.py
 # Also requires age and age-keygen (Fedora: sudo dnf install age;
 # Debian/Ubuntu: sudo apt-get install age):
 DEVKIT_OPENBAO_RUNTIME_TEST=1 DEVKIT_OPENBAO_ENCRYPTED_TEST=1 python3 tests/openbao_runtime_acceptance.py
+# Production restore controller: rehearsal, confirmed cutover and rollback,
+# all against the same disposable local fixture:
+DEVKIT_OPENBAO_RUNTIME_TEST=1 DEVKIT_OPENBAO_ENCRYPTED_TEST=1 DEVKIT_VAULT_RESTORE_RUNTIME_TEST=1 python3 tests/openbao_runtime_acceptance.py
+# Add real PTY checks for restore's multi-share/admin prompts and cancellation:
+go test -c -o /tmp/devkit-restore-terminal.test ./cmd/devkit
+python3 tests/vault_terminal_acceptance.py --devkit /tmp/devkit-secrets-acceptance --restore-test-binary /tmp/devkit-restore-terminal.test
 # Includes encrypted recovery of the pre-upgrade backup:
 DEVKIT_OPENBAO_RUNTIME_TEST=1 DEVKIT_OPENBAO_UPGRADE_TEST=1 python3 tests/openbao_runtime_acceptance.py
 ```
@@ -230,6 +236,18 @@ redaction. The native audit device is declared in server configuration and verif
 during provisioning; API audit creation stays disabled. It never
 uses deployed credentials or the `devkit-vault` Compose project. Opting in without
 Docker is a failure, not a simulated pass.
+
+The restore profile additionally invokes the production recovery controller against
+that encrypted fixture: an internal Docker network with no published ports, original
+shares, native login, registry/history verification, fresh backend/session identities,
+wrong-key/share/login rejection, source preservation, recovery with the source stopped, retained previous data and
+idempotent explicit rollback. It verifies that rollback never restores app tokens and preserves a stopped source’s prior state. Release CI enables this profile.
+Unit tests inject interruption at every replacement boundary, exercise stale operation
+IDs, path/checksum/schema rejection, cleanup after interrupted container creation,
+local-Docker enforcement and guards on normal secret operations. Restore terminal
+checks use a temporary Go test binary and synthetic input; they cover two hidden
+shares, administrator input, SIGTERM/echo restoration and refusal without a terminal.
+No test reads a production backup or contacts the deployed Devkit server.
 
 The encrypted profile invokes Devkit's actual backup pipeline with a disposable
 Traefik certificate volume. It checks encrypted Raft/registry/cleanup/host/ACME

@@ -240,7 +240,7 @@ Git credential bindings.
 
 ## Backups and updates
 
-Install `age` and `age-keygen` (`sudo dnf install age` on Fedora, or `sudo apt-get install age` on Debian/Ubuntu). Create its recovery key outside Devkit and retain the private key separately; Devkit stores only the public recipient. Choose an absolute mounted off-host backup directory:
+Install `age` and `age-keygen` (`sudo dnf install age` on Fedora, or `sudo apt-get install age` on Debian/Ubuntu). Create its recovery key outside Devkit and retain the private key separately; Devkit stores only the public recipient. Choose an absolute backup directory owned by the Devkit user. A local directory such as `/opt/vault_backup` is supported; syncing encrypted copies elsewhere is optional and protects against loss of this host:
 
 ```sh
 devkit vault backup configure --directory /mnt/backup/devkit-vault --recipient age1YOUR_RECIPIENT --daily on --retain 30
@@ -256,7 +256,104 @@ devkit vault update --image openbao/openbao:VERSION --yes
 
 Daily backups run while `devkit web` is running. They stream a Raft snapshot and local recovery metadata through `age`, capture registry/cleanup settings, and encrypt Traefik ACME state when configured. Capturing ACME briefly stops Traefik and attempts restart on every exit path. Incomplete backups are not published. Retention deletes only verified copies belonging to this installation; unknown files stop pruning. Unseal keys, decryption keys, and backend token files are excluded. This is not a full host backup: keep host configuration, Git checkouts/recipes, instruction files and Git helper bindings separately.
 
-`backup verify` checks encrypted component checksums, **not successful decryption or restoration**. The [encrypted Docker acceptance profile](testing.md#openbao-lite) exercises fresh-instance recovery with generated secrets and an offline test certificate; it does not verify your real backup or public certificate issuance. Test recovery before relying on a backup:
+`backup verify` checks encrypted component checksums, **not successful decryption or restoration**. Use the restore rehearsal below to test the actual selected backup. Synthetic acceptance does not validate your real backup or public certificate issuance.
+
+### Same-host restore
+
+```sh
+# Read-only plan: validates encrypted files and prints the target/installation.
+devkit vault backup restore BACKUP_ID
+# Restores only into a disposable local OpenBao instance.
+devkit vault backup restore BACKUP_ID --test --identity /private/recovery.agekey
+```
+
+The identity file must be a private regular file owned by your user. Enter the
+**original backup's unseal shares and native administrator password** at the hidden
+terminal prompts. The administrator username defaults to `admin`; select another
+with `--admin-user NAME`. Never put shares, passwords or key contents in flags,
+environment variables, pipelines, agent chats or job output. A controlling terminal
+is required; Ctrl-C cancels and restores terminal echo.
+
+Rehearsal requires Linux, `age`, writable tmpfs `/dev/shm`, and a local Docker Unix
+socket with host access to an internal bridge. It checks bounded private files,
+checksums, metadata and optional certificate archives; decrypts only into private
+tmpfs; then restores and unseals a fresh instance using the backup's exact official
+OpenBao image. The instance has a unique internal network with **no published ports**
+or source-vault mounts. It verifies native login, a fresh restricted backend, managed
+key versions and recoverable history. Temporary containers and data are removed;
+a cleanup failure reports an error and retains uncertain storage. The configured
+vault, registry, proxy and web service remain unchanged.
+
+For an intentional replacement, stop the Devkit web service yourself. The command
+checks that the managed unit is inactive; it never stops or starts that service automatically. Stop any manually launched Devkit web process as well.
+
+```sh
+systemctl --user stop devkit-web
+devkit vault backup restore BACKUP_ID --yes --identity /private/recovery.agekey
+devkit vault status
+# Inspect recovered secrets and integrations, then resume the dashboard:
+systemctl --user start devkit-web
+```
+
+`--yes` **repeats the isolated test before any vault replacement**; a previous test
+never bypasses this requirement. The backup installation, domain and exact data path
+must match this host. If the local registry is missing or corrupt, explicitly supply
+`--installation INSTALLATION_ID` from the plan. This cannot override a different
+existing installation. Original checkout/resource identities remain unchanged;
+replacement-host migration and automatic path rebinding are unsupported. Config/state
+directories must be owner-only, real directories; unsafe or changed paths fail closed.
+
+Replacement holds the secret-state lock, verifies the exact managed container and
+binds, stops it, retains its old encrypted data and metadata, and installs the tested
+data with its matching registry. It preserves host settings except the selected
+OpenBao image, preserves current TLS certificates and leaves the proxy running.
+Missing or damaged source data does not prevent testing/recovery from a valid backup.
+No Git checkout, application database, VM, external account or agent file is restored.
+
+Devkit app API tokens are all revoked and browser sessions invalidated. Re-enroll
+external clients after validating recovery. Automatic secret cleanup stays **off**;
+review retention/deadlines before explicitly enabling it again. Native OpenBao users,
+policies, tokens and leases follow the snapshot's own state and expiry semantics;
+this command does not promise revocation preservation for native OpenBao identities.
+Integration credentials also revert to their backed-up values; verify external access.
+
+### Interrupted restore and rollback
+
+Before replacement, Devkit writes a private journal at
+`$DEVKIT_STATE_DIR/secrets/restore.json` (normally
+`~/.local/state/devkit/secrets/restore.json`). An incomplete operation blocks normal
+secret access, setup/update, cleanup, backups and competing restores. Status and
+read-only backup inspection remain available. Keep the web service stopped and use
+the operation ID printed on failure or stored in that journal:
+
+```sh
+devkit vault backup restore --rollback OPERATION_ID --yes
+```
+
+Rollback accepts only the latest operation and checks storage identity and retained
+metadata before changing anything. It requires the **previous vault's** original
+unseal shares and native administrator login, which may differ from those in the
+backup. It restores the previous data/metadata, issues a fresh backend and browser
+signing key, keeps app tokens revoked and cleanup off, and preserves the previous
+running/stopped state. Repeating a completed rollback is harmless. If the original
+data was missing, rollback restores that unavailable state; if it was damaged and
+cannot unseal, rollback remains blocked for manual recovery. Changed ownership,
+missing retained files or changed host configuration after success require manual
+inspection, never a forced overwrite.
+
+Each operation retains private recovery material under
+`secrets/restore-operations/OPERATION_ID/`: `previous-data`, saved metadata and a
+journal; rollback retains replaced data as `replaced-data`. An interruption before
+installation can also retain `secrets/openbao/devkit-restore-candidate-*`.
+Later writes to a successfully restored vault are not merged on rollback. Neither
+restore nor backup retention automatically purges these directories. Preserve both
+data sets until recovery is verified; do not delete or edit the active journal to
+bypass a failed recovery.
+
+### Advanced manual recovery
+
+Use this procedure for replacement-host migration, explicit certificate restoration,
+or a journal requiring manual inspection. Validate an isolated copy first:
 
 1. Preserve the live bind directory. Use a disposable Docker instance with separate storage, ports and Compose project (on the same or a separate host), running the backup's exact OpenBao image; never test a downgrade against the live directory.
 2. Verify checksums, decrypt components with the human-held `age` key into a private memory-backed temporary directory, and inspect `host.json`. Do not copy recovery material into an agent chat.
