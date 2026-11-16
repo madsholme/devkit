@@ -264,7 +264,7 @@ Daily backups run while `devkit web` is running. They stream a Raft snapshot and
 # Read-only plan: validates encrypted files and prints the target/installation.
 devkit vault backup restore BACKUP_ID
 # Restores only into a disposable local OpenBao instance.
-devkit vault backup restore BACKUP_ID --test --identity /private/recovery.agekey
+devkit vault backup restore BACKUP_ID --test --identity /private/recovery.agekey --admin-user YOUR_USERNAME
 ```
 
 The identity file must be a private regular file owned by your user. Enter the
@@ -272,7 +272,9 @@ The identity file must be a private regular file owned by your user. Enter the
 terminal prompts. The administrator username defaults to `admin`; select another
 with `--admin-user NAME`. Never put shares, passwords or key contents in flags,
 environment variables, pipelines, agent chats or job output. A controlling terminal
-is required; Ctrl-C cancels and restores terminal echo.
+is required; Ctrl-C cancels and restores terminal echo. Login failures report the HTTP
+status without the response body, to distinguish authentication rejection from
+missing mounts, throttling or availability errors.
 
 Rehearsal requires Linux, `age`, writable tmpfs `/dev/shm`, and a local Docker Unix
 socket with host access to an internal bridge. It checks bounded private files,
@@ -291,7 +293,7 @@ checks that the managed unit is inactive; it never stops or starts that service 
 
 ```sh
 systemctl --user stop devkit-web
-devkit vault backup restore BACKUP_ID --yes --identity /private/recovery.agekey
+devkit vault backup restore BACKUP_ID --yes --identity /private/recovery.agekey --admin-user YOUR_USERNAME
 devkit vault status
 # Inspect recovered secrets and integrations, then resume the dashboard:
 systemctl --user start devkit-web
@@ -329,7 +331,7 @@ read-only backup inspection remain available. Keep the web service stopped and u
 the operation ID printed on failure or stored in that journal:
 
 ```sh
-devkit vault backup restore --rollback OPERATION_ID --yes
+devkit vault backup restore --rollback OPERATION_ID --yes --admin-user YOUR_USERNAME
 ```
 
 Rollback accepts only the latest operation and checks storage identity and retained

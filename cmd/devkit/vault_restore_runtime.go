@@ -119,8 +119,16 @@ func restoreLogin(ctx context.Context, c *vaultClient, input *restoreCredentials
 			Token string `json:"client_token"`
 		} `json:"auth"`
 	}
-	if e = c.call(ctx, "POST", "auth/userpass/login/"+user, map[string]string{"password": password}, &out); e != nil || out.Auth.Token == "" {
-		return fail("Restored native administrator authentication failed")
+	if e = c.call(ctx, "POST", "auth/userpass/login/"+user, map[string]string{"password": password}, &out); e != nil {
+		// vaultClient discards response bodies. Preserve only the safe status/cause so
+		// operators can distinguish a rejected login from an unavailable auth mount.
+		if api, ok := e.(vaultError); ok {
+			return fail("Restored native administrator authentication failed (HTTP %d)", api.Code)
+		}
+		return fail("Restored native administrator authentication failed: %v", e)
+	}
+	if out.Auth.Token == "" {
+		return fail("Restored native administrator login returned no client token")
 	}
 	c.token = out.Auth.Token
 	return nil
