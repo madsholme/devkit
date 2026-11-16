@@ -257,8 +257,11 @@ Actual public certificate issuance/renewal and real Cloudflare consumers,
 and LAN/Tailscale clients still require the operational checks in
 [Development secrets](secrets.md#backups-and-updates).
 
-The agent asset runner creates a disposable home and checks both install targets,
-identity/version and user-edit preservation. It **does not launch agents** or claim
+The agent asset runner creates a disposable home and checks all five bundled skills
+in both install targets, identity/version, selected-agent missing-file repair and
+user-edit preservation. The [project and external-secrets scenarios](agent-scenarios.md)
+provide reusable fresh-agent requests and acceptance criteria, with actual results
+separate from CLI contract checks. The runner **does not launch agents** or claim
 fresh-session discovery. For that separate acceptance, use a disposable enrolled
 project and a fresh Codex session, then a fresh Claude Code session in their real
 launch environment (including T3 when used). Request a temporary development

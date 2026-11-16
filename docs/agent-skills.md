@@ -6,12 +6,13 @@ change previews, VMs, credentials, routing or host services.
 
 | Skill | Use it for |
 |---|---|
+| `devkit-projects` | New-project creation, existing-app onboarding, live/review recipes and existing Compose registration without recreation. |
 | `devkit-previews` | Checkout/preview ownership, development and tests, live versus review, rebuild decisions, data retention, sharing and publishing. |
 | `devkit-troubleshooting` | Bounded diagnostics and distinguishing application/container failures from DNS, TLS, proxy and client LAN/VPN failures. |
 | `devkit-vms` | QEMU/libvirt connection and lifecycle work, SPICE defaults, direct LAN/Tailscale access and optional tunnels. New SPICE launchers default to no display password unless requested; existing passwords are preserved. |
-| `devkit-secrets` | Context-bound credentials, login entries, safe generation/injection and explicit cleanup. |
+| `devkit-secrets` | Context-bound credentials, login entries, safe generation/injection, explicit cleanup, external API tokens and app-owned native OpenBao storage. |
 
-`devkit setup` installs all four, including on hosts without a configured vault.
+`devkit setup` installs all five, including on hosts without a configured vault.
 The dashboard's agent install/repair actions use the same catalog. Install them on
 each machine where the agents run; installing on a remote devkit host does not
 update the agent client's local skill directory.
@@ -46,6 +47,12 @@ requirements rather than replacing them with generic defaults.
 Start new agent sessions after installation to refresh discovery. Installed-file
 checks prove distribution, not that an already-running session has loaded new skills.
 The managed project blocks direct relevant tasks to the corresponding skill.
+
+Project onboarding covers both isolated previews and registering an existing stack;
+these have different lifecycle/data permissions. External-secret guidance covers
+Devkit tokens and native OpenBao without giving applications host administration.
+See [practical scenario checks](agent-scenarios.md) for repeatable requests,
+acceptance criteria and the distinction between distribution and live agent checks.
 
 See [Previews](previews.md), [Project recipes](projects.md), [Host setup](setup.md),
 and [Development secrets](secrets.md) for the command and configuration contracts.

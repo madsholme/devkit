@@ -34,7 +34,7 @@ code, builds both and publishes them with checksums. For a host without Go, `./b
 LICENSE. Copy it over, unpack it, run `./bootstrap.sh`, then `install -D devkit ~/.local/bin/devkit`
 and `devkit setup`.
 
-Setup also installs the versioned secrets, VM, preview and troubleshooting skills
+Setup also installs the versioned project, secrets, VM, preview and troubleshooting skills
 for Codex and Claude, independently of vault configuration. See [Agent skills](agent-skills.md)
 for the bundle and its triggers. After upgrading an existing host,
 run `devkit agents skills install --project /absolute/checkout` for each project

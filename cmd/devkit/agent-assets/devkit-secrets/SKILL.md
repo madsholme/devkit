@@ -1,6 +1,6 @@
 ---
 name: devkit-secrets
-description: Use when generating or saving a development password, finding project credentials, running a command that needs secrets, or retiring a Devkit secret scope.
+description: Use when generating or saving development credentials, running commands that need secrets, retiring a Devkit secret scope, or integrating an external application with Devkit's secrets API or managed OpenBao.
 ---
 
 # Devkit secrets
@@ -60,3 +60,72 @@ The child receives effective values by environment. Do not use environment-dumpi
 `history KEY` shows metadata. `delete KEY --scope worktree` and resource retirement return a preview and confirmation token. Show the affected scope/keys and obtain authorization for destructive changes unless already explicitly authorized. `restore` recovers stored values; it does not recreate Git resources or reset a remote password. Permanent purge cannot be undone from the live vault.
 
 Retention is configurable: branch/worktree/project durations or `never`, with a global automatic-off option. Never assume a password expires after seven days. Do not change cleanup settings, enable overdue purging, manage OpenBao, or import operator credentials as part of a routine project task. When sealed/unavailable, report it and ask the human to unseal; never fall back to plaintext storage.
+
+## External applications
+
+Choose the API by data ownership. Use `https://devkit.<domain>/api/secrets/v1` for
+project secrets with Devkit inheritance, versions and cleanup. Use
+`https://vault.devkit.<domain>/v1/` only for app-owned native OpenBao storage outside
+Devkit's registry. Discover the configured domain; private DNS, LAN/Tailscale routing
+and normal TLS verification must work. Neither choice authorizes public exposure.
+
+For a backend needing inherited secrets, issue a Devkit token from the verified
+registered checkout, with the narrowest useful context and permissions. Register a
+new context explicitly when authorized; never repair an identity mismatch by rebinding.
+For example, from the intended worktree, choose an unused private output path:
+
+```sh
+devkit secrets tokens create example-backend --scope worktree \
+  --permissions read --ttl 168h --output /absolute/private/example-backend.token
+devkit secrets tokens list --json
+```
+
+The output file is created mode 0600 and must not already exist or be a symlink.
+Deliver it privately to server-side runtime storage; do not print it. Tokens and
+returned values never belong in browser bundles, frontend build-time environment,
+URLs or logs. This is a backend API: requests with an `Origin` header are refused.
+Use a server-side integration rather than removing browser security controls.
+
+Send **POST JSON** with `Authorization: Bearer <credential>` to the Devkit endpoint.
+Load the credential in memory from protected storage, not literal shell arguments.
+For example the body `{"operation":"list"}` returns metadata; `{"operation":"get",
+"key":"APP_PASSWORD","reveal":true}` reads a value for authorized backend use.
+A login also requires `"field":"username"` or `"field":"password"`. `inject`
+returns effective environment pairs; it does not execute a command on the host.
+Keep response values out of diagnostics. Remote clients require HTTPS; direct
+loopback HTTP is allowed for local use.
+
+The token fixes context. Omit `root`, `scope`, `project`, `branch` and `worktree`
+selectors. A project token targets shared project secrets; branch/worktree tokens
+include ancestor inheritance. Add `write` or `cleanup` permission only for the
+requested operations; write alone does not allow secret reads. Application tokens
+never authorize registration, token management, integrations or vault/host administration.
+
+- A branch switch or moved/missing context can invalidate access. Verify the intended
+  identity and issue a separate token for a new context explicitly; do not widen
+  scope or substitute paths in the request. Bound branch cleanup can still target
+  its original branch after switching away; it never targets the new branch.
+- On expiry, create a replacement, update the consumer, verify access, then run
+  `devkit secrets tokens revoke TOKEN_ID` for the old token when authorized. There
+  is no renewal API. Revoked/expired credentials must not be retried as if usable.
+- Updates need the owned record's current `expected` version; zero is for creation.
+  Reconcile stale versions before writing. After a timeout, inspect metadata/history
+  before retrying a possibly completed mutation.
+- `delete`, `restore` and cleanup retire/restore/purge are two-step API operations:
+  request a preview, inspect the affected target, then submit the same operation
+  with its returned `confirm` token under existing authorization. Stale confirmations
+  require a new preview. Child deletion never deletes inherited parent entries;
+  removing an override exposes its inherited value. Cleanup never removes Git
+  worktrees or enables host-wide automatic cleanup.
+- A sealed/unavailable vault (503) blocks secret operations. Report the operator
+  action needed; retain pending intent without plaintext fallback or blind retries.
+
+For native OpenBao, use a dedicated app identity restricted to an app-owned path,
+such as `kv/data/external/example/*`, with `X-Vault-Token` authentication. Never use
+the Devkit backend or human administrator token in an application, or write directly
+under `kv/data/projects/*` or `kv/data/devkit/*`. Native values do not appear in the
+project's Secrets tab or follow Devkit inheritance/cleanup. KV v2 reads use GET;
+writes use POST with `options.cas` (0 for creation, observed version for updates).
+Policy/auth provisioning requires separate operator authority. For full protocol
+details, consult the matching Devkit release's `docs/secrets-api.md`; do not assume
+that file exists in the consuming application's repository.

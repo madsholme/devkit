@@ -1,6 +1,6 @@
 # Preview and troubleshooting agent guidance — v13
 
-Supersedes [v12](archive/2026-11-14-vm-connections-v12.md), delivered on main and
+Supersedes [v12](2026-11-14-vm-connections-v12.md), delivered on main and
 the host as 88c55dd. Preserve the VM/password defaults and existing skill protections.
 The user now authorizes bundling `devkit-previews` and `devkit-troubleshooting`,
 committing/pushing main, and updating the running dashboard. No VM restart is allowed.

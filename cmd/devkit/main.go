@@ -21,7 +21,7 @@ commands:
   vault                managed OpenBao setup, status, unseal, backup and explicit updates
   secrets              contextual secret storage, runtime injection and configurable cleanup
   integrations         Cloudflare/GitHub credentials and exact Git HTTPS bindings
-  agents skills        install, inspect or repair Codex/Claude secrets guidance
+  agents skills        install, inspect or repair bundled Codex/Claude guidance
   doctor [--agents]    check this host and say how to fix what is missing
   version              show which devkit release or commit this is
   proxy up             write Traefik's configuration from the host config and start or update it

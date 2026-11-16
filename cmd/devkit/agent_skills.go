@@ -17,7 +17,7 @@ import (
 //go:embed agent-assets/*/SKILL.md
 var secretsSkillAssets embed.FS
 
-const secretsSkillVersion = "2"
+const secretsSkillVersion = "3"
 
 type secretsSkillManifest struct {
 	Version string `json:"version"`
@@ -75,12 +75,14 @@ func installAgentSkill(dir, version string, content []byte) error {
 	return writePrivate(filepath.Join(dir, ".devkit-managed.json"), manifest)
 }
 
-const secretsInstructionBody = "## Development credentials with Devkit\n\nUse the devkit-secrets skill whenever creating, generating, saving or using development usernames, passwords or API tokens. Store credentials through Devkit's integrated vault so the human can find and copy them in this project's Secrets tab.\n\n- Run from the intended project checkout. Check `devkit secrets context --json` and `devkit secrets list --json` before creating credentials; reuse suitable existing entries instead of silently replacing them. Follow the skill for registration or context mismatches.\n- Save a username and its password together as a login entry (`--type login`) with a descriptive key such as `dev-admin`, not the username. Standalone passwords and API tokens remain single-value secrets. Do not silently combine or delete existing entries.\n- Choose an explicit scope. Use worktree scope for temporary checkout credentials; choose branch or project scope only when sharing is intended. Worktree overrides branch, which overrides project. Never modify an inherited parent merely to create a local override.\n- Generate and store passwords with `devkit secrets generate`; send existing values through protected stdin or hidden prompts. Follow the skill for paired-login input and explicit username/password environment mappings.\n- Use `devkit secrets run` for runtime injection. Never put credential values in chat, Git, recipes, command arguments, logs or permanent dotenv files. Report only the entry name, scope and location in the Secrets tab.\n- Saving or rotating a vault entry does not create or update the application's account. Apply credentials to the application only within the authorized task, and verify without printing them.\n- Preserve existing Git/T3/agent workflows. Cleanup retention is configurable, including never and automatic off; do not change cleanup settings or delete credentials as an incidental step.\n- If the vault is sealed or unavailable, report it and ask the human to restore access. Never fall back to plaintext storage or read host backend tokens, root tokens or unseal material.\n"
+const secretsInstructionBody = "## Development credentials with Devkit\n\nUse the devkit-secrets skill whenever creating, generating, saving or using development usernames, passwords or API tokens, or connecting an external application to Devkit secrets or managed OpenBao. Store credentials through Devkit's integrated vault so the human can find and copy them in this project's Secrets tab.\n\n- Run from the intended project checkout. Check `devkit secrets context --json` and `devkit secrets list --json` before creating credentials; reuse suitable existing entries instead of silently replacing them. Follow the skill for registration or context mismatches.\n- Save a username and its password together as a login entry (`--type login`) with a descriptive key such as `dev-admin`, not the username. Standalone passwords and API tokens remain single-value secrets. Do not silently combine or delete existing entries.\n- Choose an explicit scope. Use worktree scope for temporary checkout credentials; choose branch or project scope only when sharing is intended. Worktree overrides branch, which overrides project. Never modify an inherited parent merely to create a local override.\n- Generate and store passwords with `devkit secrets generate`; send existing values through protected stdin or hidden prompts. Follow the skill for paired-login input and explicit username/password environment mappings.\n- Use `devkit secrets run` for runtime injection. Never put credential values in chat, Git, recipes, command arguments, logs or permanent dotenv files. Report only the entry name, scope and location in the Secrets tab.\n- Saving or rotating a vault entry does not create or update the application's account. Apply credentials to the application only within the authorized task, and verify without printing them.\n- Preserve existing Git/T3/agent workflows. Cleanup retention is configurable, including never and automatic off; do not change cleanup settings or delete credentials as an incidental step.\n- If the vault is sealed or unavailable, report it and ask the human to restore access. Never fall back to plaintext storage or read host backend tokens, root tokens or unseal material.\n- External clients use context-bound, least-privilege Devkit API tokens for inherited project secrets; native OpenBao is for separately authorized app-owned storage. Follow the skill for endpoint/auth selection, private token delivery, expiry/revocation and version/confirmation handling. Keep credentials server-side; never bundle them into browser code or reuse host backend/admin tokens.\n"
 const secretsInstructionEnd = "<!-- devkit-secrets end -->"
 
 func installSecretsInstructions(path string) error {
 	return installAgentInstructions(path, "devkit-secrets", secretsInstructionBody)
 }
+
+const projectsInstructionBody = "## Projects with Devkit\n\nUse the devkit-projects skill when creating a project, adapting an existing application for previews, or registering an existing Compose stack. Preserve the effective devkit.json/devbox.json recipe, VM mappings, user files and data. Distinguish isolated preview storage from existing-stack registration; registration never recreates containers or grants review/share/destroy authority. Follow the skill for live/review hooks, initial GitHub push recovery and project guidance installation.\n"
 
 const vmInstructionBody = "## VM connections with Devkit\n\nUse the devkit-vms skill whenever creating, changing, starting or connecting to QEMU/libvirt VMs on this host. Default new graphical guests to SPICE without a display password unless the user requests one, with fixed per-VM ports and both direct access and optional SSH tunnels. Preserve existing display passwords unless removal is explicitly authorized. Discover actual host addresses and show separate At home (LAN) and Away (Tailscale/VPN) connection details; a public dashboard URL is not a VM route. Prefer explicit private binds. A wildcard serving both networks requires a verified private-interface/source/destination firewall guard before opening any listener; never expose public ports or disable guest SSH authentication. Use devkit-secrets when display credentials are requested. Preserve running VMs during discovery/UI work; launcher changes take effect on the next QEMU start, and restarts require explicit authorization unless already given. Preserve project-specific instructions and report untested client routes honestly.\n"
 
@@ -279,6 +281,7 @@ type bundledAgentSkill struct {
 }
 
 func bundledAgentSkills() []bundledAgentSkill {
+	projects, _ := secretsSkillAssets.ReadFile("agent-assets/devkit-projects/SKILL.md")
 	vm, _ := secretsSkillAssets.ReadFile("agent-assets/devkit-vms/SKILL.md")
 	previews, _ := secretsSkillAssets.ReadFile("agent-assets/devkit-previews/SKILL.md")
 	troubleshooting, _ := secretsSkillAssets.ReadFile("agent-assets/devkit-troubleshooting/SKILL.md")
@@ -287,6 +290,7 @@ func bundledAgentSkills() []bundledAgentSkill {
 		{"devkit-vms", "1", vm, vmInstructionBody},
 		{"devkit-previews", "1", previews, previewsInstructionBody},
 		{"devkit-troubleshooting", "1", troubleshooting, troubleshootingInstructionBody},
+		{"devkit-projects", "1", projects, projectsInstructionBody},
 	}
 }
 func managedAgentSkills(operation string) (map[string]string, error) {

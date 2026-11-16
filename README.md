@@ -151,7 +151,7 @@ API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
 | `devkit secrets` | Save/generate development passwords with scoped inheritance and configurable cleanup |
 | `devkit secrets tokens` | Create/list/revoke scoped API tokens for external applications |
 | `devkit integrations` | Store integration credentials and bind exact Git HTTPS remotes |
-| `devkit agents skills` | Install/status/repair Codex and Claude Code preview, troubleshooting, VM and secret guidance |
+| `devkit agents skills` | Install/status/repair Codex and Claude Code project, preview, troubleshooting, VM and secret guidance |
 | `devkit doctor` | Check the host and say how to fix what is missing |
 | `devkit docs list` / `devkit docs read PATH` | List and read Markdown under docs/, root README and agent guidance in the current registered checkout |
 | `devkit docs save PATH --expected VERSION\|new --file FILE\|-` | Create or edit a document under docs/ with stale-edit protection; no commit |

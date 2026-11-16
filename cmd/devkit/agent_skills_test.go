@@ -106,7 +106,7 @@ func TestAgentCLIInstallsBothProjectGuides(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, marker := range []string{"<!-- devkit-secrets begin", "<!-- devkit-vms begin", "<!-- devkit-previews begin", "<!-- devkit-troubleshooting begin"} {
+		for _, marker := range []string{"<!-- devkit-secrets begin", "<!-- devkit-vms begin", "<!-- devkit-previews begin", "<!-- devkit-troubleshooting begin", "<!-- devkit-projects begin"} {
 			if strings.Count(string(data), marker) != 1 {
 				t.Fatalf("%s missing/duplicated %s", name, marker)
 			}
@@ -137,7 +137,7 @@ func TestAgentCLIInstallsBothProjectGuides(t *testing.T) {
 }
 
 func TestWorkflowSkillsAreInstalledAndProtected(t *testing.T) {
-	for _, name := range []string{"devkit-previews", "devkit-troubleshooting"} {
+	for _, name := range []string{"devkit-previews", "devkit-troubleshooting", "devkit-projects"} {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
@@ -220,6 +220,54 @@ func TestVMSkillUpgradeAndSelectedAgent(t *testing.T) {
 	data, _ := os.ReadFile(outside)
 	if string(data) != "preserve" {
 		t.Fatal("symlink target changed")
+	}
+}
+
+func TestProjectAndSecretSkillUpgradeBothAgents(t *testing.T) {
+	for _, agent := range []struct{ name, folder, other string }{
+		{"codex", ".agents", ".claude"}, {"claude", ".claude", ".agents"},
+	} {
+		for _, name := range []string{"devkit-projects", "devkit-secrets"} {
+			t.Run(agent.name+"/"+name, func(t *testing.T) {
+				home := t.TempDir()
+				t.Setenv("HOME", home)
+				if _, err := managedAgentSkillsFor("install", agent.name); err != nil {
+					t.Fatal(err)
+				}
+				dir := filepath.Join(home, agent.folder, "skills", name)
+				path := filepath.Join(dir, "SKILL.md")
+				current, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				old := []byte("Previous managed guidance\n")
+				manifest, _ := json.Marshal(secretsSkillManifest{"0", skillHash(old)})
+				if err := os.WriteFile(path, old, 0600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, ".devkit-managed.json"), manifest, 0600); err != nil {
+					t.Fatal(err)
+				}
+				status, err := managedAgentSkillsFor("status", agent.name)
+				if err != nil || status[agent.name] != "outdated" {
+					t.Fatal(status, err)
+				}
+				if _, err := managedAgentSkillsFor("repair", agent.name); err != nil {
+					t.Fatal(err)
+				}
+				upgraded, err := os.ReadFile(path)
+				if err != nil || string(upgraded) != string(current) {
+					t.Fatal("upgrade did not restore current guidance", err)
+				}
+				status, err = managedAgentSkillsFor("status", agent.name)
+				if err != nil || status[agent.name] != "current" {
+					t.Fatal("upgrade did not update the manifest", status, err)
+				}
+				if _, err := os.Stat(filepath.Join(home, agent.other)); !os.IsNotExist(err) {
+					t.Fatal("selected-agent upgrade touched other agent", err)
+				}
+			})
+		}
 	}
 }
 
