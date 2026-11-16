@@ -56,10 +56,16 @@ func vaultDoctorChecks() []check {
 		return checks
 	}
 	name := "vault.devkit." + dom
-	if addresses, e := lookupHost(name); e != nil || !slices.Contains(addresses, ip) {
-		checks = append(checks, warn("vault-dns", "Ensure %s resolves to this host on Tailscale; LAN clients need split DNS to the configured LAN listener", name))
+	listening := listenAddresses(host.Proxy, ip)
+	private := slices.DeleteFunc(slices.Clone(listening), func(address string) bool {
+		return len(vaultPrivateEntrypoints([]string{address})) == 0
+	})
+	if addresses, e := lookupHost(name); e != nil || len(addresses) == 0 || slices.ContainsFunc(addresses, func(address string) bool { return !slices.Contains(private, address) }) {
+		checks = append(checks, warn("vault-dns", "Ensure %s resolves to a configured private vault listener: use the Tailscale IP away and the LAN listener with local split DNS", name))
+	} else {
+		checks = append(checks, ok("vault-dns", "%s resolves to a configured private listener; other client networks require separate verification", name))
 	}
-	for _, address := range listenAddresses(host.Proxy, ip) {
+	for _, address := range listening {
 		if len(vaultPrivateEntrypoints([]string{address})) == 0 {
 			continue
 		}
