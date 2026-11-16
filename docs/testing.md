@@ -310,3 +310,27 @@ wrapper. A task-local `ZDOTDIR` can keep the test wrapper selected without editi
 user startup files. Preserve original traces and inspect completed mutations before
 rerunning an agent; successful generation must not be repeated merely to repair
 launch bookkeeping. Stop and remove the disposable test processes/vault afterward.
+
+### Agent operation reports and rebuilds
+
+The report tests cover real daemonless Compose parsing, confined local includes/env
+files, unresolved interpolation, secret sentinel suppression, full Git identities,
+provider failures, VM authority/connection limits, lifecycle contention and rebuild
+storage/recovery boundaries. `go test ./...` includes these and existing legacy
+rendering, lifecycle and skill-distribution coverage.
+
+`DEVKIT_RUNTIME_TEST=1 python3 tests/runtime_acceptance.py` now also builds a disposable
+live app, changes its image behavior and verifies the same URL and SQLite sentinel
+survive. It checks build failure, failed health application, blocked stale resume,
+same-candidate recovery and stopped staging. Config/state directories are disposable;
+fixture teardown explicitly retires only its own operation records before deletion.
+`DEVKIT_REBUILD_PREFLIGHT=1` selects the early validate/context/dry-run fixture;
+`DEVKIT_REBUILD_ONLY=1` selects the complete rebuild fixture. Both still require the
+runtime opt-in. Downloaded/build image caches remain; containers and volumes are removed.
+
+VM report checks are synthetic and invoke no lifecycle commands. These report-only
+changes do not require restarting real VMs or rerunning guest lifecycle acceptance.
+The read-only scenarios in `tests/agent_workflow_scenarios.txt` also cover operation
+reports and recovery decisions. Fresh model-session evaluation is separate from
+unit/distribution checks: run it only when authorized and the client is available.
+Claude access is currently unavailable; do not report its behavioral scenarios as run.

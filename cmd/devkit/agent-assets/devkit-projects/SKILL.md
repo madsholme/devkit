@@ -69,7 +69,14 @@ these fields into the existing recipe, retaining the real project slug:
   workflow needs a `publish` hook. Exclude credentials and database files from the
   build context. Use devkit-secrets for credential storage/injection.
 
-Inspect the effective recipe and both Compose files before launch. Use
+Run `devkit project validate --json` before launch; `--runtime containers` restricts
+it to containers, and `--runtime vms` or `--vm TARGET` handles VM recipes. Inspect
+`complete` and every failed check. Validation runs no hooks and does not prove
+runtime health. Missing application interpolation inputs remain requirements;
+never fabricate passwords to make validation pass. Compose input inspection accepts
+plain-key YAML and literal short-form local includes/env files within the checkout;
+unsupported notation must be simplified explicitly, not bypassed with a launch.
+Use `devkit context --json` to match checkout and saved/runtime identities. Use
 devkit-previews to start the owning live preview, run project checks via `devkit exec`,
 and verify health and application behavior. When independent worktrees are
 part of the task, verify distinct URLs, containers and data. Review the intended

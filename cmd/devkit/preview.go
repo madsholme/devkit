@@ -125,26 +125,18 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 	if err != nil {
 		return nil, err
 	}
+	return decorateCompose(result, cfg, mode, env, metadata)
+}
+
+func decorateCompose(result map[string]any, cfg projectConfig, mode string, env []string, metadata map[string]string) (map[string]any, error) {
+	preview := envValue(env, "DEVKIT_PREVIEW")
+	if err := validateComposeStructure(result, cfg, mode, preview); err != nil {
+		return nil, err
+	}
 	services := object(result, "services")
 	web := cfg.webService()
-	if _, ok := services[web]; !ok {
-		return nil, fail("Compose file has no %q web service.", web)
-	}
-	for _, name := range sortedKeys(services) {
-		service := asObject(services[name])
-		if truthy(service["container_name"]) || truthy(service["ports"]) || truthy(service["network_mode"]) {
-			return nil, fail("Task services must not set container_name, published ports, or network_mode.")
-		}
-		if mode == "review" {
-			bind := false
-			volumes, _ := service["volumes"].([]any)
-			for _, v := range volumes {
-				bind = bind || str(asObject(v), "type") == "bind"
-			}
-			if truthy(service["build"]) || bind {
-				return nil, fail("Review services must use built images and must not bind-mount host files.")
-			}
-		}
+	for _, value := range services {
+		service := asObject(value)
 		restartPolicy(service)
 		labels := ensureObject(service, "labels")
 		for k, v := range metadata {
@@ -154,23 +146,6 @@ var render = func(root string, cfg projectConfig, mode string, env []string, met
 	}
 	if err := exposeMedia(services, cfg.MediaPorts, env); err != nil {
 		return nil, err
-	}
-	for _, v := range object(result, "volumes") {
-		volume := asObject(v)
-		if truthy(volume["external"]) || !strings.HasPrefix(str(volume, "name"), preview+"_") {
-			return nil, fail("Task volumes must be Compose-scoped; shared/external volumes are not allowed.")
-		}
-	}
-	for key, n := range object(result, "networks") {
-		network := asObject(n)
-		if key != "proxy" && (truthy(network["external"]) || !strings.HasPrefix(str(network, "name"), preview+"_")) {
-			return nil, fail("Only the proxy network may be shared between previews.")
-		}
-	}
-	for _, r := range cfg.Routes {
-		if _, ok := services[r.Service]; !ok {
-			return nil, fail("Compose file has no %q service for a route in devkit.json.", r.Service)
-		}
 	}
 	ensureObject(result, "networks")["proxy"] = map[string]any{"external": true, "name": "devkit-proxy"}
 	host := envValue(env, "DEVKIT_HOST")
@@ -279,6 +254,18 @@ func preparePreview(mode, ref string) (err error) {
 		if name, err = newPreviewName(common, cfg.Project, mode, label, commit, identity); err != nil {
 			return err
 		}
+	}
+	unlock, err := lockPreview(name)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := previewRecoveryGuard(name, "live"); err != nil {
+		return err
+	}
+	saved, err = savedPreviews(common)
+	if err != nil {
+		return err
 	}
 	state := runDir(common, name)
 	path := filepath.Join(state, "compose.json")
@@ -450,6 +437,14 @@ func lifecycle(action, name string) error {
 	} else if !previewID.MatchString(name) {
 		return fail("Use an exact preview ID from devkit ls.")
 	}
+	unlock, err := lockPreview(name)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := previewRecoveryGuard(name, action); err != nil {
+		return err
+	}
 	if err := assertOwner(name, common); err != nil {
 		return err
 	}
@@ -457,7 +452,12 @@ func lifecycle(action, name string) error {
 	if !isFile(path) {
 		return fail("No saved preview configuration in this repository.")
 	}
-	if action != "start" {
+	op, opErr := loadRebuildOperation(name)
+	if opErr != nil {
+		return opErr
+	}
+	recovering := op != nil && op.Phase != "complete"
+	if action != "start" && !recovering {
 		// A stopped or destroyed preview must not stay public.
 		if err := unshareIfShared(name); err != nil {
 			fmt.Fprintf(os.Stderr, "devkit: %v\n", err)
@@ -467,6 +467,9 @@ func lifecycle(action, name string) error {
 	switch action {
 	case "stop":
 		err = composeRun(path, "stop")
+		if err == nil {
+			err = recordRecoveryStop(name)
+		}
 	case "start":
 		err = up(path)
 	default:
@@ -533,17 +536,43 @@ func gc(apply bool) error {
 		return nil
 	}
 	for _, s := range stale {
-		if err := assertOwner(s.name, common); err != nil {
+		err := func() error {
+			unlock, err := lockPreview(s.name)
+			if err != nil {
+				return err
+			}
+			defer unlock()
+			if err := previewRecoveryGuard(s.name, "destroy"); err != nil {
+				return err
+			}
+			currentSaved, err := savedPreviews(common)
+			if err != nil {
+				return err
+			}
+			currentTrees, err := worktreesOf(root)
+			if err != nil {
+				return err
+			}
+			currentSource, exists, known := sourceWorktree(currentSaved[s.name], currentTrees)
+			if !known || exists || currentSource != s.source {
+				return fail("GC target changed after planning; inspect a fresh dry run.")
+			}
+			if err := assertOwner(s.name, common); err != nil {
+				return err
+			}
+			if err := unshareIfShared(s.name); err != nil {
+				fmt.Fprintf(os.Stderr, "devkit: %v\n", err)
+				failed("unshare", s.name, err)
+			}
+			if err := destroyPreview(filepath.Join(runDir(common, s.name), "compose.json")); err != nil {
+				return err
+			}
+			happened("destroy", s.name, "clean-up: worktree "+s.source+" is gone")
+			return nil
+		}()
+		if err != nil {
 			return err
 		}
-		if err := unshareIfShared(s.name); err != nil {
-			fmt.Fprintf(os.Stderr, "devkit: %v\n", err)
-			failed("unshare", s.name, err)
-		}
-		if err := destroyPreview(filepath.Join(runDir(common, s.name), "compose.json")); err != nil {
-			return err
-		}
-		happened("destroy", s.name, "clean-up: worktree "+s.source+" is gone")
 	}
 	fmt.Fprintf(stdout, "Destroyed %d preview(s).\n", len(stale))
 	return nil
@@ -714,4 +743,47 @@ func logs(service string, follow bool) error {
 	}
 	_, err = runCommand(append(args, id), runOpts{})
 	return err
+}
+
+// validateComposeStructure is pure; launch and inspection share ownership constraints.
+func validateComposeStructure(result map[string]any, cfg projectConfig, mode, preview string) error {
+	services := object(result, "services")
+	web := cfg.webService()
+	if _, ok := services[web]; !ok {
+		return fail("Compose file has no %q web service.", web)
+	}
+	for _, name := range sortedKeys(services) {
+		service := asObject(services[name])
+		if truthy(service["container_name"]) || truthy(service["ports"]) || truthy(service["network_mode"]) {
+			return fail("Task services must not set container_name, published ports, or network_mode.")
+		}
+		if mode == "review" {
+			bind := false
+			volumes, _ := service["volumes"].([]any)
+			for _, v := range volumes {
+				bind = bind || str(asObject(v), "type") == "bind"
+			}
+			if truthy(service["build"]) || bind {
+				return fail("Review services must use built images and must not bind-mount host files.")
+			}
+		}
+	}
+	for _, v := range object(result, "volumes") {
+		volume := asObject(v)
+		if truthy(volume["external"]) || !strings.HasPrefix(str(volume, "name"), preview+"_") {
+			return fail("Task volumes must be Compose-scoped; shared/external volumes are not allowed.")
+		}
+	}
+	for key, n := range object(result, "networks") {
+		network := asObject(n)
+		if key != "proxy" && (truthy(network["external"]) || !strings.HasPrefix(str(network, "name"), preview+"_")) {
+			return fail("Only the proxy network may be shared between previews.")
+		}
+	}
+	for _, r := range cfg.Routes {
+		if _, ok := services[r.Service]; !ok {
+			return fail("Compose file has no %q service for a route in devkit.json.", r.Service)
+		}
+	}
+	return nil
 }

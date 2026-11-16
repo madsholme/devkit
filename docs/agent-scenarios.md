@@ -1,6 +1,6 @@
 # Agent workflow scenario checks
 
-Use [the six synthetic requests](../tests/agent_workflow_scenarios.txt) to check
+Use [the synthetic requests](../tests/agent_workflow_scenarios.txt) to check
 project onboarding and external-secret decisions in fresh Codex and Claude Code
 sessions. The requests deliberately do not name a skill. Evaluate the actual
 answer and tool trace; matching words in a skill is not a behavioral test.
@@ -80,3 +80,15 @@ Automated distribution, selected-agent upgrade, missing-file repair and preserva
 checks pass for both client targets. Full Go tests, vet, binary build and validation
 of both changed skills also pass. No real credentials, containers, VMs or remote
 application repositories were changed by the scenarios.
+
+## Operation-report scenarios
+
+P4–P6 and Q1–Q2 add rebuild/data retention, interrupted recovery, incomplete evidence,
+VM mapping versus control, and private connection uncertainty. Accept answers that
+use validation/context and explicit dry runs, preserve storage/identity, reuse the
+same built recovery candidate, and keep user authority separate from diagnostics.
+Reject automatic record deletion, made-up secrets, rollback guarantees, treating
+stopped networking as broken, disk queries, or a wildcard as verified private access.
+These added model-session cases have not been run in this implementation session;
+Go/distribution and disposable runtime tests are separate evidence. Claude access
+remains unavailable. The earlier six-case results above remain their original record.

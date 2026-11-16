@@ -17,7 +17,8 @@ Before changing a runtime, check:
 ```sh
 git rev-parse --show-toplevel
 git status --short
-devkit ls
+devkit context --json
+devkit ls --json
 devkit history -n 10
 ```
 
@@ -39,8 +40,16 @@ commits, merges or pushes in existing projects.
 - A live preview mounts source, but reload behavior belongs to the application's
   development server. Resuming an existing preview does not rebuild images or reread
   its saved rendered Compose configuration. Dockerfile, dependency or recipe edits
-  may need recreation; first identify the affected data and an authorized retention
-  or recovery approach. Never silently destroy volumes to pick up a code change.
+  need `devkit rebuild PREVIEW --json` to inspect supported changes. Apply an authorized
+  rebuild with `--yes`; it retains storage and the URL, while new app code can still
+  migrate data. It runs Compose builds, not project hooks. A stopped preview stays
+  stopped. Storage/topology/network changes and active shares block rebuilding;
+  handle those as explicit migration work. Never destroy volumes to refresh code.
+- If rebuild is interrupted or unhealthy, inspect `devkit rebuild PREVIEW --recover
+  --json`. An authorized `--recover --yes` retries the same built candidate without
+  rebuilding. Do not clear recovery records, rerun hooks, or guess a rollback.
+  Exact graceful stop remains available; ordinary start/resume is blocked until
+  recovery completes. Input drift requires manual compatibility review.
 
 ## Review, share and publish
 

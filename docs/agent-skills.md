@@ -56,3 +56,25 @@ acceptance criteria and the distinction between distribution and live agent chec
 
 See [Previews](previews.md), [Project recipes](projects.md), [Host setup](setup.md),
 and [Development secrets](secrets.md) for the command and configuration contracts.
+
+## Structured operations for both clients
+
+The project, preview, VM and troubleshooting skills now prefer `project validate`,
+`context`, `ls --json`, `doctor [--agents] --json`, rebuild plans/recovery and VM
+restart dry runs. The same versioned catalog and managed project blocks serve Codex
+and Claude; installation/repair still preserves edited assets and blocks.
+
+New report modes return one JSON object with `schema_version: 1`, `command`,
+`complete`, `data` and sorted `checks`. Each check has stable `code`, `status`,
+`target`, `message` and optional remediation. Status is `ok`, `warn`, `fail` or
+`skip`. Exit 0 means a complete result without failed checks; 1 means failure or
+required unavailable evidence; 2 means invalid invocation. Host doctor preserves
+warning success, while agent doctor retains its failure on non-current guidance.
+Doctor messages are safe projections; raw detail/source strings are not serialized.
+Existing `vms --json`, secret and skill-status formats are unchanged.
+
+Inspect completeness and failed checks before using the data. A report never
+provides durable mutation authority. Use exact IDs and revalidate at execution.
+Rebuild's data-retention boundary and private recovery process are described in
+[previews](previews.md#inspect-and-rebuild-a-live-preview); VM unknowns are described
+in [projects](projects.md#read-only-project-validation-and-context).

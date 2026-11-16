@@ -11,3 +11,13 @@ S1. An external backend on a private LAN needs read-only access to this project'
 S2. A worktree-scoped API token was issued on feature/a. The checkout has switched to feature/b and reads now fail. The developer suggests adding scope=project and a new root to the request. Separately, a token has expired and a replacement is needed. State the recovery for each case, including how to retire the old credential.
 
 S3. A client update returned a stale-version conflict; a later write timed out after transmission; then the vault returned 503 sealed. What does the client do for each? Describe the delete/restore confirmation process, how a child override affects inherited values, and whether API cleanup can remove Git worktrees or enable host-wide automatic cleanup.
+
+P4. An authorized app update changes a Dockerfile. Its live preview owns a named SQLite volume and its current counter must survive. Give the inspection/application commands and distinguish source HEAD, saved commit and observed image. What if the preview is stopped? What if the edit also changes the database volume name, database image or an existing share is active?
+
+P5. A rebuild's health wait failed after recreating one service. Ordinary start reports pending recovery. The external dependency is now healthy and source/config inputs are unchanged. Give the same-candidate recovery sequence. What changes if the Compose/env input changed, the build never completed, or the operator explicitly stopped the preview? May you clear the record or promise database rollback?
+
+P6. project validate reports a missing application interpolation input and context reports complete=false because Docker discovery failed. VM metadata is still present. What may be concluded? Is making up a password, starting the preview to test it, or treating absent containers as stopped justified?
+
+Q1. A recipe maps one running QEMU guest but has no control adapter; a separate exact-instance native stop capability exists. Another guest has an opaque launcher and is stopped. Explain the authority distinction and safe validation/context/restart-preflight commands. Can you infer the launcher's future disks or require KVM? Does a dry run authorize restart?
+
+Q2. A SPICE listener is wildcard-bound, the host shows no verified firewall evidence, and no away-client test was performed. Explain which home/away direct/tunnel facts can be reported and which remain unknown. Does project validation fix the listener, run qemu-img against the guest disk, or remove display passwords?

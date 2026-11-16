@@ -37,6 +37,100 @@ def request(container, method="GET"):
     return run("docker", "exec", container["Id"], "python", "-c", code, capture=True)
 
 
+def rebuild_checks(tmp, project, preflight_only=False):
+    root = Path(tmp) / "rebuild"
+    shutil.copytree(KIT / "project-template", root)
+    cfg = json.loads((root / "devkit.json").read_text())
+    cfg["project"] = project
+    cfg["wait_timeout"] = 4
+    (root / "devkit.json").write_text(json.dumps(cfg))
+    model = (root / "compose.live.yaml").read_text().replace("image: python:3.13-slim", "image: devkit/" + project + ":live\n    build: .")
+    model = model.replace("      - .:/app:ro\n", "")
+    (root / "compose.live.yaml").write_text(model)
+    (root / "message.txt").write_text("rebuild-v1")
+    app = (root / "app.py").read_text().replace('self.send_response(200)', 'self.send_response(503 if (data_dir / "fail-health").exists() else 200)', 1)
+    (root / "app.py").write_text(app)
+    run("git", "init", "-b", "main", cwd=root, capture=True)
+    run("git", "config", "user.name", "Devkit acceptance", cwd=root)
+    run("git", "config", "user.email", "devkit@example.invalid", cwd=root)
+    run("git", "config", "commit.gpgsign", "false", cwd=root)
+    run("git", "config", "core.hooksPath", "/dev/null", cwd=root)
+    run("git", "add", ".", cwd=root)
+    run("git", "commit", "-m", "Rebuild fixture", cwd=root, capture=True)
+    name = None
+    try:
+        run(CLI, "live", cwd=root)
+        initial = web(project)
+        name = initial["Config"]["Labels"]["devkit.preview"]
+        saved = root / ".git/devkit/runs" / name / "compose.json"
+        before = saved.read_bytes()
+        assert "<strong>1</strong>" in request(initial, "POST")
+        validation = json.loads(run(CLI, "project", "validate", "--json", cwd=root, capture=True))
+        assert validation["complete"]
+        context = json.loads(run(CLI, "context", "--json", cwd=root, capture=True))
+        assert any(p["id"] == name for p in context["data"]["previews"])
+        (root / "message.txt").write_text("rebuild-v2")
+        with (root / "Dockerfile").open("a") as f:
+            f.write("\nLABEL acceptance.version=v2\n")
+        plan = json.loads(run(CLI, "rebuild", name, "--json", cwd=root, capture=True))
+        assert plan["data"]["build_services"] == ["web"] and not plan["data"]["apply"]
+        assert saved.read_bytes() == before and web(project)["Id"] == initial["Id"]
+        assert "rebuild-v1" in request(initial)
+        print("PASS: validate/context/rebuild preflight leaves running fixture unchanged", flush=True)
+        if preflight_only:
+            return
+        applied = json.loads(run(CLI, "rebuild", name, "--yes", "--json", cwd=root, capture=True))
+        assert applied["data"]["apply"]
+        updated = web(project)
+        assert updated["Id"] != initial["Id"] and updated["Image"] != initial["Image"]
+        assert updated["Mounts"] == initial["Mounts"]
+        assert updated["Config"]["Labels"]["devkit.url"] == initial["Config"]["Labels"]["devkit.url"]
+        assert "rebuild-v2" in request(updated) and "<strong>1</strong>" in request(updated)
+        print("PASS: rebuilt image serves new behavior at the same URL with SQLite sentinel retained", flush=True)
+        before = saved.read_bytes()
+        dockerfile = (root / "Dockerfile").read_text()
+        (root / "Dockerfile").write_text(dockerfile + "\nRUN false\n")
+        failed = subprocess.run([CLI, "rebuild", name, "--yes", "--json"], cwd=root, env=env, text=True, capture_output=True)
+        assert failed.returncode == 1 and json.loads(failed.stdout)["schema_version"] == 1
+        assert saved.read_bytes() == before and web(project)["Id"] == updated["Id"]
+        record = Path(env["DEVKIT_STATE_DIR"]) / "rebuilds" / name / "operation.json"
+        failure = json.loads(record.read_text())
+        assert failure["phase"] == "failed" and not failure["built"]
+        # Explicit manual retirement is safe in this disposable fixture: build never applied.
+        record.unlink()
+        (root / "Dockerfile").write_text(dockerfile)
+        print("PASS: failed build retains saved configuration, runtime and data", flush=True)
+        run("docker", "exec", updated["Id"], "touch", "/data/fail-health")
+        (root / "message.txt").write_text("rebuild-v3")
+        failed = subprocess.run([CLI, "rebuild", name, "--yes", "--json"], cwd=root, env=env, text=True, capture_output=True)
+        assert failed.returncode == 1, failed.stdout
+        failure = json.loads(record.read_text())
+        assert failure["phase"] == "failed" and failure["built"]
+        assert saved.read_bytes() == before
+        blocked = subprocess.run([CLI, "start", name], cwd=root, env=env, capture_output=True)
+        assert blocked.returncode == 1
+        run("docker", "exec", web(project)["Id"], "rm", "/data/fail-health")
+        recovered = json.loads(run(CLI, "rebuild", name, "--recover", "--yes", "--json", cwd=root, capture=True))
+        assert recovered["data"]["apply"]
+        assert "rebuild-v3" in request(web(project)) and "<strong>1</strong>" in request(web(project))
+        print("PASS: failed health apply blocks stale start; same-candidate recovery preserves sentinel", flush=True)
+        run(CLI, "stop", name, cwd=root)
+        (root / "message.txt").write_text("rebuild-stopped")
+        run(CLI, "rebuild", name, "--yes", "--json", cwd=root, capture=True)
+        assert not web(project)["State"]["Running"]
+        run(CLI, "start", name, cwd=root)
+        assert "rebuild-stopped" in request(web(project)) and "<strong>1</strong>" in request(web(project))
+        print("PASS: stopped rebuild stages image without starting services; explicit start retains data", flush=True)
+    finally:
+        if name:
+            # The fixture owns all of these resources; retire recovery evidence only
+            # for teardown, never to resume or recreate an interrupted preview.
+            record = Path(env["DEVKIT_STATE_DIR"]) / "rebuilds" / name / "operation.json"
+            if record.exists():
+                record.unlink()
+            run(CLI, "destroy", name, cwd=root)
+
+
 def main():
     if os.environ.get("DEVKIT_RUNTIME_TEST") != "1":
         raise SystemExit("Set DEVKIT_RUNTIME_TEST=1 to create temporary test containers.")
@@ -47,6 +141,22 @@ def main():
     if not network_exists:
         run("docker", "network", "create", "devkit-proxy")
     with tempfile.TemporaryDirectory(prefix="devkit-smoke-") as tmp:
+        env["DEVKIT_STATE_DIR"] = str(Path(tmp) / "state")
+        env["DEVKIT_CONFIG_DIR"] = str(Path(tmp) / "config")
+        if os.environ.get("DEVKIT_REBUILD_PREFLIGHT") == "1":
+            try:
+                rebuild_checks(tmp, project, preflight_only=True)
+            finally:
+                if not network_exists:
+                    run("docker", "network", "rm", "devkit-proxy")
+            return
+        if os.environ.get("DEVKIT_REBUILD_ONLY") == "1":
+            try:
+                rebuild_checks(tmp, project)
+            finally:
+                if not network_exists:
+                    run("docker", "network", "rm", "devkit-proxy")
+            return
         root = Path(tmp) / "repo"
         shutil.copytree(KIT / "project-template", root)
         cfg = json.loads((root / "devkit.json").read_text())
@@ -109,6 +219,7 @@ def main():
             else:
                 raise AssertionError("Traefik did not route to the review app")
             print("PASS: real Traefik hostname routing over test TLS (not ACME)", flush=True)
+            rebuild_checks(tmp, project + "-rebuild")
         finally:
             subprocess.run(["docker", "rm", "-f", proxy], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             for path in (root / ".git/devkit/runs").glob("*/compose.json"):

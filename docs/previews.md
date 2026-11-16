@@ -6,7 +6,7 @@
   on every request. Python code edits need a restart; adapt the recipe to your
   real application's hot-reload server. Creating a live preview builds its Compose images from
   the current files; resuming one does not, so after changing a Dockerfile or dependencies,
-  destroy and recreate it.
+  inspect `devkit rebuild PREVIEW` and apply a supported update with `--yes`.
 - Local review: a detached checkout of an exact commit supplies build inputs.
   The web image is resolved to a Docker image ID; no review service may bind-mount
   host files. The temporary checkout is removed after the build. Test data remains
@@ -50,3 +50,77 @@ The limits and the daily run are set in the host config's `prune` section.
 
 - https://git-scm.com/docs/git-worktree
 - https://docs.docker.com/compose/how-tos/project-name/
+
+## Inspect and rebuild a live preview
+
+`devkit context --json` distinguishes current source HEAD/dirty state, saved preview
+configuration and observed container image IDs. `devkit ls --json` provides full
+commit IDs for managed previews. Saved configuration is not evidence that a runtime
+is running or healthy. Reports are snapshots; mutations always resolve again.
+
+After editing a Dockerfile or supported Compose settings, inspect:
+
+```sh
+devkit project validate --runtime containers --json
+devkit rebuild PREVIEW --json
+# Apply when the requested work authorizes this update:
+devkit rebuild PREVIEW --yes --json
+```
+
+Rebuild retains the live preview ID, URL, Compose project and storage. It accepts
+only the owning checkout and unchanged service topology, mounts, volume definitions,
+networks and routing. It builds services with `build` declarations using unique
+operation tags, then pins resolved image IDs. It refuses anonymous mounts, changed
+unbuilt service images/startup environment, credential-like environment changes,
+remote/out-of-checkout build contexts, additional build contexts/tags/cache exports/SSH forwarding, active shares and incomplete
+ownership evidence. Existing media allocation must match exactly; no ports are
+allocated. Review previews and existing-stack registrations cannot be rebuilt.
+
+No prepare/check/build/publish hook executes. Compose builds do execute Dockerfiles;
+new images or app startup may migrate database contents. Storage retention is not
+an application transaction, backup or rollback guarantee. Builds use the current
+worktree; reported HEAD and dirty state do not promise reproducibility.
+
+A running preview is recreated without deleting volumes and must pass health checks.
+A stopped preview receives the staged configuration and remains stopped; verify it
+with an explicit `devkit start PREVIEW` later. Ordinary `live`/`start` retain their
+saved-configuration resume behavior. Rebuild output suppresses potentially sensitive
+build diagnostics; inspect the relevant Dockerfile and use an explicitly authorized,
+private debugging workflow when a build fails.
+
+### Interrupted rebuilds
+
+Each preview has a nonblocking lifecycle lock shared with live/start/stop/destroy,
+share/unshare, expiry and GC. Busy expiry retries without removing its share record.
+Locks protect Devkit operations; manual Docker commands are outside this lock.
+
+Private recovery evidence is stored under
+`$DEVKIT_STATE_DIR/rebuilds/PREVIEW/` (default
+`~/.local/state/devkit/rebuilds/PREVIEW/`), owner-only. `operation.json` retains old
+and candidate models, source/input fingerprints and image IDs; `candidate.json` is
+the staged Compose model. These contain environment values: do not paste them into
+chat, logs or Git. The latest operation replaces the previous completed record.
+
+A failed build leaves saved configuration and existing containers untouched. A
+failed apply can leave old and candidate containers together. Devkit never rolls
+back database/application state automatically. Inspect:
+
+```sh
+devkit rebuild PREVIEW --recover --json
+# Retry the same built candidate after resolving its external health blocker:
+devkit rebuild PREVIEW --recover --yes --json
+```
+
+Recovery never rebuilds or reruns hooks. It requires unchanged checkout identity,
+HEAD, Compose/include/env inputs, effective model and owned storage. Ordinary
+resume/share/destroy is blocked while recovery is pending; exact graceful stop
+remains available and records the stopped state. Recovery after a stop stages the
+candidate without restarting it.
+
+If a build never produced a candidate, or recorded inputs have changed, automatic
+recovery is unavailable. An operator must privately inspect the phase, old/candidate
+image IDs, actual containers and volume identities. Preserve artifacts and take an
+appropriate backup before choosing forward repair or rollback compatibility. Only
+after establishing a consistent saved/runtime state and obtaining authority for the
+chosen recovery may the operator archive/remove that exact operation record.
+Removing a record is not itself a repair, and `destroy` is not a recovery shortcut.

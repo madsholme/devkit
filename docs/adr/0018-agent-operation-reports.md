@@ -1,6 +1,6 @@
 # 18. Agent reports and runtime-specific maintenance boundaries
 
-Status: proposed, 2026-11-16. Implementation is specified by
+Status: accepted, 2026-11-16. Implementation is specified by
 [agent operations v1](../plans/2026-11-16-agent-operations-v1.md).
 Extends ADRs 1, 3, 8 and 17; it does not replace their authority boundaries.
 

@@ -21,6 +21,13 @@ close your laptop.
 > it's a side project, so replies may take a while. There is no roadmap and no promise that the
 > next version stays compatible.
 
+Project preflight and agent context are available through `devkit project validate --json`
+and `devkit context --json`. Use `devkit rebuild PREVIEW --json` to inspect a live
+preview update that retains storage and identity; `--yes` applies supported changes.
+QEMU/libvirt gets validation and `restart --vm TARGET --dry-run --json`, without
+running guest lifecycle commands. See [project checks](docs/projects.md#read-only-project-validation-and-context)
+and [rebuild/recovery](docs/previews.md#inspect-and-rebuild-a-live-preview).
+
 ## What it's for
 
 - **Agents in parallel.** Three agents on three branches each get an app and a database of their
@@ -160,6 +167,10 @@ API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
 | `devkit proxy up` | Write Traefik's configuration from the host config and start or update it |
 | `devkit up` | Alias for `devkit live` |
 | `devkit up/start/stop/restart --vm TARGET` | Control a configured VM through its launcher or libvirt; retain disks |
+| `devkit project validate [--runtime all\|containers\|vms \| --vm TARGET] [--json]` | Read-only recipe and configured component validation |
+| `devkit context [--json]` | Current checkout identity, saved previews and observed resources |
+| `devkit rebuild [PREVIEW] [--yes] [--json]` | Plan/apply a supported live update retaining storage; `PREVIEW --recover` inspects/retries its recorded candidate |
+| `devkit restart --vm TARGET --dry-run [--json]` | Explain exact VM restart authority and blockers without restarting |
 | `devkit live` | Start/resume current workspace's live preview |
 | `devkit review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devkit exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
@@ -169,7 +180,7 @@ API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
 | `devkit vms [--json]` | QEMU/libvirt VMs, including stopped managed guests, sizing and private connections |
 | `devkit cleanup --vm NAME [--purge] [--yes]` | Stop/unregister one configured QEMU VM; dry run by default, retain files unless an explicit purge adapter is requested |
 | `devkit cleanup --project SLUG [--purge] [--yes]` | Clean all registered QEMU VMs in that exact project; preflight the whole batch first |
-| `devkit ls` | Preview IDs, modes, web health/status, source commits and URLs |
+| `devkit ls [--json]` | Preview IDs, modes, web health/status, source commits and URLs |
 | `devkit start --container NAME_OR_FULL_ID` | Start a registered existing container without recreating it |
 | `devkit stop --container NAME_OR_FULL_ID` | Gracefully stop one Docker container; retain data |
 | `devkit stop [preview]` | Stop containers; retain data |

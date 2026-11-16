@@ -653,3 +653,46 @@ for branch-owned overrides. Enroll the intended checkout explicitly with
 project values. Cleanup changes secret state only; existing tools continue to own
 Git/worktree lifecycle. See [Development secrets](secrets.md) for CLI use, immutable
 context, retirement/recovery and configurable retention, including automatic off.
+
+## Read-only project validation and context
+
+`devkit project validate [--runtime all|containers|vms] [--json]` validates the closest
+effective recipe without launching hooks, containers or guests. `--vm TARGET`
+selects one exact VM mapping and cannot be combined with `--runtime`. Legacy
+`devbox.json` and `DEVBOX_*` aliases remain supported. Missing/invalid recipes,
+absent requested components and invalid Compose models fail explicitly. A VM-only
+or registration-only recipe does not require preview files.
+
+Compose validation uses the installed plugin without requiring the Docker daemon.
+It checks preview isolation, web/route targets and enabled health checks before a
+review image exists. A supplied review model needs a build hook; absent optional
+review support is a warning. Application interpolation inputs must be available;
+validation-only Devkit identifiers are not credentials. Runtime registration
+ownership needs Docker access and exact unique registration labels.
+
+Input inspection is intentionally bounded: plain-key YAML, ordinary scalar/list
+values, literal short-form local includes and env files confined to the checkout.
+Remote inputs, `extends`, quoted mapping keys, aliases/anchors/tags, flow mappings,
+long-form include/env-file declarations and unsupported YAML notation are refused
+before Compose reads them. Simplify unsupported notation explicitly; ordinary
+launch syntax has not changed. Input files are limited to 2 MiB each and 128 tracked
+files, with bounded parser output/time. No rendered environment is printed.
+
+`devkit context --json` reports current Git identity (null for non-Git recipes),
+saved/runtime preview associations and configured VM associations. Full source SHA,
+dirty state and observed image IDs are separate facts. Docker failure preserves VM
+results and saved metadata, with unavailable evidence explicit. Context does not
+fetch Git, query vault values or record mutations.
+
+For QEMU/libvirt, `devkit project validate --runtime vms --json` checks selectors,
+provider/state/authority evidence and observed connection limitations. Plain mappings
+grant no launcher control; existing exact-instance native stop capability stays
+separate. Opaque launchers are not executed or interpreted as desired hardware.
+Stopped listeners, future disk/firmware settings and remote client reachability
+remain unknown. No new disk or `qemu-img` probes run. A wildcard bind does not verify
+a firewall guard; public listeners fail validation.
+
+`devkit restart --vm TARGET --dry-run --json` explains the exact configured control
+ID, provider, observed state, stop/start sequence and blockers. It performs no
+restart, purge, guest login or firewall change. Actual restart still requires user
+authority and fresh existing lifecycle checks. There is no `rebuild --vm` command.

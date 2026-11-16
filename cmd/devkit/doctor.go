@@ -23,19 +23,21 @@ import (
 // devkit doctor checks everything a working host needs and says how to fix what is missing.
 
 type check struct {
-	Status string // "ok", "warn" or "fail"
-	Name   string
-	Detail string
+	Status      string // "ok", "warn" or "fail"
+	Name        string
+	Detail      string
+	Code        string
+	SafeMessage string
 }
 
 func ok(name, format string, args ...any) check {
-	return check{"ok", name, fmt.Sprintf(format, args...)}
+	return check{Status: "ok", Name: name, Detail: fmt.Sprintf(format, args...), Code: "doctor." + name, SafeMessage: safeDoctorMessage(name, "ok")}
 }
 func warn(name, format string, args ...any) check {
-	return check{"warn", name, fmt.Sprintf(format, args...)}
+	return check{Status: "warn", Name: name, Detail: fmt.Sprintf(format, args...), Code: "doctor." + name, SafeMessage: safeDoctorMessage(name, "warn")}
 }
 func bad(name, format string, args ...any) check {
-	return check{"fail", name, fmt.Sprintf(format, args...)}
+	return check{Status: "fail", Name: name, Detail: fmt.Sprintf(format, args...), Code: "doctor." + name, SafeMessage: safeDoctorMessage(name, "fail")}
 }
 
 // lookupHost uses this host's resolver, including local split DNS; tests replace it.

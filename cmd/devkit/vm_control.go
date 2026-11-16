@@ -258,20 +258,10 @@ func resolveVMControl(ctx context.Context, target string) (vmTarget, error) {
 	if len(current) > 0 {
 		local = current[0].root
 	}
-	matches := []vmTarget{}
-	for _, t := range targets {
-		if target == t.vm.ControlID {
-			matches = []vmTarget{t}
-			break
-		}
-		if (target == t.selector.Name || (t.selector.UUID != "" && strings.EqualFold(target, t.selector.UUID))) && (local == "" || local == t.root) {
-			matches = append(matches, t)
-		}
-	}
-	if len(matches) != 1 {
+	t, found := lookupVMTarget(target, local, targets)
+	if !found {
 		return vmTarget{}, fail("Use one exact configured VM name/UUID in its project, or a control ID from devkit vms --json.")
 	}
-	t := matches[0]
 	if len(t.vm.Actions) == 0 {
 		return vmTarget{}, fail("VM control unavailable: %s", t.vm.ControlNote)
 	}

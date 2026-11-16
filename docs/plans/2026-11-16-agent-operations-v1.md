@@ -1,12 +1,13 @@
 # Agent operations and QEMU checks — v1
 
-Status: proposed implementation plan, 2026-11-16. Planning is authorized; runtime
-implementation, deployment and VM restarts have not been requested by this task.
+Status: implemented and verified, 2026-11-16. All six implementation tasks are
+complete; delivery follows the repository main-branch convention. Deployment and
+real VM restarts are outside this implementation session.
 
 This is the authoritative plan for the next operations work. The completed
 [agent guidance v14](2026-11-16-agent-guidance-v14.md) remains its own delivery record;
 it is not superseded. Material changes to the scope or strategy below require v2
-and archiving v1. Architecture is recorded in proposed
+and archiving v1. Architecture is recorded in accepted
 [ADR 18](../adr/0018-agent-operation-reports.md).
 
 ## Goal and approach
@@ -36,7 +37,7 @@ validation, context and an exact-target restart preflight, not a disk rebuild.
 
 ## Intended command surface
 
-These commands are proposals, not currently implemented CLI documentation.
+The following CLI surface is implemented; detailed usage lives in the affected docs.
 
 | Command | Contract |
 |---|---|
@@ -284,8 +285,43 @@ served CLI/dashboard version and install guidance for both clients without overw
 edits. Claude checks remain pending if access is unavailable. Record actual evidence,
 unrun checks and stopped-versus-running outcomes; retain unfinished worktrees.
 
-Current state: planning only. No production source, runtime, host configuration or
-installed skill changes are part of this planning commit.
+Current state: implementation in the dedicated `codex/project-agent-guidance`
+worktree. Source, bundled skills/templates and docs are updated. No deployed host
+configuration, running host service or real VM has been changed. Installed assets
+were tested only in disposable homes.
+
+## Implementation evidence and bounded support
+
+- Reused pure structural rendering checks, private-file helpers, VM selector/control
+  logic and existing distribution/template checks. No dependencies or UI endpoints.
+- Compose input preflight deliberately supports a bounded plain-key YAML subset and
+  short-form confined local includes/env files. Unsupported notation fails before
+  Compose reads inputs; ordinary launch syntax is unchanged. Rebuild additionally
+  requires local build contexts; extra tags/cache exports/SSH forwarding are refused.
+- VM report discovery uses declared host/project roots, process working directories
+  and linked Git checkouts, without requiring Docker or adding disk probes. Existing
+  execution resolves again through its full control catalog.
+- Private records retain old/candidate models and image IDs. Candidate images are
+  pinned; source-image references preserve unchanged unbuilt services across repeated
+  rebuilds. Recovery validates candidate/model consistency and newly added inputs.
+- Early Docker validate/context/rebuild preflight passed with unchanged saved model
+  and container identity. Focused full rebuild acceptance passed new behavior with
+  the same URL/SQLite sentinel, build failure, failed health/recovery and stopped staging.
+- Full `go test ./...`, `go vet ./...`, formatting/diff checks, build and all four
+  changed skill validators passed. Both-client asset installation/repair/edit
+  preservation passed in disposable homes. Final combined Docker acceptance passed,
+  including existing live/review isolation and HTTPS routing plus all rebuild cases;
+  temporary containers, volumes and the temporary proxy network were removed.
+  A final recovery-stop observation guard passed its regression and the full Go suite
+  (9.113 seconds); unchanged Docker acceptance evidence was retained.
+- Single-agent review followed the repository instruction. No fresh model sessions
+  were launched; the added decision scenarios remain unrun, and Claude is unavailable.
+  Existing earlier scenario results are preserved in `docs/agent-scenarios.md`.
+- No VM lifecycle execution behavior changed; synthetic checks and existing VM tests
+  cover the shared lookup and read-only report paths. No real VM restart was used.
+
+This is an execution/progress update to v1, not a requirements or architecture
+change; no previously agreed requirement is superseded.
 
 ## Primary references
 

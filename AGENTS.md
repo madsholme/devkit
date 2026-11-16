@@ -52,6 +52,12 @@ old names are dropped on purpose.
   codes (its own small encoder; tests pin output that was checked with a real decoder).
   `history.go` is the event log (`~/.local/state/devkit/history.jsonl`). Package variables such as `runCommand`, `dockerContainers` and
   `repository` are the seams tests replace.
+- `operation_report.go`, `project_validate.go`, `compose_inspect.go`, `context.go` and
+  `vm_validate.go` provide bounded read-only agent reports. Share pure structural
+  Compose validation with render; never print raw models, diagnostics or credentials.
+  `preview_rebuild*.go` and `preview_lock.go` retain storage/identity with private
+  staged candidates and explicit recovery. All lifecycle/share/GC paths acquire the
+  preview lock before media locks; incomplete operations permit exact stop only.
 - `bootstrap.sh`: installs the system prerequisites (Docker, Tailscale, docker group,
   firewall for tailscale0, lingering) on Ubuntu/Debian (and derivatives) and Fedora with sudo. POSIX sh, idempotent.
   Optional `--qemu` installs native QEMU/KVM, libvirt, UEFI and TPM prerequisites. devkit itself never uses sudo.
@@ -134,8 +140,9 @@ old names are dropped on purpose.
 
 - `devkit live` does not re-read Compose files for an existing preview. It reuses
   the rendered `<git-common-dir>/devkit/runs/<preview>/compose.json`. To pick up
-  Compose changes, edit that file or destroy and recreate the preview (which
-  deletes its data).
+  Compose changes, inspect `devkit rebuild PREVIEW` and apply supported changes with
+  `--yes`; storage/topology changes need explicit migration. Never destroy data merely
+  to refresh configuration. Pending rebuild recovery blocks stale resume.
 - Do not re-enable T3's Tailscale Serve on 443. Traefik owns that listener.
 - Credentials (`~/.config/devkit/dns-token`, `cloudflare-token`, or whatever source the
   host config names) are private host files and must never be committed. Tests set

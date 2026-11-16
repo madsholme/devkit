@@ -18,6 +18,8 @@ guidance, saved launcher configuration, and the host's `~/.config/devkit/STATUS.
 when present. Start with read-only discovery:
 
 ```sh
+devkit project validate --runtime vms --json
+devkit context --json
 devkit vms --json
 ip -brief address
 tailscale ip -4
@@ -56,6 +58,18 @@ and applicable tailnet policy. Check routing on the client as well as the host.
 - Preserve user-edited launchers and managed instruction blocks. Reconcile conflicting
   older loopback-only rules with the user's authorized policy; do not silently delete
   project instructions or assume this skill overrides explicit user constraints.
+
+## Restart preflight
+
+Use `devkit restart --vm TARGET --dry-run --json` for one exact configured target.
+It shows the current state, control ID, provider, stop/start sequence and blockers.
+A mapping alone does not grant launcher authority; native stop-only authority is
+separate. Missing evidence, paused state or conflicting claims do not permit restart.
+Opaque launchers do not reveal desired disks, firmware or dependency changes; this
+preflight performs no disk inspection or `qemu-img` probes. A wildcard listener is
+not proof of a firewall guard, and absent listeners on stopped guests are unknown.
+There is no VM rebuild command. Apply only an already authorized restart, which
+revalidates and stops gracefully before starting. A dry run grants no new permission.
 
 ## Activate and hand over
 

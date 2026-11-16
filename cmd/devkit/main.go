@@ -22,7 +22,8 @@ commands:
   secrets              contextual secret storage, runtime injection and configurable cleanup
   integrations         Cloudflare/GitHub credentials and exact Git HTTPS bindings
   agents skills        install, inspect or repair bundled Codex/Claude guidance
-  doctor [--agents]    check this host and say how to fix what is missing
+  doctor [--agents] [--json]
+                       check this host and say how to fix what is missing
   version              show which devkit release or commit this is
   proxy up             write Traefik's configuration from the host config and start or update it
   up                   alias for live (Docker); use --vm TARGET for a configured VM
@@ -45,7 +46,14 @@ commands:
                       [--github-owner OWNER --github-repo REPO [--github-public] [--github-push]]
                        copy the bundled template into projects_dir, initialize main and commit
   git fetch|sync|push   fetch origin, fast-forward from its upstream, or explicitly push
-  ls                   list managed previews, including stopped ones
+  context [--json]     inspect checkout, saved previews and runtime associations
+  project validate [--runtime all|containers|vms | --vm TARGET] [--json]
+                       validate a recipe without launching workloads
+  rebuild [preview] [--yes] [--json]
+                       plan/apply a live update retaining storage; --recover retries its recorded candidate
+  restart --vm TARGET --dry-run [--json]
+                       inspect exact VM restart authority without restarting
+  ls [--json]          list managed previews, including stopped ones
   web [--host H] [--port P]
                        serve the web overview (default 127.0.0.1 and the configured port, 3780)
   web password         set the password that lets the web overview run actions
@@ -159,10 +167,33 @@ func splitArgs(args []string, valued, switches map[string]bool) (positional []st
 }
 
 func dispatch(args []string) (int, error) {
+	code, err := dispatchCommand(args)
+	if code == 2 && err != nil && len(args) > 0 {
+		reportCommand := args[0] == "context" || args[0] == "rebuild" || args[0] == "doctor" || args[0] == "ls" || args[0] == "restart" || (args[0] == "project" && len(args) > 1 && args[1] == "validate")
+		for _, arg := range args {
+			if reportCommand && arg == "--json" {
+				r := newReport(args[0], nil)
+				r.Complete = false
+				r.add("invocation.invalid", "fail", "command", "Invalid invocation; consult devkit help for supported arguments.")
+				_, writeErr := r.write(true)
+				return 2, writeErr
+			}
+		}
+	}
+	return code, err
+}
+func dispatchCommand(args []string) (int, error) {
 	if len(args) == 0 {
 		return 2, usageError("missing command")
 	}
 	command, rest := args[0], args[1:]
+	if command == "restart" {
+		for _, arg := range rest {
+			if arg == "--dry-run" {
+				return vmRestartPlanCLI(rest)
+			}
+		}
+	}
 	if command == "up" || command == "start" || command == "stop" || command == "restart" {
 		positional, values, err := splitArgs(rest, map[string]bool{"--vm": true, "--container": true}, nil)
 		if err != nil {
@@ -204,6 +235,9 @@ func dispatch(args []string) (int, error) {
 	case "docs":
 		return documentsCLI(rest)
 	case "project":
+		if len(rest) > 0 && rest[0] == "validate" {
+			return projectValidateCLI(rest[1:])
+		}
 		return projectCreateCLI(rest)
 	case "git":
 		dashboard := len(rest) == 2 && rest[1] == "--dashboard"
@@ -253,12 +287,22 @@ func dispatch(args []string) (int, error) {
 			return 2, err
 		}
 		return 0, listVMs(*asJSON)
+	case "rebuild":
+		return rebuildCLI(rest)
+	case "context":
+		return contextCLI(rest)
 	case "doctor":
-		if len(rest) == 1 && rest[0] == "--agents" {
-			return doctorAgents()
-		}
-		if err := parse(flags(command), rest); err != nil {
+		set := flags(command)
+		agents := set.Bool("agents", false, "")
+		asJSON := set.Bool("json", false, "")
+		if err := parse(set, rest); err != nil {
 			return 2, err
+		}
+		if *asJSON {
+			return doctorJSON(*agents)
+		}
+		if *agents {
+			return doctorAgents()
 		}
 		return doctor()
 	case "proxy":
@@ -322,8 +366,13 @@ func dispatch(args []string) (int, error) {
 		}
 		return 0, logs(*service, *follow)
 	case "ls":
-		if err := parse(flags(command), rest); err != nil {
+		set := flags(command)
+		asJSON := set.Bool("json", false, "")
+		if err := parse(set, rest); err != nil {
 			return 2, err
+		}
+		if *asJSON {
+			return listingJSON()
 		}
 		return 0, listing()
 	case "web":

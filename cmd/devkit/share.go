@@ -218,6 +218,14 @@ func sharePreview(name, fixedHost string, hours int) error {
 	if name, err = resolvePreview(name); err != nil {
 		return err
 	}
+	unlock, err := lockPreview(name)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := previewRecoveryGuard(name, "share"); err != nil {
+		return err
+	}
 	if hours == 0 {
 		hours = cfg.DefaultHours
 	}
@@ -343,6 +351,26 @@ func extendShare(cfg shareConfig, cf *cloudflare, web container, s share, expire
 // removeShare deletes the connector, the app's public URL, the DNS record and the tunnel.
 // restartApp recreates a running web container without DEVKIT_PUBLIC_URL; stop and destroy skip that.
 func removeShare(s share, restartApp bool) error {
+	unlock, err := lockPreview(s.Preview)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := previewRecoveryGuard(s.Preview, "unshare"); err != nil {
+		return err
+	}
+	current, found, err := shareFor(s.Preview)
+	if err != nil {
+		return err
+	}
+	if !found || current.Container != s.Container || current.Tunnel != s.Tunnel {
+		return fail("Share changed; refresh before removal")
+	}
+	return removeShareLocked(s, restartApp)
+}
+
+// Caller holds the preview lock (including lifecycle cleanup).
+func removeShareLocked(s share, restartApp bool) error {
 	var problems []string
 	if err := removeContainer(s.Container); err != nil {
 		problems = append(problems, err.Error())
@@ -385,7 +413,7 @@ var unshareIfShared = func(preview string) error {
 	if err != nil || !ok {
 		return err
 	}
-	if err := removeShare(s, false); err != nil {
+	if err := removeShareLocked(s, false); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "unshared: %s\n", s.URL)
