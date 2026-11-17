@@ -416,3 +416,15 @@ as outdated. Deployment, skill refresh and fresh-model discovery remain separate
 away/VPN-client reachability was not tested. Sanitized evidence was retained privately
 at `/tmp/devkit-server-evidence-3b94a04` on the workstation; temporary server files were
 removed after collection. No product change was needed following this smoke test.
+
+### Authorized deployment verification — 2026-11-17
+
+After explicit rollout authorization, the tested `3b94a04` binary replaced the previous
+server binary and only `devkit-web` was restarted. Exact running binary and served
+revision, trusted dashboard/application LAN HTTPS, installed doctor, resource report
+and private-preview check passed. All observed container states/identities/start times,
+VM identities/inventory, T3 and host configuration were preserved; the vault remained
+ready/unsealed. Both server skill catalogs report all six skills current. Prior binary
+and skill directories were retained in the host's private deployment directory with
+verification receipt and binary rollback command. Project instruction files were not
+changed. Fresh-model discovery and away-client routing remain untested.

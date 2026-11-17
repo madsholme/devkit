@@ -23,8 +23,8 @@ and the intentionally bounded connectivity claim.
 **Status:** All seven implementation/verification tasks are complete. Full Go checks,
 trusted-TLS tests, six-skill distribution and full Docker-bridge workflow acceptance
 pass. The loopback smoke path timed out on this host; evidence and the bounded probe
-profile are recorded below. Runtime deployment and active-client skill installation
-remain separate. [ADR 20](../adr/0020-agent-cli-observability.md) is accepted.
+profile are recorded below. Authorized server deployment and both skill catalog updates are complete; see the
+rollout record below. [ADR 20](../adr/0020-agent-cli-observability.md) is accepted.
 
 ## Global constraints and decisions
 
@@ -479,7 +479,31 @@ binary passed inventories/resources/history/shares, GC dry-run, two private HTTP
 preview checks and running/stopped exact log reads. Separate workstation LAN checks
 passed trusted dashboard/application HTTPS. Running containers, VMs and the dashboard
 PID were unchanged; temporary server files were removed. See [testing](../testing.md#real-host-cli-smoke-check--2026-11-17).
-The installed server remains `5a1aa86` and both client skill catalogs are outdated
-relative to the candidate. This follow-up authorizes testing, not service replacement;
-binary deployment, skills refresh, fresh-agent discovery and away-client verification
-are still distinct operational actions. No code or implementation strategy changed.
+At the end of that smoke check, the installed server remained `5a1aa86` and both
+client skill catalogs were outdated relative to the candidate. Testing did not replace
+the service; the subsequent explicit rollout authorization is recorded below.
+No code or implementation strategy changed.
+
+
+## Authorized server rollout — 2026-11-17
+
+The user explicitly authorized deployment, restarting `devkit-web` and updating both
+skill catalogs. The exact tested `3b94a04` binary was installed atomically after
+backing up the existing binary and managed skill directories. Only `devkit-web` was
+restarted. Exact running-executable hash and served commit matched; trusted dashboard
+and application LAN HTTPS, installed doctor, resources and private-preview checks
+passed. All 15 container identities/states/start times, VM inventory/process identities,
+T3 PID, host configuration and secret registry matched the deployment baseline;
+the vault remained ready/unsealed.
+
+Codex and Claude catalogs on the server both report all six skills current. Project
+instruction files were outside this catalog-only update and were preserved. Fresh
+agent sessions are needed to consume new guidance; no model agents were launched.
+Away-client routing remains untested. These are stated verification limits, not
+unfinished deployment operations.
+
+The host STATUS.md and private deployment receipt record verification, the previous
+binary, a binary-only rollback command and separately retained skill-directory
+backups. Receipt directory on the server:
+`~/.local/state/devkit/deployments/agent-cli-3b94a04-20261117/`.
+The later documentation-only commits do not change the deployed feature binary.

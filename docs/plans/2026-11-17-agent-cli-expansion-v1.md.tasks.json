@@ -82,5 +82,21 @@
     "skills": "six assets validate; disposable Codex/Claude distribution passed; fresh model scenarios unrun",
     "runtime": "full DEVKIT_RUNTIME_TEST=1 DEVKIT_PROXY_PROBE=bridge runner passed and cleaned fixtures",
     "limitation": "default published-loopback smoke TLS timed out on this host; no host repair or deployment performed"
+  },
+  "rollout": {
+    "status": "complete",
+    "featureCommit": "3b94a040799af86456cd78eac8f4bce6589c4ea2",
+    "authorization": "Explicit user request to deploy, restart devkit-web and update both catalogs",
+    "service": "devkit-web restarted and verified",
+    "catalogs": {
+      "codex": "current",
+      "claude": "current"
+    },
+    "preservation": "container/VM identities, T3, host config and secret registry matched baseline",
+    "verification": "trusted LAN HTTPS, exact served/running commit, doctor, resources and private-preview check passed",
+    "limits": [
+      "fresh model sessions not run",
+      "away-client routing not tested"
+    ]
   }
 }
