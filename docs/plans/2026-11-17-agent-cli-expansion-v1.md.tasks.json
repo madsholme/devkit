@@ -21,7 +21,7 @@
     {
       "id": 3,
       "subject": "Task 3: One-shot resource sampling",
-      "status": "in_progress",
+      "status": "completed",
       "blockedBy": [
         2
       ],
@@ -30,7 +30,7 @@
     {
       "id": 4,
       "subject": "Task 4: Private preview connectivity checks",
-      "status": "pending",
+      "status": "in_progress",
       "blockedBy": [
         1
       ],

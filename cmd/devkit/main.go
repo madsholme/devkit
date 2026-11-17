@@ -46,6 +46,7 @@ commands:
                       [--github-owner OWNER --github-repo REPO [--github-public] [--github-push]]
                        copy the bundled template into projects_dir, initialize main and commit
   git fetch|sync|push   fetch origin, fast-forward from its upstream, or explicitly push
+  resources [--json]  sample host and container resource usage once
   projects [--json]   list discovered projects and linked checkouts
   containers [--json] list host containers and observed registration/capabilities
   context [--json]     inspect checkout, saved previews and runtime associations
@@ -171,7 +172,7 @@ func splitArgs(args []string, valued, switches map[string]bool) (positional []st
 func dispatch(args []string) (int, error) {
 	code, err := dispatchCommand(args)
 	if code == 2 && err != nil && len(args) > 0 {
-		reportCommand := args[0] == "projects" || args[0] == "containers" || args[0] == "context" || args[0] == "rebuild" || args[0] == "doctor" || args[0] == "ls" || args[0] == "restart" || (args[0] == "project" && len(args) > 1 && args[1] == "validate")
+		reportCommand := args[0] == "resources" || args[0] == "projects" || args[0] == "containers" || args[0] == "context" || args[0] == "rebuild" || args[0] == "doctor" || args[0] == "ls" || args[0] == "restart" || (args[0] == "project" && len(args) > 1 && args[1] == "validate")
 		for _, arg := range args {
 			if reportCommand && arg == "--json" {
 				r := newReport(args[0], nil)
@@ -291,6 +292,8 @@ func dispatchCommand(args []string) (int, error) {
 		return 0, listVMs(*asJSON)
 	case "rebuild":
 		return rebuildCLI(rest)
+	case "resources":
+		return resourcesCLI(rest)
 	case "projects":
 		return projectsCLI(rest)
 	case "containers":

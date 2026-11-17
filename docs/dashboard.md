@@ -361,3 +361,18 @@ include OpenBao status/native UI, manual update preview, encrypted backups,
 integration credentials, agent skill repair and cleanup durations/`never`/automatic off.
 All operations have [CLI equivalents](secrets.md). A sealed vault also prevents
 authenticated dashboard access; use terminal unseal/recovery independently.
+
+## One-shot CLI resources
+
+`devkit resources --json` samples this host without starting the dashboard or its
+background sampler. CPU is a percentage measured over two observations 250 ms
+apart; `interval_seconds` reports the actual interval. Load averages cover 1/5/15
+minutes, memory/swap/disk values are bytes, disk covers `/`, and uptime is seconds.
+Container CPU/memory percentages and Docker-formatted memory/network/block usage
+are keyed by full container ID. A replacement container never inherits an old
+container's association merely because it has the same name.
+
+The 10-second budget includes Docker sampling. Missing metrics are null, not zero;
+partial reports retain available values with `complete: false` and exit 1. No
+process arguments or per-process inventory are included. The human-readable form
+is `devkit resources`.
