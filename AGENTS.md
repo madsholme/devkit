@@ -162,8 +162,8 @@ Keep values out of metadata, history and job output; fail closed when sealed.
 Cleanup configuration supports durations, `never`, automatic off and a confirmed
 overdue-resume barrier. Existing tools retain Git/worktree lifecycle ownership.
 Agent assets are embedded from `cmd/devkit/agent-assets`; preserve edited assets
-and instruction blocks. The shared catalog distributes project, secrets, VM, preview and
-troubleshooting skills and their project blocks. See `docs/agent-skills.md` for
+and instruction blocks. The shared catalog distributes project, secrets, VM, preview, troubleshooting and
+host-maintenance skills and their project blocks. See `docs/agent-skills.md` for
 distribution and `docs/secrets.md` for secret operations/recovery.
 Use disposable homes/config/state in tests; the opt-in runtime runner must never
 target the deployed `devkit-vault` Compose project.
@@ -196,3 +196,10 @@ or disable guest SSH authentication to meet this rule. Devkit only discovers the
 do not modify running VMs during inventory/UI work. Existing launcher migration is
 explicit work, and VM restarts require approval. See docs/projects.md in the devkit
 repository for the VM connection rule and examples.
+
+Agent CLI observations live in `preview_observe.go`, `preview_logs.go`,
+`inventory_cli.go`, `resources_cli.go`, `preview_check.go` and `operational_reports.go`.
+Use bounded local collectors and typed safe report projections; logs remain raw.
+Checks pin only verified private host peers with normal TLS verification and no
+redirects/proxies. GC text and JSON share selection/locked execution; retain partial
+outcomes. These diagnostics grant no new execution or lifecycle authority.

@@ -259,3 +259,8 @@ preserves local credentials and disables managed project secrets. See
 [Development secrets](secrets.md) for verified import, LAN/Tailscale DNS, manual
 unseal, encrypted recovery and explicit OpenBao updates. Bootstrap installs `age`
 for encrypted backups; the human supplies the recipient, key custody and off-host destination.
+
+The bundled `devkit-host` skill covers authorized host provisioning/upgrades and
+private proxy maintenance, with rollback and served-version verification. Installing
+guidance does not authorize deployment or restart services. See [agent skills](agent-skills.md)
+and [vault backup/restore](secrets.md#same-host-restore) for operator boundaries.

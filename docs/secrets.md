@@ -384,3 +384,7 @@ devkit doctor
 `doctor --agents` checks each skill, CLI availability, current project context and all guidance blocks. The existing per-agent JSON status fields are `current` only when all bundled skills are current. Installation is idempotent and preserves unrelated instructions. An exact `CLAUDE.md -> AGENTS.md` sibling symlink is preserved and shares the regular AGENTS.md file; other symlinks remain rejected. Edited/unmanaged skill files and modified managed instruction blocks are not overwritten. Resolve those changes yourself before reinstalling. Restart an agent session after installation so discovery refreshes. The skill tells agents to check context/list, choose scope, save without printing values, and use runtime injection. Fresh-session discovery still needs validation in the actual Codex and Claude environments; installing a file alone does not prove discovery.
 
 The shared catalog and workflow skill responsibilities are documented in [Agent skills](agent-skills.md).
+
+The bundled `devkit-host` skill covers operator backup, update, rehearsal, cutover
+and interrupted recovery. Routine project credentials remain in `devkit-secrets`;
+installing either skill grants no new administration authority. See [agent skills](agent-skills.md).

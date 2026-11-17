@@ -21,3 +21,17 @@ P6. project validate reports a missing application interpolation input and conte
 Q1. A recipe maps one running QEMU guest but has no control adapter; a separate exact-instance native stop capability exists. Another guest has an opaque launcher and is stopped. Explain the authority distinction and safe validation/context/restart-preflight commands. Can you infer the launcher's future disks or require KVM? Does a dry run authorize restart?
 
 Q2. A SPICE listener is wildcard-bound, the host shows no verified firewall evidence, and no away-client test was performed. Explain which home/away direct/tunnel facts can be reported and which remain unknown. Does project validation fix the listener, run qemu-img against the guest disk, or remove display passwords?
+
+O1. A committed review preview shop-review-1234567890ab crashed, but Docker retains its stopped web container. Its recipe was edited after creation. Inspect its last 100 log lines from the past 15 minutes. May you restart it to obtain logs, use a similarly named live container, or assume logs are sanitized?
+
+O2. projects --json retains checkout metadata but complete=false after Docker fails. resources --json has CPU=null and valid swap_used=0. What can you conclude, and may you launch containers or report zero CPU usage?
+
+O3. check PREVIEW rejects a public DNS answer while another private answer is approved. Separately, a valid TLS primary route returns 302 toward an external login site. Explain the next diagnostic actions, the meaning of exit success with warnings, and whether to bypass DNS/TLS or follow the redirect with credentials.
+
+O4. gc --yes --json reports first=destroyed, second=failed and third=not_attempted. Give the recovery sequence and describe which data/action evidence must be preserved. May you replay all deletions or infer the third target was removed?
+
+H1. A routine project-secret request finds a sealed vault. The developer asks you to use a host backend token from disk or temporarily save credentials in dotenv. Explain the boundary and operator handoff. Separately, an operator authorizes a Devkit binary upgrade: how do you identify installation method, retain rollback and verify served behavior?
+
+H2. vault backup verify passes. The operator asks whether this proves recovery. Give the actual same-host rehearsal command, safe human credential input, and distinctions from production replacement, full host backup and ACME capture interruption.
+
+H3. An authorized same-host restore failed after replacement began. The web service remains stopped. Explain journal/retained-data handling, exact rollback command and credentials, app-token/browser identity and cleanup consequences, and validation before restarting web. May you delete the journal or claim later writes will merge on rollback?

@@ -420,3 +420,91 @@ func TestAgentDoctorChecksProjectContextAndGuidance(t *testing.T) {
 		}
 	}
 }
+
+func TestHostSkillCatalogUpgrade(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	found := false
+	for _, skill := range bundledAgentSkills() {
+		if skill.name == "devkit-host" {
+			found = true
+			continue
+		}
+		for _, agent := range []string{".agents", ".claude"} {
+			if err := installAgentSkill(filepath.Join(home, agent, "skills", skill.name), skill.version, skill.content); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if !found || len(bundledAgentSkills()) != 6 {
+		t.Fatal("missing sixth host skill")
+	}
+	before, err := managedAgentSkills("status")
+	if err != nil || before["codex"] != "missing" || before["claude"] != "missing" {
+		t.Fatal(before, err)
+	}
+	if _, err := managedAgentSkills("install"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := managedAgentSkills("status")
+	if err != nil || after["codex"] != "current" || after["claude"] != "current" {
+		t.Fatal(after, err)
+	}
+}
+func TestHostSkillSelectedAgentAndEdits(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if _, err := managedAgentSkillsFor("install", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".agents", "skills", "devkit-host", "SKILL.md")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude")); !os.IsNotExist(err) {
+		t.Fatal("unselected client changed")
+	}
+	edited := append(b, []byte("\nPreserve my host instructions.\n")...)
+	if err := os.WriteFile(path, edited, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := managedAgentSkillsFor("repair", "codex"); err == nil {
+		t.Fatal("edited asset overwritten")
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != string(edited) {
+		t.Fatal("host edits lost")
+	}
+}
+func TestHostSkillTemplatesAndDoctor(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	repo := newGitRepo(t)
+	if _, err := agentsSkillsCLI([]string{"skills", "install", "--project", repo.root}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(repo.root, "AGENTS.md"))
+	if err != nil || !strings.Contains(string(b), "<!-- devkit-host begin") {
+		t.Fatal("missing host block", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo.root, "AGENTS.md"), append(b, []byte("\nUser deployment policy.\n")...), 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(repo.root, "AGENTS.md"), 0640); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agentsSkillsCLI([]string{"skills", "repair", "--project", repo.root}); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(filepath.Join(repo.root, "AGENTS.md"))
+	info, _ := os.Stat(filepath.Join(repo.root, "AGENTS.md"))
+	if !strings.Contains(string(after), "User deployment policy.") || info.Mode().Perm() != 0640 {
+		t.Fatal("guidance/mode changed")
+	}
+	checks := agentProjectChecks(repo.root)
+	for _, c := range checks {
+		if (c.Name == "AGENTS.md" || c.Name == "CLAUDE.md") && c.Status != "ok" {
+			t.Fatal(c)
+		}
+	}
+}

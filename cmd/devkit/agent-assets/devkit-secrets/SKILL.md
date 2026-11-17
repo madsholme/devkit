@@ -129,3 +129,8 @@ writes use POST with `options.cas` (0 for creation, observed version for updates
 Policy/auth provisioning requires separate operator authority. For full protocol
 details, consult the matching Devkit release's `docs/secrets-api.md`; do not assume
 that file exists in the consuming application's repository.
+
+For explicitly authorized host provisioning, vault updates, encrypted backups or
+restore/recovery, use devkit-host. Project-secret access does not grant those operator
+permissions. A sealed vault needs human recovery, without reading backend tokens or
+unseal material. Backup checksum verification is distinct from restore rehearsal.

@@ -21,7 +21,7 @@ with tempfile.TemporaryDirectory(prefix="devkit-agent-assets-") as directory:
     run("agents", "skills", "install")
     result = json.loads(run("agents", "skills", "status", "--json"))
     assert result == {"codex": "current", "claude": "current"}, result
-    skills = ("devkit-projects", "devkit-secrets", "devkit-previews", "devkit-troubleshooting", "devkit-vms")
+    skills = ("devkit-projects", "devkit-secrets", "devkit-previews", "devkit-troubleshooting", "devkit-vms", "devkit-host")
     for name in skills:
         codex = root / ".agents/skills" / name / "SKILL.md"
         claude = root / ".claude/skills" / name / "SKILL.md"

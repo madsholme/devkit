@@ -11,8 +11,9 @@ change previews, VMs, credentials, routing or host services.
 | `devkit-troubleshooting` | Bounded diagnostics and distinguishing application/container failures from DNS, TLS, proxy and client LAN/VPN failures. |
 | `devkit-vms` | QEMU/libvirt connection and lifecycle work, SPICE defaults, direct LAN/Tailscale access and optional tunnels. New SPICE launchers default to no display password unless requested; existing passwords are preserved. |
 | `devkit-secrets` | Context-bound credentials, login entries, safe generation/injection, explicit cleanup, external API tokens and app-owned native OpenBao storage. |
+| `devkit-host` | Operator provisioning/upgrades, private proxy maintenance, encrypted backups, restore rehearsal, cutover and recovery. |
 
-`devkit setup` installs all five, including on hosts without a configured vault.
+`devkit setup` installs all six, including on hosts without a configured vault.
 The dashboard's agent install/repair actions use the same catalog. Install them on
 each machine where the agents run; installing on a remote devkit host does not
 update the agent client's local skill directory.
@@ -78,3 +79,8 @@ provides durable mutation authority. Use exact IDs and revalidate at execution.
 Rebuild's data-retention boundary and private recovery process are described in
 [previews](previews.md#inspect-and-rebuild-a-live-preview); VM unknowns are described
 in [projects](projects.md#read-only-project-validation-and-context).
+
+The sixth skill routes operator tasks separately from project credentials. Exact
+preview logs, check, projects/containers/resources and history/shares/GC reports are
+covered by the updated workflow skills. Raw logs are not sanitized metadata; `check`
+is host-only primary-route evidence and never proves an authenticated user session.

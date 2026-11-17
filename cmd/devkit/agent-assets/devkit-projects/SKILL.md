@@ -11,6 +11,12 @@ Registration and preview creation have different storage and lifecycle contracts
 
 ## Establish the project
 
+Use `devkit projects --json` and `devkit containers --json` for local inventory,
+including outside a checkout. Inspect `complete` and failed checks: Docker being
+unavailable is not an empty or stopped environment. Match exact identities and
+revalidate current registration before acting; listed capabilities and `live_recipe`
+(declared recipe presence) never authorize launch or container recreation.
+
 Read project guidance, Git state, Dockerfile, Compose files, hooks and the recipe.
 Use `devkit.json` when present; otherwise `devbox.json` remains supported, as do
 `DEVBOX_*` aliases of `DEVKIT_*`. Edit the effective recipe, preserving VM mappings,

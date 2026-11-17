@@ -19,12 +19,16 @@ available. From the owning checkout:
 devkit version
 devkit context --json
 devkit ls --json
-devkit history -n 10
+devkit history -n 10 --json
 devkit doctor --json
-devkit logs
+devkit projects --json
+devkit containers --json
+devkit resources --json
+devkit check PREVIEW --json
+devkit logs --preview PREVIEW --tail 200 --since 10m
 ```
 
-Use `devkit logs -s SERVICE` for the implicated service; never leave `logs -f` or an
+Use `devkit logs --preview PREVIEW -s SERVICE` for the implicated service; never leave `logs -f` or an
 unbounded log stream running. `devkit doctor --agents --json` checks installed skills and
 project guidance. New agent sessions may be needed after installing skills.
 Inspect only relevant configuration/metadata and redact credentials, cookies and
@@ -74,3 +78,10 @@ After two failed attempts on the same issue, reassess the failing layer and appr
 before another change. Report the cause/evidence, exact change, successful checks,
 unverified client routes and any remaining blocker. Never present a host-only probe
 or healthy process as proof of a working end-to-end user session.
+
+Inventory is read-only and may be partial when Docker/Git is unavailable. Missing
+metrics are null, not zero; reports never grant durable action authority. `check`
+observes only the primary route from this host, without credentials or redirects;
+3xx/401/403 are warnings, not a verified user session. Never bypass rejected DNS
+peers or failed TLS. Use devkit-host for authorized provisioning, proxy updates,
+vault backups and restore/recovery; keep project credential work in devkit-secrets.

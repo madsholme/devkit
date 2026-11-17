@@ -19,7 +19,7 @@ git rev-parse --show-toplevel
 git status --short
 devkit context --json
 devkit ls --json
-devkit history -n 10
+devkit history -n 10 --json
 ```
 
 Match the checkout, preview identity and mode. Run lifecycle commands inside the
@@ -35,8 +35,16 @@ commits, merges or pushes in existing projects.
 - Run project tests and tools through `devkit exec <command>`, or
   `devkit exec -s SERVICE <command>` for another service. Use the project's documented
   commands. Do not bypass devkit with host application processes or raw Compose.
-- Read bounded output with `devkit logs` or `devkit logs -s SERVICE`; do not use
-  `logs -f` in a task that needs to finish. For failures, use devkit-troubleshooting.
+- Read bounded output with `devkit logs --preview PREVIEW --tail 200 --since 10m`
+  and optional `-s SERVICE`. Exact owned live/review IDs work with retained stopped
+  containers too; removed logs cannot be recovered. Omit the selector only for the
+  current live preview. Raw application logs can contain credentials; redact them.
+  Do not leave `logs -f` running in a finite task. Use devkit-troubleshooting for failures.
+- Use `devkit check PREVIEW --json` for bounded host-side primary-route evidence.
+  It verifies configured private peers and TLS, never follows redirects, and sends
+  no credentials. Redirects/auth challenges and absent health checks are warnings,
+  not application proof. Inspect failed checks and completeness; verify application
+  behavior and remote-client routes separately.
 - A live preview mounts source, but reload behavior belongs to the application's
   development server. Resuming an existing preview does not rebuild images or reread
   its saved rendered Compose configuration. Dockerfile, dependency or recipe edits
@@ -78,3 +86,8 @@ and unused images. Use dry runs where available, identify exact targets/data, an
 obtain destructive-action authorization when it is not already explicit. A failed
 health check alone does not authorize cleanup, public exposure or host repair.
 VM lifecycle work belongs to devkit-vms; do not restart VMs as preview maintenance.
+
+Use `devkit shares --json` for local connector observations, not a Cloudflare audit.
+Inspect `devkit gc --json` before an authorized `devkit gc --yes --json`. Apply reports
+kept/destroyed/failed/not_attempted targets; retain exact partial results and resume
+only unfinished work after inspecting failure. GC removes volumes of orphaned previews.
