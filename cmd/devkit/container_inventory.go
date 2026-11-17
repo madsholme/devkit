@@ -79,6 +79,12 @@ func containersOverview(ctx context.Context) (containersData, error) {
 	if registrationErr != nil {
 		data.Warnings = append(data.Warnings, registrationErr.Error())
 	}
+	data.Containers = projectContainerRows(rows, owners)
+	return data, nil
+}
+
+func projectContainerRows(rows []container, owners map[string]containerProject) []containerRow {
+	data := containersData{Containers: []containerRow{}}
 	for _, c := range rows {
 		labels := c.Config.Labels
 		managed := labels[managedLabel] == "true"
@@ -109,6 +115,11 @@ func containersOverview(ctx context.Context) (containersData, error) {
 		}
 		data.Containers = append(data.Containers, r)
 	}
-	sort.Slice(data.Containers, func(i, j int) bool { return data.Containers[i].Name < data.Containers[j].Name })
-	return data, nil
+	sort.Slice(data.Containers, func(i, j int) bool {
+		if data.Containers[i].Name == data.Containers[j].Name {
+			return data.Containers[i].ID < data.Containers[j].ID
+		}
+		return data.Containers[i].Name < data.Containers[j].Name
+	})
+	return data.Containers
 }

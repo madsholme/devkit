@@ -169,6 +169,7 @@ API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
 | `devkit up` | Alias for `devkit live` |
 | `devkit up/start/stop/restart --vm TARGET` | Control a configured VM through its launcher or libvirt; retain disks |
 | `devkit project validate [--runtime all\|containers\|vms \| --vm TARGET] [--json]` | Read-only recipe and configured component validation |
+| `devkit projects [--json]` / `devkit containers [--json]` | Local project/checkouts and host container inventory; no dashboard required |
 | `devkit context [--json]` | Current checkout identity, saved previews and observed resources |
 | `devkit rebuild [PREVIEW] [--yes] [--json]` | Plan/apply a supported live update retaining storage; `PREVIEW --recover` inspects/retries its recorded candidate |
 | `devkit restart --vm TARGET --dry-run [--json]` | Explain exact VM restart authority and blockers without restarting |

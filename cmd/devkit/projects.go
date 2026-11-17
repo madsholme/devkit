@@ -67,11 +67,17 @@ type projectsData struct {
 
 // checkoutProject exposes capabilities, never recipe commands or arbitrary config.
 func checkoutProject(tree worktree, containers []container) projectCheckout {
+	return checkoutProjectWith(tree, containers, true)
+}
+
+func checkoutProjectWith(tree worktree, containers []container, inspectGit bool) projectCheckout {
 	row := projectCheckout{Path: tree.Path, Branch: tree.Branch, Previews: []projectPreview{}}
 	if _, err := os.Stat(filepath.Join(tree.Path, ".git")); err == nil {
 		row.Git = true
-		row.worktreeInfo = worktreeState(tree.Path)
-		row.GitControls = checkoutGitControls(tree.Path)
+		if inspectGit {
+			row.worktreeInfo = worktreeState(tree.Path)
+			row.GitControls = checkoutGitControls(tree.Path)
+		}
 	}
 	cfg, err := loadConfig(tree.Path)
 	switch {
@@ -133,6 +139,26 @@ func projectsOverview() (projectsData, error) {
 		data.Warnings = append(data.Warnings, "Existing container inventory unavailable.")
 	}
 	data.Warnings = append(data.Warnings, registered.Warnings...)
+	repos := knownRepos(containers)
+	roots = append(roots, cfg.VMProjects...)
+	for _, common := range sortedKeys(repos) {
+		if len(repos[common]) > 0 {
+			roots = append(roots, repos[common][0].Path)
+		}
+	}
+	data.Projects = groupProjectRoots(roots, containers, registered, repos, projectReadProfile{git: git, trees: worktreesOf, checkout: checkoutProject, problem: func(string, string) {}})
+	return data, nil
+}
+
+type projectReadProfile struct {
+	git      func(string, ...string) (string, error)
+	trees    func(string) ([]worktree, error)
+	checkout func(worktree, []container) projectCheckout
+	problem  func(string, string)
+}
+
+func groupProjectRoots(roots []string, containers []container, registered containersData, repos map[string][]worktree, profile projectReadProfile) []projectRow {
+	data := projectsData{Projects: []projectRow{}}
 	attach := func(row projectCheckout) projectCheckout {
 		for _, c := range registered.Containers {
 			if c.Registered && c.Worktree == row.Path {
@@ -141,29 +167,29 @@ func projectsOverview() (projectsData, error) {
 		}
 		return row
 	}
-	repos := knownRepos(containers)
-	roots = append(roots, cfg.VMProjects...)
-	for _, common := range sortedKeys(repos) {
-		if len(repos[common]) > 0 {
-			roots = append(roots, repos[common][0].Path)
-		}
-	}
 	seen := map[string]bool{}
 	for _, root := range roots {
 		root = resolve(expandHome(root))
 		if info, err := os.Stat(root); err != nil || !info.IsDir() {
+			profile.problem("projects.directory", root)
 			continue
 		}
 		key := root
 		trees := []worktree{}
 		if _, err := os.Stat(filepath.Join(root, ".git")); err == nil {
-			if common, err := git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"); err == nil {
+			if common, err := profile.git(root, "rev-parse", "--path-format=absolute", "--git-common-dir"); err == nil {
 				key = common
 				if known, ok := repos[common]; ok {
 					trees = known
 				} else {
-					trees, _ = worktreesOf(common)
+					var err error
+					trees, err = profile.trees(common)
+					if err != nil {
+						profile.problem("projects.worktrees", root)
+					}
 				}
+			} else {
+				profile.problem("projects.git", root)
 			}
 		}
 		if seen[key] {
@@ -175,9 +201,9 @@ func projectsOverview() (projectsData, error) {
 			main = trees[0]
 			trees = trees[1:]
 		}
-		row := projectRow{Name: filepath.Base(main.Path), Path: main.Path, Main: attach(checkoutProject(main, containers)), Worktrees: []projectCheckout{}}
+		row := projectRow{Name: filepath.Base(main.Path), Path: main.Path, Main: attach(profile.checkout(main, containers)), Worktrees: []projectCheckout{}}
 		for _, tree := range trees {
-			row.Worktrees = append(row.Worktrees, attach(checkoutProject(tree, containers)))
+			row.Worktrees = append(row.Worktrees, attach(profile.checkout(tree, containers)))
 		}
 		data.Projects = append(data.Projects, row)
 	}
@@ -188,5 +214,5 @@ func projectsOverview() (projectsData, error) {
 		}
 		return a.Name < b.Name
 	})
-	return data, nil
+	return data.Projects
 }

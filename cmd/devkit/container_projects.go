@@ -39,6 +39,10 @@ func validateExistingCompose(root string, entries []existingCompose) error {
 // Read only explicitly discovered roots and their Git worktrees. Do not follow
 // container-supplied paths to discover recipes. Any incomplete catalog fails closed.
 func existingContainerProjects(rows []container) (map[string]containerProject, error) {
+	return existingContainerProjectsWith(rows, worktreesOf)
+}
+
+func existingContainerProjectsWith(rows []container, treesOf func(string) ([]worktree, error)) (map[string]containerProject, error) {
 	host, err := loadHostConfig()
 	if err != nil {
 		return nil, err
@@ -59,7 +63,7 @@ func existingContainerProjects(rows []container) (map[string]containerProject, e
 	for _, root := range append([]string{}, roots...) {
 		root = resolve(expandHome(root))
 		if _, err := os.Stat(filepath.Join(root, ".git")); err == nil {
-			trees, err := worktreesOf(root)
+			trees, err := treesOf(root)
 			if err != nil {
 				return nil, fail("Existing-container registration unavailable: cannot inspect Git worktrees.")
 			}

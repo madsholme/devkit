@@ -696,3 +696,19 @@ a firewall guard; public listeners fail validation.
 ID, provider, observed state, stop/start sequence and blockers. It performs no
 restart, purge, guest login or firewall change. Actual restart still requires user
 authority and fresh existing lifecycle checks. There is no `rebuild --vm` command.
+
+## CLI project and container inventory
+
+`devkit projects --json` lists configured project roots, linked Git checkouts,
+preview associations and registered containers. `devkit containers --json` lists
+all host containers by full ID with observed registration and start/stop capabilities.
+Both work outside a checkout and without the dashboard. These observations never
+authorize an action; lifecycle commands revalidate ownership and state separately.
+
+Reports use schema version 1 and omit commands, environments, raw labels, credential
+sources and Git remotes. Project paths are intentional local inventory metadata.
+`live_recipe` means a confined recipe exists, not that Docker is available or launch
+will succeed. Unavailable Docker/discovery retains available facts with
+`complete: false` and exit 1; a verified empty inventory stays complete. A 30-second
+budget bounds command probes. Exit 2 denotes invalid arguments; stdout remains one
+JSON object. Human-readable forms omit `--json`.

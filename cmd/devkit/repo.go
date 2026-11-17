@@ -160,6 +160,10 @@ var worktreesOf = func(root string) ([]worktree, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseWorktrees(out), nil
+}
+
+func parseWorktrees(out string) []worktree {
 	var trees []worktree
 	path, branch, prunable, locked := "", "", false, false
 	for _, line := range append(strings.Split(out, "\n"), "") {
@@ -181,7 +185,7 @@ var worktreesOf = func(root string) ([]worktree, error) {
 			path = ""
 		}
 	}
-	return trees, nil
+	return trees
 }
 
 func branchOf(trees []worktree, path string) (string, bool) {
