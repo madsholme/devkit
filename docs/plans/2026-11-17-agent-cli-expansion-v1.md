@@ -470,3 +470,16 @@ was verified at the implementation base `5a1aa86`; configured `main` tracking sa
 `origin`, so push explicitly to `fork` and never infer the destination from tracking.
 Confirm integrated/pushed identity before archiving only this task-created worktree.
 Final handoff records the resulting commit and cleanup state.
+
+
+## Authorized server follow-up — 2026-11-17
+
+The user authorized testing on the real Devkit server. An exact temporary `3b94a04`
+binary passed inventories/resources/history/shares, GC dry-run, two private HTTPS
+preview checks and running/stopped exact log reads. Separate workstation LAN checks
+passed trusted dashboard/application HTTPS. Running containers, VMs and the dashboard
+PID were unchanged; temporary server files were removed. See [testing](../testing.md#real-host-cli-smoke-check--2026-11-17).
+The installed server remains `5a1aa86` and both client skill catalogs are outdated
+relative to the candidate. This follow-up authorizes testing, not service replacement;
+binary deployment, skills refresh, fresh-agent discovery and away-client verification
+are still distinct operational actions. No code or implementation strategy changed.

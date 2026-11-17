@@ -396,3 +396,23 @@ assertions and fixture cleanup. Original loopback and successful bridge logs wer
 retained at `/tmp/devkit-agent-cli-runtime.log` and
 `/tmp/devkit-agent-cli-runtime-bridge.log` on the test host. Downloaded/build image
 caches remain, as documented by the runner.
+
+### Real-host CLI smoke check — 2026-11-17
+
+The user-authorized server check ran an exact `3b94a04` static binary from a temporary
+directory, without replacing the installed `5a1aa86` or restarting services. Projects,
+containers, resources, history, shares and GC dry-run reports completed successfully.
+Both selected running previews passed host-side pinned private DNS/TCP/trusted-TLS/HTTP
+checks with HTTP 200. Exact logs worked for a running preview and an existing stopped
+preview; raw log contents were neither displayed nor retained. The dashboard and an
+application also returned HTTP 200 with certificate verification from a separate LAN
+workstation using normal DNS; direct dashboard LAN resolution passed as well.
+
+Container identities/states/start times, QEMU process/start identities and dashboard
+PID were unchanged. The installed binary's doctor report was clean. The temporary
+candidate's dashboard-unit warning is expected because its executable path differs
+from the deployed service. The candidate reports both installed client skill catalogs
+as outdated. Deployment, skill refresh and fresh-model discovery remain separate;
+away/VPN-client reachability was not tested. Sanitized evidence was retained privately
+at `/tmp/devkit-server-evidence-3b94a04` on the workstation; temporary server files were
+removed after collection. No product change was needed following this smoke test.
