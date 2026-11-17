@@ -485,7 +485,6 @@ func lifecycle(action, name string) error {
 	return nil
 }
 
-// gc destroys previews whose source worktree no longer exists.
 // liveHead is the current commit of a live preview's worktree; its code is the worktree, not the start commit.
 func liveHead(labels map[string]string, treesByRepo map[string][]worktree) string {
 	repo := labels["devkit.repository"]

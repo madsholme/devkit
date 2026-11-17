@@ -85,3 +85,15 @@ func TestResourcesCLINoProcessArguments(t *testing.T) {
 		t.Fatal(string(b))
 	}
 }
+
+func TestResourceCPUParsing(t *testing.T) {
+	total, idle, err := parseCPUTimes([]byte("cpu  100 20 30 400 50 6 7 8 90 10\ncpu0 1 2 3 4\n"))
+	if err != nil || total != 621 || idle != 450 {
+		t.Fatalf("guest times were counted twice: %d %d %v", total, idle, err)
+	}
+	for _, input := range []string{"", "cpu", "cpu 1 2 3", "cpu0 1 2 3 4", "cpu 1 nope 3 4", "cpu 18446744073709551615 1 0 0"} {
+		if _, _, err := parseCPUTimes([]byte(input)); err == nil {
+			t.Fatalf("accepted invalid CPU counters %q", input)
+		}
+	}
+}

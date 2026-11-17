@@ -20,18 +20,20 @@ acceptance runner and Go test seams; Markdown skill assets. No frontend changes.
 Read it with this plan; it fixes command semantics, output limits, network policy
 and the intentionally bounded connectivity claim.
 
-**Status:** Planning complete; all implementation tasks pending. Proposed ADR:
-[0020](../adr/0020-agent-cli-observability.md). No product code or installed assets
-changed, no runtime checks executed for these proposed features.
+**Status:** All seven implementation/verification tasks are complete. Full Go checks,
+trusted-TLS tests, six-skill distribution and full Docker-bridge workflow acceptance
+pass. The loopback smoke path timed out on this host; evidence and the bounded probe
+profile are recorded below. Runtime deployment and active-client skill installation
+remain separate. [ADR 20](../adr/0020-agent-cli-observability.md) is accepted.
 
 ## Global constraints and decisions
 
 **User decisions already made:** Plan all five additions from the preceding review;
 use Superpowers; work as one agent; follow existing repository architecture and
-plan conventions; preserve work and avoid unrelated changes. This request does
-not authorize implementing the plan or changing a deployed host.
+plan conventions; preserve work and avoid unrelated changes. The subsequent user request authorizes implementation of this plan. Changing a
+deployed host remains separate.
 
-Planning defaults are specified in the design and remain reviewable. There are no
+Implementation defaults are specified in the approved design. There are no
 unresolved questions preventing an actionable plan. For implementation, reuse this
 task worktree/branch if still suitable. Integration follows repository main/push
 conventions after verifying the actual destination; do not create a PR or assume
@@ -106,30 +108,30 @@ define `logsCLI(args []string) (int, error)` and
 The options hold tail count, normalized since time and follow mode.
 
 **Acceptance Criteria:**
-- [ ] No-selector behavior stays current-live/default-web; explicit ID reaches an
+- [x] No-selector behavior stays current-live/default-web; explicit ID reaches an
   owned review or sibling-worktree preview, including stopped/exited containers.
-- [ ] Foreign/conflicting ownership, duplicate service candidates and removed
+- [x] Foreign/conflicting ownership, duplicate service candidates and removed
   containers fail before Docker logs; edited/missing recipe does not block an
   otherwise verified explicit target. Existing exec behavior is unchanged.
-- [ ] Tail/since limits, 15s/4 MiB non-follow bounds and follow cancellation match
+- [x] Tail/since limits, 15s/4 MiB non-follow bounds and follow cancellation match
   the design. Invalid input exits 2; log/process failures exit 1.
-- [ ] No start/recreate, hook, secret lookup or history write occurs.
+- [x] No start/recreate, hook, secret lookup or history write occurs.
 
 **Verify:** `go test ./cmd/devkit -run 'TestPreviewObserve|TestPreviewLogs|TestLogsRejectAnythingButAPreviewID|TestRefuseAnotherClone' -count=1` → PASS, including zero forbidden calls.
 
 **Steps:**
-- [ ] Add table cases `TestPreviewObserveOwnership`, `TestPreviewObserveAmbiguousService`,
+- [x] Add table cases `TestPreviewObserveOwnership`, `TestPreviewObserveAmbiguousService`,
   `TestPreviewObserveMissingRecipe`, `TestPreviewLogsStoppedReview`,
   `TestPreviewLogsArgumentLimits`, `TestPreviewLogsOutputLimitAndCancel` using
   `newGitRepo`, `labelled`, `swap` and `runCommand`-style seams. Pin selected full IDs,
   zero lifecycle calls, exact argument arrays, return codes and raw-log preservation.
   Include malformed/negative/excessive tail, duration/RFC3339 normalization, foreign
   clone, duplicate web, absent container and rebuild candidate ambiguity.
-- [ ] Run the focused command and observe the intended missing-command/behavior
+- [x] Run the focused command and observe the intended missing-command/behavior
   failures. Implement the resolver and bounded reader without changing `execLive`.
   Reuse existing ID validation/legacy naming; do not broaden dashboard authority by
   swapping its resolver wholesale. Revalidate the full ID immediately before logs.
-- [ ] Wire flags/help, document raw-log privacy and missing-container limits, rerun
+- [x] Wire flags/help, document raw-log privacy and missing-container limits, rerun
   the focused command and commit the coherent change as `Add exact preview logs`.
 
 ### Task 2: Project and container inventory reports
@@ -154,27 +156,27 @@ behind existing web wrappers. Maintain their old shapes; map typed checks to the
 old warnings for HTTP rather than parsing free-form warning strings for CLI codes.
 
 **Acceptance Criteria:**
-- [ ] Both commands run outside Git and without web, expose the design's allowlist,
+- [x] Both commands run outside Git and without web, expose the design's allowlist,
   preserve existing grouping/registration and sort by identity on equal names.
-- [ ] Missing Docker returns retained project facts plus incomplete evidence/exit 1;
+- [x] Missing Docker returns retained project facts plus incomplete evidence/exit 1;
   conflicting registration removes unsupported capabilities. Empty is not unavailable.
-- [ ] A 30s command budget and existing inventory caps cancel subprocesses and
+- [x] A 30s command budget and existing inventory caps cancel subprocesses and
   preserve partial evidence; no hidden hook, fetch, secret or mutation occurs.
-- [ ] Existing HTTP contracts and exact capability checks continue passing.
+- [x] Existing HTTP contracts and exact capability checks continue passing.
 
 **Verify:** `go test ./cmd/devkit -run 'TestInventoryCLI|TestProjects|TestProjectCheckout|TestContainerInventory|TestExistingContainer' -count=1` → PASS; JSON parses as one object on success, invalid invocation and collector failure.
 
 **Steps:**
-- [ ] Add `TestInventoryCLIOutsideCheckout`, `TestInventoryCLIPartialDocker`,
+- [x] Add `TestInventoryCLIOutsideCheckout`, `TestInventoryCLIPartialDocker`,
   `TestInventoryCLIConflictingRegistration`, `TestInventoryCLIStableSafeProjection`
   and `TestInventoryCLIDeadline`. Assert full IDs/grouping, `complete == false`
   on unavailable evidence, no sentinel environment/argv/error strings, no invented
   permissions, and cancellation reaching the child. Run to establish failures.
-- [ ] Implement adapters and small shared collector extraction where necessary.
+- [x] Implement adapters and small shared collector extraction where necessary.
   Propagate unavailable project-directory/Git/registration evidence rather than
   hiding existing swallowed errors in the new complete report. Keep old UI output
   structurally compatible; no broad inventory redesign or new cache.
-- [ ] Wire command/JSON-invocation handling, update docs, rerun focused tests and
+- [x] Wire command/JSON-invocation handling, update docs, rerun focused tests and
   commit as `Expose project and container inventories`.
 
 ### Task 3: One-shot resource sampling
@@ -194,25 +196,25 @@ and container samples keyed by full ID. Keep any shared parsing extraction small
 the existing dashboard loop and its output remain unchanged.
 
 **Acceptance Criteria:**
-- [ ] CPU uses two samples 250 ms apart; absent/invalid deltas remain null with a
+- [x] CPU uses two samples 250 ms apart; absent/invalid deltas remain null with a
   check. Memory/swap/disk zeros remain valid numbers, not missing values.
-- [ ] One 10s deadline bounds sampling and child output. No sampler goroutine leaks
+- [x] One 10s deadline bounds sampling and child output. No sampler goroutine leaks
   or dependency on a web process; no process command lines enter output.
-- [ ] Docker stats join exact IDs, not names; replacement/disappearance yields
+- [x] Docker stats join exact IDs, not names; replacement/disappearance yields
   unknown/omitted association with a check, never a stale owner.
-- [ ] Docker/proc failure retains other evidence and returns incomplete/exit 1.
+- [x] Docker/proc failure retains other evidence and returns incomplete/exit 1.
 
 **Verify:** `go test ./cmd/devkit -run 'TestResourcesCLI|TestResourceSample' -count=1` → PASS with deterministic clock/probe fixtures and real cancellation coverage.
 
 **Steps:**
-- [ ] Add `TestResourceSampleCPUDelta`, `TestResourcesCLIPartialMetrics`,
+- [x] Add `TestResourceSampleCPUDelta`, `TestResourcesCLIPartialMetrics`,
   `TestResourcesCLIContainerReplacement`, `TestResourcesCLIDeadline` and
   `TestResourcesCLINoProcessArguments`. Assert interval, null versus numeric zero,
   exact IDs, stable ordering and no background-loop startup. Run to show failures.
-- [ ] Extract only reusable sample/parsing pieces. Request full IDs from bounded
+- [x] Extract only reusable sample/parsing pieces. Request full IDs from bounded
   Docker stats and match the observed inventory; keep a test seam for time/probes.
   Do not call `newResources()` or return its initially empty history snapshot.
-- [ ] Wire CLI/report errors, document metric units and host filesystem scope,
+- [x] Wire CLI/report errors, document metric units and host filesystem scope,
   rerun focused tests and commit as `Add one-shot resource reports`.
 
 ### Task 4: Private preview connectivity checks
@@ -234,36 +236,36 @@ numeric HTTP status and elapsed times. Transport/DNS/trust seams are replaceable
 in tests, never exposed as insecure or arbitrary-destination CLI flags.
 
 **Acceptance Criteria:**
-- [ ] Timeout parsing/defaults, primary-route scope and all result classifications
+- [x] Timeout parsing/defaults, primary-route scope and all result classifications
   match the design. Output always declares host vantage and no application proof.
-- [ ] Ownership/observed router evidence is required; edited recipes, foreign
+- [x] Ownership/observed router evidence is required; edited recipes, foreign
   labels and unsupported router expressions cannot invent a valid route.
-- [ ] All DNS answers are validated before dial; exact private listener matching,
+- [x] All DNS answers are validated before dial; exact private listener matching,
   DNS pinning, certificate verification, proxy disabling and no redirects hold.
-- [ ] Real trusted-TLS fixture succeeds; wrong-host/untrusted certificates, foreign
+- [x] Real trusted-TLS fixture succeeds; wrong-host/untrusted certificates, foreign
   addresses and a redirect target never receive unauthorized application requests.
-- [ ] No mutation, secrets, hooks or health-command execution; partial rebuild
+- [x] No mutation, secrets, hooks or health-command execution; partial rebuild
   records remain intact and remote-client reachability remains unverified.
 
 **Verify:** `go test ./cmd/devkit -run 'TestPreviewCheck' -count=1` → PASS, including local real TCP/TLS/HTTP exchanges and zero forbidden dials/mutations.
 
 **Steps:**
-- [ ] Write `TestPreviewCheckPrimaryRouteAndHealth`, `TestPreviewCheckSavedObservedDrift`,
+- [x] Write `TestPreviewCheckPrimaryRouteAndHealth`, `TestPreviewCheckSavedObservedDrift`,
   `TestPreviewCheckDNSPinningAndPrivatePeers`, `TestPreviewCheckTLSVerification`,
   `TestPreviewCheckHTTPClassification`, `TestPreviewCheckTotalDeadline` and
   `TestPreviewCheckRecoveryReadOnly`. Table-test the design's entire classification
   table, missing health, non-web one-shot ambiguity, multiple addresses and the
   eight-address bound. Assert bodies/headers/errors containing sentinels are absent.
-- [ ] Build an in-process HTTPS fixture with a generated test CA and matching SAN;
+- [x] Build an in-process HTTPS fixture with a generated test CA and matching SAN;
   pass its trust and ephemeral listener through test-only dependencies while running
   the production probe path. Assert 2xx passes and wrong SAN/untrusted CA fail;
   a second redirect server gets zero requests, proxy traps get zero connections,
   and a changed DNS answer is never used after validation. Run to show failures.
-- [ ] Implement bounded observed-route parsing and stage-specific reports using
+- [x] Implement bounded observed-route parsing and stage-specific reports using
   task 1. Pin approved dials, preserve SNI, disable redirects/proxies, bound headers
   and close unread bodies. Do not reuse doctor's diagnostic TLS mode as an insecure
   transport or mistake existing acceptance `curl -k` for TLS verification.
-- [ ] Wire CLI/error envelope, document host-only scope and warning semantics,
+- [x] Wire CLI/error envelope, document host-only scope and warning semantics,
   rerun focused tests and commit as `Check private preview connectivity`.
 
 ### Task 5: Structured events, shares and GC results
@@ -286,20 +288,20 @@ The existing `gc(apply bool) error` may stay as a compatibility wrapper for call
 Do not build a second mutation implementation for JSON.
 
 **Acceptance Criteria:**
-- [ ] History ordering/default/filter/rotation remain compatible; JSON excludes
+- [x] History ordering/default/filter/rotation remain compatible; JSON excludes
   free-form detail and normalizes actors. Shares remain local observations with UTC
   expiry/null and warnings, no cloud queries or raw backend identifiers.
-- [ ] GC dry-run is side-effect free and matches current selection, including
+- [x] GC dry-run is side-effect free and matches current selection, including
   legacy branch mapping and unknown sources; no new reclaimability guarantees.
-- [ ] Apply revalidates under existing locks/guards. A later failure reports earlier
+- [x] Apply revalidates under existing locks/guards. A later failure reports earlier
   destroyed targets and remaining not-attempted targets; no replay or fake rollback.
-- [ ] Unshare warnings, partial destructive failures and history events remain
+- [x] Unshare warnings, partial destructive failures and history events remain
   accurate. Both successful and failed JSON applications emit exactly one object.
 
 **Verify:** `go test ./cmd/devkit -run 'TestOperationalReports|TestHistory|TestGC|TestPreviewLock|TestPreviewRebuildRecovery|TestReap|TestShare' -count=1` → PASS; old lifecycle/lock/history behavior remains covered.
 
 **Steps:**
-- [ ] Add `TestOperationalReportsHistoryProjection`, `TestOperationalReportsShares`,
+- [x] Add `TestOperationalReportsHistoryProjection`, `TestOperationalReportsShares`,
   `TestOperationalReportsGCParity`, `TestOperationalReportsGCPartialFailure`,
   `TestOperationalReportsGCRevalidation` and `TestOperationalReportsJSONFailures`.
   For three sorted candidates, make the second destroy fail: assert outcomes equal
@@ -307,11 +309,11 @@ Do not build a second mutation implementation for JSON.
   no first-target replay and preserved third-target files. Test unshare warning plus
   subsequent success, owner/source drift, recovery block, lock conflict and unsafe
   sentinel errors; run the focused command to establish failures.
-- [ ] Add allowlisted projections and extract selection/application minimally.
+- [x] Add allowlisted projections and extract selection/application minimally.
   Separate presentation from mutation, route child output away from JSON stdout,
   and report only safe operation summaries. Preserve `noted`/`happened` semantics
   without recording failures twice. A failed target may already have side effects.
-- [ ] Wire new JSON modes and usage errors, update docs, rerun focused regression
+- [x] Wire new JSON modes and usage errors, update docs, rerun focused regression
   tests and commit as `Add structured operational reports`.
 
 ### Task 6: Host skill and workflow integration
@@ -336,34 +338,34 @@ entry is `devkit-host`, version `1`; bump only changed existing assets. Preserve
 the single-file installer and existing Go standard-library dependency boundary.
 
 **Acceptance Criteria:**
-- [ ] Fresh install/status/repair/setup/doctor include all six skills for both
+- [x] Fresh install/status/repair/setup/doctor include all six skills for both
   clients, and all six managed blocks/templates are consistent.
-- [ ] Five-to-six upgrades preserve edited assets/blocks, modes, unrelated content,
+- [x] Five-to-six upgrades preserve edited assets/blocks, modes, unrelated content,
   selected-agent isolation and supported `CLAUDE.md -> AGENTS.md` alias behavior.
-- [ ] Host skill covers the design's operator workflow and matching-release docs;
+- [x] Host skill covers the design's operator workflow and matching-release docs;
   app secret use does not trigger vault/host administration.
-- [ ] Existing workflows use exact logs/inventories/check/reports without claiming
+- [x] Existing workflows use exact logs/inventories/check/reports without claiming
   raw-log secrecy, remote-client proof, extra action authority or recovery approval.
-- [ ] Scenario definitions distinguish installed-file checks from actual agent
+- [x] Scenario definitions distinguish installed-file checks from actual agent
   behavior; no model session is launched without user authorization.
 
 **Verify:** `go test ./cmd/devkit -run 'TestAgent|TestManagedAgentSkills|TestWorkflowSkills|TestProjectTemplates|TestProjectGuidance|TestHostSkill' -count=1`; `go build -o bin/devkit ./cmd/devkit`; `python3 tests/agent_secrets_acceptance.py --devkit bin/devkit` → PASS; the distribution runner writes only to its disposable directories.
 
 **Steps:**
-- [ ] Add `TestHostSkillCatalogUpgrade`, `TestHostSkillSelectedAgentAndEdits` and
+- [x] Add `TestHostSkillCatalogUpgrade`, `TestHostSkillSelectedAgentAndEdits` and
   `TestHostSkillTemplatesAndDoctor` using existing installer fixtures; establish
   missing-sixth-skill failures. Extend the existing acceptance runner's asset tuple
   to include `devkit-host`; do not invent a new installer runner.
-- [ ] Write the host skill, add its catalog/block and route explicit operator work
+- [x] Write the host skill, add its catalog/block and route explicit operator work
   from the secrets/troubleshooting skills. Update preview/project examples and
   changed asset versions; regenerate managed template block hashes through existing
   machinery instead of hand-inventing them. Update installation counts everywhere
   current behavior is described, preserving historical evidence about five skills.
-- [ ] Add scenarios: crashed review logs; Docker-down inventory; foreign-DNS refusal;
+- [x] Add scenarios: crashed review logs; Docker-down inventory; foreign-DNS refusal;
   HTTP redirect warning; GC second-target failure; sealed vault operator handoff;
   backup checksum versus rehearsal; interrupted restore with token revocation and
   retained data. Define expected decisions/tool calls and forbidden mutations.
-- [ ] Run focused tests, existing single-file skill validator where available and
+- [x] Run focused tests, existing single-file skill validator where available and
   disposable distribution acceptance; record live Codex/Claude scenarios as unrun
   unless separately authorized. Commit as `Add host maintenance guidance`.
 
@@ -378,15 +380,15 @@ actual behavior and hand off an honest implementation/deployment state.
 Reconcile affected README/command/skill docs from tasks 1–6.
 
 **Acceptance Criteria:**
-- [ ] Existing runner demonstrates distinct live/review log markers, retrieval
+- [x] Existing runner demonstrates distinct live/review log markers, retrieval
   after stop and no container/data mutation from diagnostics.
-- [ ] Disposable orphan GC JSON reports exact targets/outcomes; surviving preview
+- [x] Disposable orphan GC JSON reports exact targets/outcomes; surviving preview
   volume/data sentinel remains unchanged. Foreign clone and unknown source stay safe.
-- [ ] Trusted-TLS local fixture proves production network validation; existing
+- [x] Trusted-TLS local fixture proves production network validation; existing
   insecure smoke curl is not cited as certificate evidence.
-- [ ] Go tests/vet/build, formatting/diff checks and disposable distribution/runtime
+- [x] Go tests/vet/build, formatting/diff checks and disposable distribution/runtime
   checks pass, or concrete blockers remain explicitly unfinished.
-- [ ] Docs/spec/task status reflect delivery; no deployment or fresh-model evidence
+- [x] Docs/spec/task status reflect delivery; no deployment or fresh-model evidence
   is claimed without execution. Worktree cleanup waits for verified integration.
 
 **Verify:** `go test ./...`; `go vet ./...`; `gofmt -l cmd/devkit`; `git diff --check`;
@@ -396,19 +398,19 @@ environment, `DEVKIT_RUNTIME_TEST=1 python3 tests/runtime_acceptance.py` and
 checks pass, formatting/diff checks have no output, fixtures clean up their resources.
 
 **Steps:**
-- [ ] Extend the existing runtime runner at its live/review/stopped-preview points;
+- [x] Extend the existing runtime runner at its live/review/stopped-preview points;
   use unique test-owned resource IDs, temporary config/state and existing teardown.
   Add bounded log assertions before destruction, and structured GC assertions with
   a surviving data sentinel. Do not add real Cloudflare, vault or VM dependencies.
-- [ ] Run an early representative log/check fixture as soon as task 4 is ready;
+- [x] Run an early representative log/check fixture as soon as task 4 is ready;
   retain valid evidence for unchanged paths. At this task run combined acceptance
   and broad Go checks once. Failures after two repair rounds require reassessment
   of the shared contract, not another narrow harness patch.
-- [ ] Review the diff against the design and all five review-focus risks as one
+- [x] Review the diff against the design and all five review-focus risks as one
   agent. Reconcile help/examples, JSON shapes, limits, installed asset counts and
   limitations; record actual commands/results and unrun checks. No frontend build
   is needed if frontend/web assets remain untouched.
-- [ ] Commit the final tests/docs as `Verify agent CLI workflows`. At authorized
+- [x] Commit the final tests/docs as `Verify agent CLI workflows`. At authorized
   implementation delivery, report branch/worktree, commits and verification;
   integrate/push according to the verified project remote convention. Remove only
   task-created clean worktrees/fully merged branches after confirmed integration.
@@ -421,8 +423,50 @@ connectivity → 4; structured reports → 5. Task 7 verifies their combined out
 The planned test names are new requirements, not evidence that those tests exist
 or pass. Existing useful seams and regression tests are named above.
 
-Planning worktree: `/home/mads/.codex/worktrees/agent-cli-expansion/devkit`.
-Branch: `codex/agent-cli-expansion`. Start at task 1 after implementation is
-authorized. No implementation task has been run. Preserve this design, plan,
-proposed ADR and task metadata together when committing/integrating the planning
-artifacts; no old plan needs archiving for this additive workstream.
+Task worktree: `/home/mads/.codex/worktrees/agent-cli-expansion/devkit`.
+Branch: `codex/agent-cli-expansion`; base `5a1aa86`. Tasks 1–6 are committed in
+`b5bdd2c`, `b760b65`, `f25dfd4`, `5ae7bc2`, `48ba71c` and `e0d4a40`.
+
+The final review retained shared GC selection/execution, ownership/registration
+checks, private pinned TLS probes and single-file skill distribution. It corrected
+the reused CPU parser's double-counting of guest time and malformed/overflow input,
+and added actual nested-root registration-conflict coverage. These are focused
+contract corrections, not a new implementation strategy or plan version. CLI project
+`live_recipe` means declared recipe presence, not launch authorization; Git
+synchronization details are intentionally omitted from the read-only projection.
+
+Verified: full `go test ./...`, `go vet ./...`, binary build, formatting/diff checks,
+trusted local TCP/TLS/HTTP tests, all changed skill validators and disposable
+`tests/agent_secrets_acceptance.py`. Go commands use
+`GOCACHE=/tmp/devkit-agent-cli-go-cache` because the default cache is read-only.
+No frontend build is needed: no frontend/web assets changed.
+
+The full runtime command
+`DEVKIT_RUNTIME_TEST=1 DEVKIT_PROXY_PROBE=bridge python3 tests/runtime_acceptance.py`
+passed, including exact live/review log isolation, stopped-container log retrieval,
+GC JSON selection/application and surviving container/volume/SQLite identities.
+Existing rebuild, build-failure, interrupted recovery and stopped-staging checks also
+passed. All fixture containers/volumes were removed; image caches remain.
+
+The initial daemon-access failure was transient. Once Docker was reachable outside
+the sandbox, the default smoke probe connected to its published loopback port but
+stalled during TLS. The same proxy/Host route returned HTTP 200 from its fixture
+bridge. The original run was interrupted and cleaned up, then the same runner was
+rerun with an explicit bridge probe profile and bounded request/connect timeouts.
+This bounded platform profile does not change product networking, lifecycle tests,
+certificate verification requirements or the design strategy. Published-loopback and
+remote LAN/VPN reachability are not established by bridge success. The real local
+trusted-TLS Go fixture provides certificate/hostname validation evidence; neither
+insecure runtime smoke profile does. Logs remain at
+`/tmp/devkit-agent-cli-runtime.log` and `/tmp/devkit-agent-cli-runtime-bridge.log`.
+
+Fresh Codex/Claude model scenarios remain unrun under the single-agent instruction;
+installed-file distribution is separate evidence. No deployed binary/service or
+active-client skill assets were changed. The useful next operational step is an
+explicit binary/guidance rollout, followed by actual client route verification.
+
+Integration follows the repository's main/push convention. The user's `fork` main
+was verified at the implementation base `5a1aa86`; configured `main` tracking says
+`origin`, so push explicitly to `fork` and never infer the destination from tracking.
+Confirm integrated/pushed identity before archiving only this task-created worktree.
+Final handoff records the resulting commit and cleanup state.

@@ -1,6 +1,6 @@
 # 20. Local CLI observations and operator guidance
 
-Status: proposed, 2026-11-17. Extends [ADR 18](0018-agent-operation-reports.md)
+Status: accepted for implementation, 2026-11-17. Extends [ADR 18](0018-agent-operation-reports.md)
 and preserves [ADR 19](0019-tested-vault-restore.md).
 
 The dashboard has project/container/resource facts that CLI agents cannot query
@@ -33,3 +33,7 @@ by useful diagnostics during service outages and safer exact-target operations.
 
 Behavior and limits are specified in the [design](../plans/2026-11-17-agent-cli-expansion-design-v1.md)
 and delivered through the [implementation plan](../plans/2026-11-17-agent-cli-expansion-v1.md).
+
+Implementation and Go/TLS/distribution/Docker-bridge workflow acceptance are
+complete. The implementation plan records evidence and the host-specific published
+loopback limitation separately from this architectural decision.

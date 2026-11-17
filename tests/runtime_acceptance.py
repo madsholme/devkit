@@ -37,6 +37,15 @@ def request(container, method="GET"):
     return run("docker", "exec", container["Id"], "python", "-c", code, capture=True)
 
 
+def log_marker(container, marker):
+    code = "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/" + marker + "').read()"
+    run("docker", "exec", container["Id"], "python", "-c", code, capture=True)
+
+
+def exact_logs(root, name):
+    return run(CLI, "logs", "--preview", name, "--tail", "100", "--since", "10m", cwd=root, capture=True)
+
+
 def rebuild_checks(tmp, project, preflight_only=False):
     root = Path(tmp) / "rebuild"
     shutil.copytree(KIT / "project-template", root)
@@ -134,6 +143,9 @@ def rebuild_checks(tmp, project, preflight_only=False):
 def main():
     if os.environ.get("DEVKIT_RUNTIME_TEST") != "1":
         raise SystemExit("Set DEVKIT_RUNTIME_TEST=1 to create temporary test containers.")
+    proxy_probe = os.environ.get("DEVKIT_PROXY_PROBE", "loopback")
+    if proxy_probe not in ("loopback", "bridge"):
+        raise SystemExit("DEVKIT_PROXY_PROBE must be loopback or bridge.")
     project = "smoke-" + uuid.uuid4().hex[:8]
     proxy = "devkit-smoke-edge-" + project
     network_exists = subprocess.run(["docker", "network", "inspect", "devkit-proxy"],
@@ -197,7 +209,25 @@ def main():
             assert "Agent edits after review build" in request(a)
             assert "First live task" in request(review)
             assert "<strong>1</strong>" in request(review, "POST")
-            run(CLI, "stop", labels["devkit.preview"], cwd=root)
+            live_marker, review_marker = "live-log-" + project, "review-log-" + project
+            log_marker(a, live_marker)
+            log_marker(review, review_marker)
+            live_id = a["Config"]["Labels"]["devkit.preview"]
+            review_id = labels["devkit.preview"]
+            live_logs, review_logs = exact_logs(root, live_id), exact_logs(root, review_id)
+            assert live_marker in live_logs and review_marker not in live_logs
+            assert review_marker in review_logs and live_marker not in review_logs
+            assert web(project, "try/a")["Id"] == a["Id"]
+            assert web(project, mode="review")["Id"] == review["Id"]
+            assert "<strong>1</strong>" in request(a) and "<strong>1</strong>" in request(review)
+            run(CLI, "stop", review_id, cwd=root)
+            stopped = web(project, mode="review")
+            assert not stopped["State"]["Running"]
+            assert review_marker in exact_logs(root, review_id)
+            still_stopped = web(project, mode="review")
+            assert not still_stopped["State"]["Running"] and still_stopped["Id"] == stopped["Id"]
+            assert still_stopped["Mounts"] == stopped["Mounts"]
+            print("PASS: exact live/review log isolation and retained stopped logs without lifecycle/data changes", flush=True)
             run(CLI, "start", labels["devkit.preview"], cwd=root)
             review = web(project, mode="review")
             assert review["Image"] == image_id
@@ -210,15 +240,48 @@ def main():
             address = run("docker", "port", proxy, "443/tcp", capture=True).strip()
             port = address.rsplit(":", 1)[1]
             host = labels["devkit.url"].removeprefix("https://")
+            probe = ["curl", "-ksS", "--connect-timeout", "3", "--max-time", "5", "--noproxy", "*", "--resolve",
+                     f"{host}:{port}:127.0.0.1", f"https://{host}:{port}/"]
+            if proxy_probe == "bridge":
+                # Same proxy/Host route from the fixture network on hosts where
+                # Docker's loopback published-port path is unavailable. This
+                # smoke check deliberately does not validate certificates.
+                code = ("import http.client,ssl; "
+                        f"c=http.client.HTTPSConnection({proxy!r},443,timeout=5,context=ssl._create_unverified_context()); "
+                        f"c.request('GET','/',headers={{'Host':{host!r}}}); "
+                        "r=c.getresponse(); print(r.read().decode()); c.close()")
+                probe = ["docker", "exec", review["Id"], "python", "-c", code]
             for attempt in range(30):
-                response = subprocess.run(["curl", "-ksS", "--noproxy", "*", "--resolve",
-                    f"{host}:{port}:127.0.0.1", f"https://{host}:{port}/"], text=True, capture_output=True)
+                try:
+                    response = subprocess.run(probe, text=True, capture_output=True, timeout=10)
+                except subprocess.TimeoutExpired:
+                    continue
                 if "First live task" in response.stdout:
                     break
                 time.sleep(1)
             else:
                 raise AssertionError("Traefik did not route to the review app")
-            print("PASS: real Traefik hostname routing over test TLS (not ACME)", flush=True)
+            print(f"PASS: real Traefik hostname routing over test TLS via {proxy_probe} (not certificate verification/ACME)", flush=True)
+            # Only the second disposable checkout is orphaned; both surviving
+            # previews retain their exact containers, volumes and SQLite sentinel.
+            orphan_id = b["Config"]["Labels"]["devkit.preview"]
+            run("git", "worktree", "remove", "--force", paths[1], cwd=root)
+            before = {c["Id"] for c in containers(project)}
+            gc_plan = json.loads(run(CLI, "gc", "--json", cwd=root, capture=True))
+            assert gc_plan["complete"] and not gc_plan["data"]["apply"]
+            targets = {t["id"]: t["outcome"] for t in gc_plan["data"]["targets"]}
+            assert targets == {live_id: "kept", review_id: "kept", orphan_id: "planned"}, targets
+            assert {c["Id"] for c in containers(project)} == before
+            gc_applied = json.loads(run(CLI, "gc", "--yes", "--json", cwd=root, capture=True))
+            assert gc_applied["complete"] and gc_applied["data"]["apply"]
+            targets = {t["id"]: t["outcome"] for t in gc_applied["data"]["targets"]}
+            assert targets == {live_id: "kept", review_id: "kept", orphan_id: "destroyed"}, targets
+            for prior in (a, review):
+                after = next(c for c in containers(project) if c["Id"] == prior["Id"])
+                assert after["Mounts"] == prior["Mounts"]
+                assert "<strong>1</strong>" in request(after)
+            assert b["Id"] not in {c["Id"] for c in containers(project)}
+            print("PASS: GC JSON exact orphan outcome; surviving containers, volumes and data retained", flush=True)
             rebuild_checks(tmp, project + "-rebuild")
         finally:
             subprocess.run(["docker", "rm", "-f", proxy], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

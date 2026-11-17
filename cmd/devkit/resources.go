@@ -86,13 +86,30 @@ func cpuTimes() (total, idle uint64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
+	return parseCPUTimes(data)
+}
+
+func parseCPUTimes(data []byte) (total, idle uint64, err error) {
 	line, _, _ := strings.Cut(string(data), "\n")
-	fields := strings.Fields(line)[1:]
-	for i, f := range fields {
-		v, _ := strconv.ParseUint(f, 10, 64)
-		total += v
-		if i == 3 || i == 4 { // idle + iowait
-			idle += v
+	fields := strings.Fields(line)
+	if len(fields) < 5 || fields[0] != "cpu" {
+		return 0, 0, fail("CPU counters unavailable.")
+	}
+	// guest and guest_nice are already included in user and nice respectively.
+	for i, field := range fields[1:] {
+		value, e := strconv.ParseUint(field, 10, 64)
+		if e != nil {
+			return 0, 0, fail("Invalid CPU counter.")
+		}
+		if i >= 8 {
+			continue
+		}
+		if value > ^uint64(0)-total {
+			return 0, 0, fail("CPU counters overflow.")
+		}
+		total += value
+		if i == 3 || i == 4 {
+			idle += value
 		}
 	}
 	return total, idle, nil

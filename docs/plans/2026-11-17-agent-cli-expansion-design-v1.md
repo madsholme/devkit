@@ -1,9 +1,9 @@
 # Agent CLI expansion design — v1
 
-Status: proposed design for the requested five additions, 2026-11-17.
-Implementation is not started. The user requested a plan covering all five gaps
-identified in the CLI/skill review; the detailed defaults below are planning
-decisions, not previously approved implementation requirements.
+Status: approved through the user's implementation request, 2026-11-17.
+All five additions are implemented. Go/TLS/distribution checks and combined Docker
+acceptance through the fixture bridge pass. The published-loopback smoke path timed
+out on this host; see the implementation plan for evidence and scope.
 
 ## Purpose and relationship to existing work
 
@@ -18,7 +18,7 @@ This is a new additive workstream. It does not supersede the completed
 [vault restore v1](2026-11-16-vault-restore-v1.md). Their behavior, acceptance
 requirements and evidence remain intact. The implementation plan is
 [agent CLI expansion v1](2026-11-17-agent-cli-expansion-v1.md); architecture is
-recorded in proposed [ADR 20](../adr/0020-agent-cli-observability.md).
+recorded in accepted [ADR 20](../adr/0020-agent-cli-observability.md).
 
 ## Approach
 
@@ -35,11 +35,11 @@ Alternatives considered:
   decisions to each agent and would not supply missing runtime facts.
 - Direct CLI adapters reuse the working backend while retaining offline/local
   access and explicit machine-readable failure states. This is the selected
-  planning approach. No generic provider framework or new dependency is needed.
+  implementation approach. No generic provider framework or new dependency is needed.
 
 ## Command contract
 
-| Addition | Proposed interface | Scope |
+| Addition | Interface | Scope |
 |---|---|---|
 | Exact logs | `devkit logs [--preview ID] [-s SERVICE] [--tail N] [--since TIME] [-f]` | Managed live/review previews belonging to the current Git common directory. |
 | Project inventory | `devkit projects [--json]` | Existing host project discovery and linked checkout grouping. |

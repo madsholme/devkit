@@ -36,7 +36,7 @@ func TestInventoryCLIPartialDocker(t *testing.T) {
 		t.Fatal(string(b))
 	}
 }
-func TestInventoryCLIConflictingRegistration(t *testing.T) {
+func TestInventoryCLIIncompleteRegistration(t *testing.T) {
 	parent := t.TempDir()
 	projectHost(t, parent)
 	for _, name := range []string{"one", "two"} {
@@ -97,5 +97,22 @@ func TestInventoryCLIChildDeadline(t *testing.T) {
 	_, err := observationCommand(ctx, "sh", "-c", "exec sleep 20")
 	if err == nil || time.Since(started) > time.Second {
 		t.Fatal(err, time.Since(started))
+	}
+}
+
+func TestInventoryCLIConflictingRegistration(t *testing.T) {
+	root, c := registeredContainerFixture(t)
+	nested := filepath.Join(root, "runtime")
+	if err := os.WriteFile(filepath.Join(nested, "devkit.json"), []byte(`{"project":"other","existing_compose":[{"project":"restored-app","working_dir":"."}]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeConfigFile(map[string]any{"projects_dir": filepath.Dir(root), "vm_projects": []string{nested}}); err != nil {
+		t.Fatal(err)
+	}
+	swap(t, &observeContainers, func(context.Context) ([]container, error) { return []container{*c}, nil })
+	r := containersReport(context.Background())
+	b, _ := json.Marshal(r)
+	if r.Complete || strings.Contains(string(b), `"registered":true`) || strings.Contains(string(b), `"start"`) {
+		t.Fatal(string(b))
 	}
 }

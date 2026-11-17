@@ -361,3 +361,38 @@ Wrong-host and untrusted certificates fail; foreign DNS destinations, redirects 
 environment proxies cannot redirect the probe. Test-only transport/trust seams do
 not add production overrides. The existing runtime smoke test's `curl -k` is not
 certificate verification evidence.
+
+### CLI expansion acceptance
+
+The full Docker runner also emits distinct live/review access-log markers, reads
+an exact retained stopped review container without starting it, then dry-runs and
+applies JSON GC to one disposable orphan. It asserts exact target outcomes and
+unchanged surviving container identities, mounts and SQLite counters. Run the full
+profile (without either rebuild-only selector) to exercise these assertions.
+
+On 2026-11-17 the Go suite, vet, build, trusted-TLS fixture, six-skill validation and
+disposable Codex/Claude asset acceptance passed. Final review corrected CPU accounting
+so guest counters are not counted twice and malformed counters fail safely.
+The first Docker attempt could not reach the daemon; after it became accessible
+outside the sandbox, exact log checks passed. The existing loopback proxy probe then
+stalled during TLS. A bounded probe confirmed TCP connection but TLS timeout, while
+the same test proxy returned the expected HTTP 200 through the fixture Docker bridge.
+The interrupted run cleaned up its resources; its original evidence was retained.
+
+The runner now bounds both connection and request time. Its default remains
+`DEVKIT_PROXY_PROBE=loopback`; use `DEVKIT_PROXY_PROBE=bridge` explicitly on hosts
+where Docker published-loopback traffic is unavailable. This changes only the smoke
+probe location, keeping the same proxy, Host route, app and lifecycle/data checks.
+Neither smoke mode is certificate verification evidence; the trusted-TLS Go fixture
+above provides that. Bridge success does not establish published-loopback or remote
+LAN/VPN reachability. No host networking/firewall changes are made by the runner.
+
+No deployed services or installed client skills were changed; fresh model-session
+scenarios were not run under the single-agent instruction.
+
+The full `DEVKIT_RUNTIME_TEST=1 DEVKIT_PROXY_PROBE=bridge python3
+tests/runtime_acceptance.py` run passed on 2026-11-17, including all log/GC/rebuild
+assertions and fixture cleanup. Original loopback and successful bridge logs were
+retained at `/tmp/devkit-agent-cli-runtime.log` and
+`/tmp/devkit-agent-cli-runtime-bridge.log` on the test host. Downloaded/build image
+caches remain, as documented by the runner.
