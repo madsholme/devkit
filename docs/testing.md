@@ -352,3 +352,12 @@ The read-only scenarios in `tests/agent_workflow_scenarios.txt` also cover opera
 reports and recovery decisions. Fresh model-session evaluation is separate from
 unit/distribution checks: run it only when authorized and the client is available.
 Claude access is currently unavailable; do not report its behavioral scenarios as run.
+
+### CLI connectivity fixtures
+
+`go test ./cmd/devkit -run TestPreviewCheck -count=1` exercises the real TCP/TLS/HTTP
+probe against a local HTTPS test server with an explicitly trusted test certificate.
+Wrong-host and untrusted certificates fail; foreign DNS destinations, redirects and
+environment proxies cannot redirect the probe. Test-only transport/trust seams do
+not add production overrides. The existing runtime smoke test's `curl -k` is not
+certificate verification evidence.

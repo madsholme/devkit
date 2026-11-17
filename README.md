@@ -169,6 +169,7 @@ API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
 | `devkit up` | Alias for `devkit live` |
 | `devkit up/start/stop/restart --vm TARGET` | Control a configured VM through its launcher or libvirt; retain disks |
 | `devkit project validate [--runtime all\|containers\|vms \| --vm TARGET] [--json]` | Read-only recipe and configured component validation |
+| `devkit check [PREVIEW] [--timeout DURATION] [--json]` | Check the primary private HTTPS route from this host, without repairs |
 | `devkit resources [--json]` | One-shot host/container usage, independent of the web sampler |
 | `devkit projects [--json]` / `devkit containers [--json]` | Local project/checkouts and host container inventory; no dashboard required |
 | `devkit context [--json]` | Current checkout identity, saved previews and observed resources |

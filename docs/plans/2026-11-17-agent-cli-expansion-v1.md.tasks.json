@@ -30,7 +30,7 @@
     {
       "id": 4,
       "subject": "Task 4: Private preview connectivity checks",
-      "status": "in_progress",
+      "status": "completed",
       "blockedBy": [
         1
       ],
@@ -39,7 +39,7 @@
     {
       "id": 5,
       "subject": "Task 5: Structured events, shares and GC results",
-      "status": "pending",
+      "status": "in_progress",
       "blockedBy": [
         1,
         2,

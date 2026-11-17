@@ -139,3 +139,21 @@ and 15 seconds; truncation/failure returns nonzero. Explicit `-f` streams until
 cancelled. Logs are raw application output and may contain credentials: inspect
 before sharing, and never treat them as sanitized report metadata. No container is
 started or recreated, and `exec` remains restricted to the live preview.
+
+## Check a private preview route
+
+`devkit check PREVIEW --json` observes the exact owned preview's services and primary
+private HTTPS route from this host. Without an ID it selects the current live
+preview. It validates the observed web router, resolves DNS once, verifies that
+every destination is a configured private local proxy listener, and probes TCP,
+trusted TLS and HTTP without credentials, redirects or environment HTTP proxies.
+The default total timeout is 15s; `--timeout` accepts 1s through 60s. At most eight
+DNS addresses are accepted. No service or recovery record is changed.
+
+Reports identify `vantage: host`, `scope: primary-route` and
+`application_verified: false`. HTTP 2xx passes; redirects and 401/403 warn that
+the authentication/redirect flow is untested; other 4xx/5xx fail. Missing health
+checks warn rather than implying application health. Stopped/paused web services
+fail and skip network probes. Additional paths/subdomains and remote LAN/VPN client
+access are not checked. Missing or conflicting identity, router, listener or DNS
+evidence fails closed. Response bodies, headers and raw errors are omitted.
