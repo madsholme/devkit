@@ -124,3 +124,18 @@ appropriate backup before choosing forward repair or rollback compatibility. Onl
 after establishing a consistent saved/runtime state and obtaining authority for the
 chosen recovery may the operator archive/remove that exact operation record.
 Removing a record is not itself a repair, and `destroy` is not a recovery shortcut.
+
+## Exact preview logs
+
+`devkit logs` selects this checkout's live web container, including a retained
+stopped container. Use `devkit logs --preview ID -s SERVICE --tail 200 --since 1h`
+for an exact live or review preview in the same Git repository. Foreign clones and
+ambiguous service replicas are rejected; removed containers cannot supply logs.
+Explicit preview selection uses observed metadata even if the recipe has changed.
+
+Tail accepts 1–10000 lines (default 200). Since accepts a positive duration up to
+720h or a past RFC3339 timestamp with a zone. Non-follow output is capped at 4 MiB
+and 15 seconds; truncation/failure returns nonzero. Explicit `-f` streams until
+cancelled. Logs are raw application output and may contain credentials: inspect
+before sharing, and never treat them as sanitized report metadata. No container is
+started or recreated, and `exec` remains restricted to the live preview.

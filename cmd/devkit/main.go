@@ -32,8 +32,8 @@ commands:
   publish [commit]     publish an existing reviewed image through the project publish hook
   exec [-s SERVICE] <command...>
                        run a command in this worktree's live web container (or SERVICE's)
-  logs [-s SERVICE] [-f]
-                       show this worktree's live web log, or SERVICE's (-f, --follow to follow it)
+  logs [--preview ID] [-s SERVICE] [--tail N] [--since TIME] [-f]
+                       read an owned live/review service log, including stopped containers
   vms [--json]          list QEMU/libvirt VMs, including stopped managed guests
   start --container NAME_OR_FULL_ID
                        start one explicitly registered existing container
@@ -356,15 +356,7 @@ func dispatchCommand(args []string) (int, error) {
 		}
 		return execLive(service, rest)
 	case "logs":
-		set := flags(command)
-		follow := set.Bool("follow", false, "")
-		set.BoolVar(follow, "f", false, "")
-		service := set.String("service", "", "")
-		set.StringVar(service, "s", "", "")
-		if err := parse(set, rest); err != nil {
-			return 2, err
-		}
-		return 0, logs(*service, *follow)
+		return logsCLI(rest)
 	case "ls":
 		set := flags(command)
 		asJSON := set.Bool("json", false, "")

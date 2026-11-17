@@ -728,23 +728,6 @@ func execLive(service string, command []string) (int, error) {
 	return 0, nil
 }
 
-func logs(service string, follow bool) error {
-	root, _, err := repository()
-	if err != nil {
-		return err
-	}
-	id, err := liveService(root, service)
-	if err != nil {
-		return err
-	}
-	args := []string{"docker", "logs", "--tail", "200"}
-	if follow {
-		args = append(args, "--follow")
-	}
-	_, err = runCommand(append(args, id), runOpts{})
-	return err
-}
-
 // validateComposeStructure is pure; launch and inspection share ownership constraints.
 func validateComposeStructure(result map[string]any, cfg projectConfig, mode, preview string) error {
 	services := object(result, "services")

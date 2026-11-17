@@ -175,7 +175,7 @@ API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
 | `devkit live` | Start/resume current workspace's live preview |
 | `devkit review HEAD` | Clean checkout, checks, image build, isolated review runtime |
 | `devkit exec [-s service] <cmd>` | Run a command in this worktree's live web container (or another service's), as your user |
-| `devkit logs [-s service] [-f]` | Show (or follow) this worktree's live web log (or another service's) |
+| `devkit logs [--preview ID] [-s service] [--tail N] [--since TIME] [-f]` | Read an owned live/review service log, including retained stopped containers |
 | `devkit web` | Serve the dashboard (see [Dashboard](docs/dashboard.md)); `devkit web password` enables its actions |
 | `devkit git fetch / sync / push` | Fetch origin, safely fast-forward from its upstream, or push explicitly |
 | `devkit vms [--json]` | QEMU/libvirt VMs, including stopped managed guests, sizing and private connections |
