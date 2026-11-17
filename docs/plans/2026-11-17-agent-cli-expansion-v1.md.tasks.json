@@ -39,7 +39,7 @@
     {
       "id": 5,
       "subject": "Task 5: Structured events, shares and GC results",
-      "status": "in_progress",
+      "status": "completed",
       "blockedBy": [
         1,
         2,
@@ -51,7 +51,7 @@
     {
       "id": 6,
       "subject": "Task 6: Host skill and workflow integration",
-      "status": "pending",
+      "status": "in_progress",
       "blockedBy": [
         1,
         2,

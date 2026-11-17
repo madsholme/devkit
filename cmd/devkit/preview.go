@@ -410,8 +410,10 @@ func preparePreview(mode, ref string) (err error) {
 	return nil
 }
 
-var destroyPreview = func(path string) error {
-	if err := composeRun(path, "down", "--volumes", "--remove-orphans"); err != nil {
+var destroyPreview = func(path string) error { return destroyPreviewWith(path, composeRun) }
+
+func destroyPreviewWith(path string, run func(string, ...string) error) error {
+	if err := run(path, "down", "--volumes", "--remove-orphans"); err != nil {
 		return err
 	}
 	if err := os.Remove(path); err != nil {
@@ -484,100 +486,6 @@ func lifecycle(action, name string) error {
 }
 
 // gc destroys previews whose source worktree no longer exists.
-func gc(apply bool) error {
-	root, common, err := repository()
-	if err != nil {
-		return err
-	}
-	trees, err := worktreesOf(root)
-	if err != nil {
-		return err
-	}
-	saved, err := savedPreviews(common)
-	if err != nil {
-		return err
-	}
-	type stalePreview struct{ name, mode, source string }
-	var stale []stalePreview
-	var unknown []string
-	for _, name := range sortedKeys(saved) {
-		labels := saved[name]
-		path, exists, ok := sourceWorktree(labels, trees)
-		if !ok {
-			unknown = append(unknown, name)
-		} else if !exists {
-			mode := labels["devkit.mode"]
-			if mode == "" {
-				mode = "?"
-			}
-			stale = append(stale, stalePreview{name, mode, path})
-		}
-	}
-	if len(unknown) > 0 {
-		fmt.Fprintln(stdout, "Kept (source worktree not recorded; destroy explicitly if unneeded):")
-		for _, name := range unknown {
-			fmt.Fprintf(stdout, "  %s\n", name)
-		}
-	}
-	if len(stale) == 0 {
-		fmt.Fprintln(stdout, "No previews with a removed worktree.")
-		return nil
-	}
-	if apply {
-		fmt.Fprintln(stdout, "Destroying:")
-	} else {
-		fmt.Fprintln(stdout, "Would destroy (worktree no longer exists):")
-	}
-	for _, s := range stale {
-		fmt.Fprintf(stdout, "  %s\t%s\t%s\n", s.name, s.mode, s.source)
-	}
-	if !apply {
-		fmt.Fprintln(stdout, "Run devkit gc --yes to remove their containers, networks, volumes and run dirs.")
-		return nil
-	}
-	for _, s := range stale {
-		err := func() error {
-			unlock, err := lockPreview(s.name)
-			if err != nil {
-				return err
-			}
-			defer unlock()
-			if err := previewRecoveryGuard(s.name, "destroy"); err != nil {
-				return err
-			}
-			currentSaved, err := savedPreviews(common)
-			if err != nil {
-				return err
-			}
-			currentTrees, err := worktreesOf(root)
-			if err != nil {
-				return err
-			}
-			currentSource, exists, known := sourceWorktree(currentSaved[s.name], currentTrees)
-			if !known || exists || currentSource != s.source {
-				return fail("GC target changed after planning; inspect a fresh dry run.")
-			}
-			if err := assertOwner(s.name, common); err != nil {
-				return err
-			}
-			if err := unshareIfShared(s.name); err != nil {
-				fmt.Fprintf(os.Stderr, "devkit: %v\n", err)
-				failed("unshare", s.name, err)
-			}
-			if err := destroyPreview(filepath.Join(runDir(common, s.name), "compose.json")); err != nil {
-				return err
-			}
-			happened("destroy", s.name, "clean-up: worktree "+s.source+" is gone")
-			return nil
-		}()
-		if err != nil {
-			return err
-		}
-	}
-	fmt.Fprintf(stdout, "Destroyed %d preview(s).\n", len(stale))
-	return nil
-}
-
 // liveHead is the current commit of a live preview's worktree; its code is the worktree, not the start commit.
 func liveHead(labels map[string]string, treesByRepo map[string][]worktree) string {
 	repo := labels["devkit.repository"]

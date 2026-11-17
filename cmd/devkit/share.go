@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -371,8 +372,12 @@ func removeShare(s share, restartApp bool) error {
 
 // Caller holds the preview lock (including lifecycle cleanup).
 func removeShareLocked(s share, restartApp bool) error {
+	return removeShareLockedWith(s, restartApp, removeContainer)
+}
+
+func removeShareLockedWith(s share, restartApp bool, remove func(string) error) error {
 	var problems []string
-	if err := removeContainer(s.Container); err != nil {
+	if err := remove(s.Container); err != nil {
 		problems = append(problems, err.Error())
 	}
 	if s.Repository != "" {
@@ -408,15 +413,17 @@ func removeShareLocked(s share, restartApp bool) error {
 }
 
 // unshareIfShared removes a preview's share before it is stopped or destroyed.
-var unshareIfShared = func(preview string) error {
+var unshareIfShared = func(preview string) error { return unshareCleanupWith(preview, stdout, removeContainer) }
+
+func unshareCleanupWith(preview string, out io.Writer, remove func(string) error) error {
 	s, ok, err := shareFor(preview)
 	if err != nil || !ok {
 		return err
 	}
-	if err := removeShareLocked(s, false); err != nil {
+	if err := removeShareLockedWith(s, false, remove); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "unshared: %s\n", s.URL)
+	fmt.Fprintf(out, "unshared: %s\n", s.URL)
 	happened("unshare", preview, s.URL)
 	return nil
 }

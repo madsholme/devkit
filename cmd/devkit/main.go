@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const usage = `usage: devkit <command> [arguments]
@@ -62,14 +63,14 @@ commands:
   web [--host H] [--port P]
                        serve the web overview (default 127.0.0.1 and the configured port, 3780)
   web password         set the password that lets the web overview run actions
-  gc [--yes]           destroy previews whose worktree no longer exists (dry run by default)
+  gc [--yes] [--json]           destroy previews whose worktree no longer exists (dry run by default)
   prune [--yes]        trim Docker build cache and old unused images host-wide (dry run by default)
   share [preview] [--host NAME] [--hours N]
                        make a running preview public through a Cloudflare tunnel until it expires
   unshare [preview]    end a preview's public share (--expired: every expired share, plus leftovers)
-  shares               list public shares
+  shares [--json]      list public shares
   pair [--json]        pair a device with T3 Code: a one-time link and QR code, valid 10 minutes
-  history [preview] [-n N]
+  history [preview] [-n N] [--json]
                        show what devkit did on this host, newest last (default the last 30 events)
   up|start|stop|restart --vm TARGET
                        control a configured VM by name, UUID or control ID; retain disks
@@ -174,7 +175,7 @@ func splitArgs(args []string, valued, switches map[string]bool) (positional []st
 func dispatch(args []string) (int, error) {
 	code, err := dispatchCommand(args)
 	if code == 2 && err != nil && len(args) > 0 {
-		reportCommand := args[0] == "check" || args[0] == "resources" || args[0] == "projects" || args[0] == "containers" || args[0] == "context" || args[0] == "rebuild" || args[0] == "doctor" || args[0] == "ls" || args[0] == "restart" || (args[0] == "project" && len(args) > 1 && args[1] == "validate")
+		reportCommand := args[0] == "history" || args[0] == "shares" || args[0] == "gc" || args[0] == "check" || args[0] == "resources" || args[0] == "projects" || args[0] == "containers" || args[0] == "context" || args[0] == "rebuild" || args[0] == "doctor" || args[0] == "ls" || args[0] == "restart" || (args[0] == "project" && len(args) > 1 && args[1] == "validate")
 		for _, arg := range args {
 			if reportCommand && arg == "--json" {
 				r := newReport(args[0], nil)
@@ -399,15 +400,7 @@ func dispatchCommand(args []string) (int, error) {
 		}
 		return 0, serve(*host, *port)
 	case "gc":
-		set := flags(command)
-		yes := set.Bool("yes", false, "")
-		if err := parse(set, rest); err != nil {
-			return 2, err
-		}
-		if !*yes {
-			return 0, gc(false)
-		}
-		return 0, noted("gc", "", gc(true))
+		return gcCLI(rest)
 	case "prune":
 		set := flags(command)
 		yes := set.Bool("yes", false, "")
@@ -451,8 +444,12 @@ func dispatchCommand(args []string) (int, error) {
 		}
 		return 0, noted("unshare", name, unsharePreview(name))
 	case "shares":
-		if err := parse(flags(command), rest); err != nil {
-			return 2, err
+		p, v, err := splitArgs(rest, nil, map[string]bool{"--json": true})
+		if err != nil || len(p) > 0 {
+			return 2, usageError("Use shares [--json]")
+		}
+		if _, ok := v["--json"]; ok {
+			return sharesReport(time.Now()).write(true)
 		}
 		return 0, listShares()
 	case "pair":
@@ -463,7 +460,7 @@ func dispatchCommand(args []string) (int, error) {
 		}
 		return 0, noted("pair", "", pair(*asJSON))
 	case "history":
-		positional, values, err := splitArgs(rest, map[string]bool{"-n": true}, nil)
+		positional, values, err := splitArgs(rest, map[string]bool{"-n": true}, map[string]bool{"--json": true})
 		if err != nil {
 			return 2, err
 		}
@@ -476,6 +473,12 @@ func dispatchCommand(args []string) (int, error) {
 			if _, err := fmt.Sscan(v, &limit); err != nil || limit < 1 {
 				return 2, usageError("-n takes a whole number of events")
 			}
+		}
+		if _, ok := values["--json"]; ok {
+			if name != "" && !previewID.MatchString(name) {
+				return 2, usageError("Use an exact preview ID.")
+			}
+			return historyReport(name, limit).write(true)
 		}
 		return 0, showHistory(name, limit)
 	case "start", "stop", "destroy":

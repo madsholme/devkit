@@ -157,3 +157,19 @@ checks warn rather than implying application health. Stopped/paused web services
 fail and skip network probes. Additional paths/subdomains and remote LAN/VPN client
 access are not checked. Missing or conflicting identity, router, listener or DNS
 evidence fails closed. Response bodies, headers and raw errors are omitted.
+
+## Structured history and cleanup
+
+`devkit history [PREVIEW] -n 30 --json` returns the selected recent events in
+oldest-first order. Metadata includes UTC time, action, target and success; arbitrary
+historical detail strings are omitted and unknown actors become `other`.
+
+`devkit gc --json` previews the existing orphan selection with exact IDs, sources,
+kept reasons and deletion categories. It neither deletes anything nor promises a
+volume manifest or reclaimed byte count. `devkit gc --yes --json` applies the same
+locked, freshly revalidated cleanup as text mode and reports each outcome:
+`destroyed`, `failed`, `not_attempted` or `kept`. A failed target may already have
+partial side effects. The batch stops at that failure; earlier successes are not
+replayed or rolled back. Share cleanup warnings remain visible even when container
+destruction proceeds under the existing policy. Inspect current state before retry.
+Both forms emit one schema-version-1 object; failures exit 1, invalid arguments 2.

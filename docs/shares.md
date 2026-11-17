@@ -59,3 +59,12 @@ API token. Use the explicit [verified import](secrets.md#integration-credentials
 for existing source files. The per-tunnel token is delivered through an owner-only
 memory-backed runtime file, not Docker environment/arguments. Unseal and restart
 the affected consumer after reboot; there is no persistent plaintext fallback.
+
+## Structured local inventory
+
+`devkit shares --json` reports local connector metadata, its observation time and
+UTC expiry. An invalid expiry is null with a warning; expired connectors remain
+visible until explicit or scheduled cleanup. URLs must be valid credential-free
+HTTPS origins matching their recorded host. Tunnel/DNS IDs are omitted. The command
+does not contact Cloudflare, read its credentials, renew or remove anything; a local
+record is not proof that its public endpoint is reachable.

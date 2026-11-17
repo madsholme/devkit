@@ -190,14 +190,14 @@ API access is also available for app-owned storage over LAN/Tailscale HTTPS. See
 | `devkit stop [preview]` | Stop containers; retain data |
 | `devkit start [preview]` | Resume saved configuration; retain data |
 | `devkit destroy [preview]` | Remove containers/networks and disposable named volumes |
-| `devkit gc [--yes]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
+| `devkit gc [--yes] [--json]` | Destroy previews whose worktree no longer exists; dry run without `--yes` |
 | `devkit prune [--yes]` | Trim Docker build cache and remove old unused images, host-wide (limits in the host config); dry run without `--yes` |
 | `devkit publish HEAD` | Run the project's `publish` hook with the reviewed image ID |
 | `devkit share [preview] [--host NAME] [--hours N]` | Make a running preview public until it expires (see [Public shares](docs/shares.md)) |
 | `devkit unshare [preview]` | End a public share; `--expired` removes all expired ones and leftovers |
-| `devkit shares` | List public shares, their URLs and expiry |
+| `devkit shares [--json]` | List public shares, their URLs and expiry |
 | `devkit pair [--json]` | A one-time link, code and QR code to connect a phone or computer to T3 Code, valid 10 minutes |
-| `devkit history [preview] [-n N]` | What devkit did on this host and who did it, newest last (default 30 events) |
+| `devkit history [preview] [-n N] [--json]` | What devkit did on this host and who did it, newest last (default 30 events) |
 
 Run lifecycle commands inside the owning Git repository; `ls` works anywhere. See
 [Previews](docs/previews.md) for what each command does to a preview and its data.
