@@ -23,7 +23,8 @@ and put an API token with **Tunnel Write** and **DNS Write** for that domain in
 `preview-<preview>.<domain>`, or at a name you choose with `--host team-demo`. In the dashboard, select a
 suggested address or choose **Custom hostname** and enter just the part before the
 share domain. The full HTTPS address updates as you type. Use the copy icon beside it
-to copy the address before sharing. Use 1–63 lowercase letters, digits or hyphens, starting and ending
+to copy the address before sharing. Each suggested address also has a copy icon that works
+regardless of which address is selected. Use 1–63 lowercase letters, digits or hyphens, starting and ending
 with a letter or digit. The `hosts` list supplies the dashboard shortcuts. Change
 the prefix with `"prefix"` (`""` for none); names over the 63-character DNS limit are
 shortened with a short hash. Register

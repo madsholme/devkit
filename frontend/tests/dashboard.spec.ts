@@ -120,7 +120,7 @@ test('sign-in, cancel/confirm exact container and VM targets, preview destroy an
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Actions for atlas-main' }).click()
   await page.getByRole('menuitem', { name: 'Share publicly…' }).click()
-  await expect(page.getByLabel('share-atlas-main.example.test')).toBeChecked()
+  await expect(page.getByRole('radio', { name: 'share-atlas-main.example.test' })).toBeChecked()
   await expect(page.getByLabel('demo.example.test', { exact: true })).toBeVisible()
   await page.getByLabel('Custom hostname').check()
   const subdomain = page.locator('#custom-share-host')
@@ -134,6 +134,11 @@ test('sign-in, cancel/confirm exact container and VM targets, preview destroy an
   await expect(page.getByText('https://design.example.test', { exact: true })).toBeVisible()
   await subdomain.fill('design-review')
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  for (const address of ['share-atlas-main.example.test', 'demo.example.test']) {
+    await page.getByRole('button', { name: `Copy https://${address}`, exact: true }).click()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`https://${address}`)
+    await expect(page.getByRole('radio', { name: 'Custom hostname' })).toBeChecked()
+  }
   await copyUrl.click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('https://design-review.example.test')
   expect(actions).toHaveLength(4)

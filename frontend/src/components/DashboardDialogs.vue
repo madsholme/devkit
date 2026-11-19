@@ -156,10 +156,17 @@ const qrPath = computed(
         >
           <fieldset class="share-addresses">
             <legend>Public address</legend>
-            <label v-for="option in shareOptions" :key="option.value">
-              <input v-model="host" type="radio" name="share-host" :value="option.value" />
-              {{ option.label }}
-            </label>
+            <div v-for="option in shareOptions" :key="option.value" class="share-url">
+              <label>
+                <input v-model="host" type="radio" name="share-host" :value="option.value" />
+                {{ option.label }}
+              </label>
+              <CopyButton
+                type="button"
+                :text="`https://${option.label}`"
+                :label="`Copy https://${option.label}`"
+              />
+            </div>
             <label>
               <input v-model="host" type="radio" name="share-host" value=":custom" />
               Custom hostname
