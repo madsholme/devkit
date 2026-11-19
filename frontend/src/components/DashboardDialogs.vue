@@ -26,6 +26,12 @@ const password = ref('')
 const hours = ref(1)
 const host = ref('')
 const customHost = ref('')
+const hostLabelPattern = /^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$/
+const customUrl = computed(() =>
+  state.session.share && hostLabelPattern.test(customHost.value)
+    ? `https://${customHost.value}.${state.session.share.domain}`
+    : ''
+)
 const output = ref<HTMLElement>()
 const titles: Record<string, string> = {
   'create-project': 'Create Project',
@@ -160,13 +166,18 @@ const qrPath = computed(
             </label>
           </fieldset>
           <template v-if="host === ':custom'">
-            <label for="custom-share-host">Subdomain under {{ state.session.share.domain }}</label>
+            <div class="share-url">
+              <label for="custom-share-host" aria-label="Custom subdomain">
+                {{ customUrl || `Subdomain under ${state.session.share.domain}` }}
+              </label>
+              <CopyButton v-if="customUrl" type="button" :text="customUrl" label="Copy public URL" />
+            </div>
             <Input
               id="custom-share-host"
               v-model="customHost"
               required
               maxlength="63"
-              pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?"
+              :pattern="hostLabelPattern.source"
               title="Use lowercase letters, digits, or hyphens between letters or digits."
               autocomplete="off"
               autocapitalize="none"
@@ -269,6 +280,12 @@ const qrPath = computed(
 </template>
 
 <style scoped>
+.share-url {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-wrap: anywhere;
+}
 .share-addresses,
 .share-addresses label {
   display: grid;
