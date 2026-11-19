@@ -16,7 +16,6 @@ import CreateProjectForm from './CreateProjectForm.vue'
 import DetailsPanel from './DetailsPanel.vue'
 import SystemPanel from './SystemPanel.vue'
 import CopyButton from './CopyButton.vue'
-import FilterSelect from './FilterSelect.vue'
 import InventoryNotice from './InventoryNotice.vue'
 import StatusBadge from './StatusBadge.vue'
 function setFollow(value: boolean | 'indeterminate') {
@@ -26,6 +25,7 @@ function setFollow(value: boolean | 'indeterminate') {
 const password = ref('')
 const hours = ref(1)
 const host = ref('')
+const customHost = ref('')
 const output = ref<HTMLElement>()
 const titles: Record<string, string> = {
   'create-project': 'Create Project',
@@ -61,6 +61,7 @@ watch(
     password.value = ''
     hours.value = state.session.share?.default_hours || 1
     host.value = ''
+    customHost.value = ''
   }
 )
 watch(
@@ -89,7 +90,7 @@ async function confirmAction() {
   if (!state.action || !confirmationInfo.value) return
   const request = { ...state.action, confirm: confirmationInfo.value.confirm }
   if (request.action === 'share') {
-    request.host = host.value
+    request.host = host.value === ':custom' ? customHost.value : host.value
     request.hours = Number(hours.value)
   }
   await runAction(request)
@@ -146,9 +147,33 @@ const qrPath = computed(
       >
         <p>{{ confirmationInfo?.description }}</p>
         <template v-if="state.action?.action === 'share' && state.session.share"
-          ><label>Address</label
-          ><FilterSelect v-model="host" label="Public address" :options="shareOptions" /><label
-            for="share-hours"
+        >
+          <fieldset class="share-addresses">
+            <legend>Public address</legend>
+            <label v-for="option in shareOptions" :key="option.value">
+              <input v-model="host" type="radio" name="share-host" :value="option.value" />
+              {{ option.label }}
+            </label>
+            <label>
+              <input v-model="host" type="radio" name="share-host" value=":custom" />
+              Custom hostname
+            </label>
+          </fieldset>
+          <template v-if="host === ':custom'">
+            <label for="custom-share-host">Subdomain under {{ state.session.share.domain }}</label>
+            <Input
+              id="custom-share-host"
+              v-model="customHost"
+              required
+              maxlength="63"
+              pattern="[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?"
+              title="Use lowercase letters, digits, or hyphens between letters or digits."
+              autocomplete="off"
+              autocapitalize="none"
+              :spellcheck="false"
+            />
+          </template>
+          <label for="share-hours"
             >Hours (1–{{ state.session.share.max_hours }})</label
           ><Input
             id="share-hours"
@@ -242,3 +267,20 @@ const qrPath = computed(
     ></Dialog
   >
 </template>
+
+<style scoped>
+.share-addresses,
+.share-addresses label {
+  display: grid;
+  gap: 0.5rem;
+}
+.share-addresses label {
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.share-addresses legend {
+  margin-bottom: 0.5rem;
+}
+</style>

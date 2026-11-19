@@ -20,7 +20,10 @@ and put an API token with **Tunnel Write** and **DNS Write** for that domain in
 `image` (the pinned `cloudflared`).
 
 `devkit share` publishes the current worktree's preview (or the one named) at
-`preview-<preview>.<domain>`, or at a fixed name from `hosts` with `--host sso-1`. Change
+`preview-<preview>.<domain>`, or at a name you choose with `--host team-demo`. In the dashboard, select a
+suggested address or choose **Custom hostname** and enter just the part before the
+share domain. Use 1–63 lowercase letters, digits or hyphens, starting and ending
+with a letter or digit. The `hosts` list supplies the dashboard shortcuts. Change
 the prefix with `"prefix"` (`""` for none); names over the 63-character DNS limit are
 shortened with a short hash. Register
 fixed names once as OAuth callback hosts with Google, GitHub and so on; Google does

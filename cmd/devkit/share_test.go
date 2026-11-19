@@ -232,14 +232,14 @@ func TestShareCreatesTunnelDNSAndConnector(t *testing.T) {
 	}
 }
 
-func TestShareUsesOnlyConfiguredFixedHostsAndBoundedHours(t *testing.T) {
+func TestShareAcceptsCustomDNSLabelAndBoundsHours(t *testing.T) {
 	shareHost(t)
 	cf := newFakeCloudflare(t)
 	var rec recorded
 	stubDocker(t, &rec, nil)
 	swap(t, &dockerContainers, withContainers(runningWeb("demo-main")))
-	if err := sharePreview("demo-main", "sso-9", 2); err == nil {
-		t.Error("accepted an unconfigured fixed host")
+	if err := sharePreview("demo-main", "other.example", 2); err == nil {
+		t.Error("accepted a multi-label host")
 	}
 	if err := sharePreview("demo-main", "", 25); err == nil {
 		t.Error("accepted more than max_hours")
@@ -247,11 +247,11 @@ func TestShareUsesOnlyConfiguredFixedHostsAndBoundedHours(t *testing.T) {
 	if len(cf.tunnels) != 0 {
 		t.Errorf("tunnels created: %v", cf.tunnels)
 	}
-	if err := sharePreview("demo-main", "sso-1", 0); err != nil {
+	if err := sharePreview("demo-main", "team-demo", 0); err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range cf.records {
-		if r.Name != "sso-1.share.test" {
+		if r.Name != "team-demo.share.test" {
 			t.Errorf("fixed host record %q", r.Name)
 		}
 	}

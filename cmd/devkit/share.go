@@ -210,7 +210,7 @@ func resolvePreview(name string) (string, error) {
 	return currentPreview(root, common)
 }
 
-// sharePreview makes a running preview public at <preview>.<domain>, or at a fixed host from the config.
+// sharePreview makes a running preview public at <preview>.<domain>, or at a chosen label under the share domain.
 func sharePreview(name, fixedHost string, hours int) error {
 	cfg, err := requireShareConfig()
 	if err != nil {
@@ -235,12 +235,8 @@ func sharePreview(name, fixedHost string, hours int) error {
 	}
 	label := shareName(*cfg.Prefix, name)
 	if fixedHost != "" {
-		known := false
-		for _, h := range cfg.Hosts {
-			known = known || h == fixedHost
-		}
-		if !known {
-			return fail("%s is not one of the configured share hosts: %s.", fixedHost, strings.Join(cfg.Hosts, ", "))
+		if !domainLabel.MatchString(fixedHost) {
+			return fail("Use a single lowercase DNS label for the share host.")
 		}
 		label = fixedHost
 	}

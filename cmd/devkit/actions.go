@@ -143,7 +143,7 @@ func planAction(req actionRequest) (plannedAction, error) {
 			}
 			if req.Host != "" {
 				if !domainLabel.MatchString(req.Host) {
-					return plannedAction{}, fail("Use one of the configured share hosts.")
+					return plannedAction{}, fail("Use a single lowercase DNS label for the share host.")
 				}
 				p.args = append(p.args, "--host", req.Host)
 			}
