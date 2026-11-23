@@ -426,12 +426,13 @@ func TestSweepDeletesOnlyOldLeftoversOfThisMachine(t *testing.T) {
 	}
 }
 
-func TestSetPublicURLChangesOnlyTheWebService(t *testing.T) {
+func TestSetPublicURLChangesWebAndOptedInServices(t *testing.T) {
 	common := t.TempDir()
 	path := filepath.Join(runDir(common, "demo-main"), "compose.json")
 	os.MkdirAll(filepath.Dir(path), 0o700)
 	os.WriteFile(path, []byte(`{"services": {
 		"web": {"labels": {"traefik.enable": "true"}, "environment": {"DOMAIN": "https://demo-main.dev"}},
+		"api": {"labels": {"devkit.share.public-url": "true"}},
 		"db": {"labels": {"traefik.enable": "false"}}}}`), 0o600)
 	ups := 0
 	swap(t, &composeRun, func(string, ...string) error { ups++; return nil })
@@ -443,6 +444,9 @@ func TestSetPublicURLChangesOnlyTheWebService(t *testing.T) {
 	if env := object(object(services, "web"), "environment"); env["DEVKIT_PUBLIC_URL"] != "https://demo-main.share.test" || env["DEVBOX_PUBLIC_URL"] != env["DEVKIT_PUBLIC_URL"] || env["DOMAIN"] != "https://demo-main.dev" {
 		t.Errorf("web environment %v", env)
 	}
+	if env := object(object(services, "api"), "environment"); env["DEVKIT_PUBLIC_URL"] != "https://demo-main.share.test" {
+		t.Fatalf("missing API share URL: %v", env)
+	}
 	if _, has := object(services, "db")["environment"]; has {
 		t.Error("db got an environment")
 	}
@@ -451,6 +455,9 @@ func TestSetPublicURLChangesOnlyTheWebService(t *testing.T) {
 	}
 	setPublicURL(common, "demo-main", "", false)
 	project, _ = readCompose(path)
+	if _, has := object(object(object(project, "services"), "api"), "environment")["DEVKIT_PUBLIC_URL"]; has {
+		t.Fatal("API retained expired share URL")
+	}
 	env := object(object(object(project, "services"), "web"), "environment")
 	if _, has := env["DEVKIT_PUBLIC_URL"]; has || env["DEVBOX_PUBLIC_URL"] != nil || ups != 1 {
 		t.Errorf("not removed, or restarted (%d)", ups)

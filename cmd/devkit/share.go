@@ -102,8 +102,7 @@ func shareTarget(preview string) (container, string, error) {
 	return container{}, "", fail("No preview %s on this host (see devkit ls).", preview)
 }
 
-// setPublicURL records DEVKIT_PUBLIC_URL in the preview's web service ("" removes it) and, if apply,
-// recreates the web container so the app sees it.
+// setPublicURL updates the web service and any explicitly opted-in services.
 var setPublicURL = func(common, preview, publicURL string, apply bool) error {
 	path := filepath.Join(runDir(common, preview), "compose.json")
 	project, err := readCompose(path)
@@ -117,7 +116,7 @@ var setPublicURL = func(common, preview, publicURL string, apply bool) error {
 		for k, v := range object(service, "labels") {
 			labels[k], _ = v.(string)
 		}
-		if !isWeb(labels) {
+		if !isWeb(labels) && labels["devkit.share.public-url"] != "true" {
 			continue
 		}
 		env := ensureObject(service, "environment")
@@ -303,10 +302,10 @@ func sharePreview(name, fixedHost string, hours int) error {
 	if err != nil {
 		return rollback(err)
 	}
+	undo = append(undo, func() { setPublicURL(s.Repository, name, "", true) })
 	if err := setPublicURL(s.Repository, name, s.URL, true); err != nil {
 		return rollback(err)
 	}
-	undo = append(undo, func() { setPublicURL(s.Repository, name, "", true) })
 	// Recreating the web service kept its container name, so the tunnel's target is unchanged.
 	id, err := startCloudflared(cfg, web, s, token)
 	if err != nil {

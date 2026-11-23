@@ -51,8 +51,12 @@ about this machine's leftover tunnels and DNS records older than ten minutes. `d
 --expired` removes both. Whether the token may also create tunnels and DNS records only shows when
 you share.
 
-While shared, the preview's web service gets `DEVKIT_PUBLIC_URL` (the web container is
-recreated to pick it up, and again when the share ends). Let the app accept that host,
+While shared, the preview’s web service gets `DEVKIT_PUBLIC_URL`. A separate API or
+authentication service can opt in by adding the Compose service label
+`devkit.share.public-url: "true"` under `labels`. Devkit recreates participating
+services with the selected HTTPS origin on share and removes it on unshare or expiry.
+Read it at startup to configure exact allowed hosts and trusted origins. For an
+existing saved preview, apply the label with the preview rebuild workflow first. Let the app accept that host,
 e.g. Django's `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`, and build absolute URLs
 and OAuth callbacks from it. A share is public: anyone with the link can open it.
 Prefer review previews; a live preview may run with debug pages on.
