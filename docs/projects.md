@@ -18,7 +18,12 @@ inputs. Build must produce `$DEVKIT_IMAGE`. Compose files must have health check
 no fixed container names and no host port publishing in Compose. The explicit
 `media_ports` exception below lets devkit allocate Tailscale-bound media ports. Review Compose uses the built
 image and has no build entries or source mounts. `DEVKIT_URL` and `DEVKIT_COMMIT`
-are available during rendering/building for project configuration.
+are available during rendering/building for project configuration. The starter
+passes `DEVKIT_URL` to the web process in both modes. When adding a separate
+API that checks hosts or origins, copy the `devkit.share.public-url: "true"`
+service label and the private URL environment mapping to the API. At startup,
+read the optional `DEVKIT_PUBLIC_URL` to admit the selected share hostname
+alongside the private one. See [Public shares](shares.md).
 
 The runner does not blindly copy `.env` from another checkout. Pass project-specific
 development settings deliberately and generate per-preview connections/URLs. Never

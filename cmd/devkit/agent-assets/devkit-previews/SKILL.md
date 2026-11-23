@@ -70,8 +70,13 @@ preview URL, full commit SHA, checks performed and any limitations.
 Public sharing and team publishing need explicit authorization unless already
 given. `devkit share PREVIEW --hours N` exposes that preview publicly; prefer a
 review preview, choose an appropriate expiry, and report the public URL and expiry.
-Sharing/unsharing recreates the web container to update its public URL, so account
-for interruption. `devkit unshare PREVIEW` ends the share.
+For a custom label, use `devkit share PREVIEW --host team-demo --hours N`.
+Sharing, unsharing and expiry update the web service and services labeled
+`devkit.share.public-url: "true"`. Expect recreation as their runtime environment
+changes. Verify the reported share URL in a fresh browser and check a representative
+API response, such as an unauthenticated session endpoint, for the expected status
+and content type. When split DNS is in use, check the exact same-domain share
+hostname through the LAN proxy and through public DNS if both paths matter. `devkit unshare PREVIEW` ends the share.
 
 `devkit publish COMMIT` uses an existing reviewed image and the project's publish
 hook. Verify the adapter exists and the destination is intended. Do not rebuild a

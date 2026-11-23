@@ -82,7 +82,7 @@ func installSecretsInstructions(path string) error {
 	return installAgentInstructions(path, "devkit-secrets", secretsInstructionBody)
 }
 
-const projectsInstructionBody = "## Projects with Devkit\n\nUse the devkit-projects skill when creating a project, adapting an existing application for previews, or registering an existing Compose stack. Preserve the effective devkit.json/devbox.json recipe, VM mappings, user files and data. Distinguish isolated preview storage from existing-stack registration; registration never recreates containers or grants review/share/destroy authority. Follow the skill for live/review hooks, initial GitHub push recovery and project guidance installation. Use devkit project validate --json before launch and devkit context --json for exact checkout associations; missing inputs or incomplete evidence are not permission to launch. Use devkit projects --json and devkit containers --json for bounded inventory; inspect incomplete evidence and revalidate exact ownership before any action.\n"
+const projectsInstructionBody = "## Projects with Devkit\n\nUse the devkit-projects skill when creating a project, adapting an existing application for previews, or registering an existing Compose stack. Preserve the effective devkit.json/devbox.json recipe, VM mappings, user files and data. Distinguish isolated preview storage from existing-stack registration; registration never recreates containers or grants review/share/destroy authority. Follow the skill for live/review hooks, initial GitHub push recovery and project guidance installation. When adding a separate API, follow the skill to pass the private origin and opt the API into runtime custom share URLs in both Compose recipes. Use devkit project validate --json before launch and devkit context --json for exact checkout associations; missing inputs or incomplete evidence are not permission to launch. Use devkit projects --json and devkit containers --json for bounded inventory; inspect incomplete evidence and revalidate exact ownership before any action.\n"
 
 const vmInstructionBody = "## VM connections with Devkit\n\nUse the devkit-vms skill whenever creating, changing, starting or connecting to QEMU/libvirt VMs on this host. Default new graphical guests to SPICE without a display password unless the user requests one, with fixed per-VM ports and both direct access and optional SSH tunnels. Preserve existing display passwords unless removal is explicitly authorized. Discover actual host addresses and show separate At home (LAN) and Away (Tailscale/VPN) connection details; a public dashboard URL is not a VM route. Prefer explicit private binds. A wildcard serving both networks requires a verified private-interface/source/destination firewall guard before opening any listener; never expose public ports or disable guest SSH authentication. Use devkit-secrets when display credentials are requested. Preserve running VMs during discovery/UI work; launcher changes take effect on the next QEMU start, and restarts require explicit authorization unless already given. Preserve project-specific instructions and report untested client routes honestly. Use devkit project validate --runtime vms --json and devkit restart --vm TARGET --dry-run --json to inspect exact authority and blockers. Opaque launcher settings and stopped guest networking remain unknown; there is no VM rebuild or new disk inspection.\n"
 
@@ -291,9 +291,9 @@ func bundledAgentSkills() []bundledAgentSkill {
 	return []bundledAgentSkill{
 		{"devkit-secrets", secretsSkillVersion, canonicalSecretsSkill(), secretsInstructionBody},
 		{"devkit-vms", "2", vm, vmInstructionBody},
-		{"devkit-previews", "3", previews, previewsInstructionBody},
+		{"devkit-previews", "4", previews, previewsInstructionBody},
 		{"devkit-troubleshooting", "3", troubleshooting, troubleshootingInstructionBody},
-		{"devkit-projects", "3", projects, projectsInstructionBody},
+		{"devkit-projects", "4", projects, projectsInstructionBody},
 		{"devkit-host", "1", host, hostInstructionBody},
 	}
 }

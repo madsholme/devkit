@@ -163,7 +163,8 @@ func TestT3FilesUseKnownFieldsAndIcons(t *testing.T) {
 
 func composeEnv() []string {
 	return withEnv(os.Environ(), map[string]string{"DEVKIT_PREVIEW": "demo-review-123",
-		"DEVKIT_HOST": "demo-review-123.dev.example.com", "DEVKIT_IMAGE": "devkit/demo:abc", "DEVKIT_COMMIT": "abc"})
+		"DEVKIT_HOST": "demo-review-123.dev.example.com", "DEVKIT_URL": "https://demo-review-123.dev.example.com",
+		"DEVKIT_IMAGE": "devkit/demo:abc", "DEVKIT_COMMIT": "abc"})
 }
 
 // fakeImage answers docker image inspect and passes every other command to the real runner.
@@ -195,6 +196,17 @@ func templateConfig(t *testing.T) (string, projectConfig) {
 	return root, cfg
 }
 
+func checkTemplateOrigins(t *testing.T, web map[string]any) {
+	t.Helper()
+	if str(object(web, "environment"), "DEVKIT_URL") != "https://demo-review-123.dev.example.com" ||
+		str(object(web, "labels"), "devkit.share.public-url") != "true" {
+		t.Fatal("template is missing the private origin or share label")
+	}
+	if _, exists := object(web, "environment")["DEVKIT_PUBLIC_URL"]; exists {
+		t.Fatal("an unshared preview must start without a public origin")
+	}
+}
+
 func TestRealComposeTemplateAndPinnedWebImage(t *testing.T) {
 	requireCompose(t)
 	fakeImage(t, "")
@@ -204,6 +216,7 @@ func TestRealComposeTemplateAndPinnedWebImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	web := object(object(output, "services"), "web")
+	checkTemplateOrigins(t, web)
 	if web["image"] != "sha256:fixed-image" || web["pull_policy"] != "never" {
 		t.Errorf("web image not pinned: %v %v", web["image"], web["pull_policy"])
 	}
@@ -229,6 +242,7 @@ func TestLiveTemplateResolvesAbsoluteSourceMount(t *testing.T) {
 		t.Fatal(err)
 	}
 	web := object(object(output, "services"), "web")
+	checkTemplateOrigins(t, web)
 	volumes, _ := web["volumes"].([]any)
 	source := ""
 	for _, v := range volumes {

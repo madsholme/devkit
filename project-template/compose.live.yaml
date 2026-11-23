@@ -1,9 +1,13 @@
 services:
   web:
+    # Copy this label to a separate API that needs the active share URL.
+    labels:
+      devkit.share.public-url: "true"
     image: python:3.13-slim
     working_dir: /app
     command: [python, app.py]
     environment:
+      DEVKIT_URL: ${DEVKIT_URL:?Run through devkit}
       DEVKIT_MODE: live
       DEVKIT_COMMIT: working-files
       DATA_DIR: /data

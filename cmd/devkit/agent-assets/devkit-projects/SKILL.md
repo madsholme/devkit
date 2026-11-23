@@ -89,6 +89,27 @@ part of the task, verify distinct URLs, containers and data. Review the intended
 committed revision under the user's Git authority; do not claim review success from
 uncommitted changes or silently recreate a saved preview with valuable volumes.
 
+### Custom share hostnames
+
+The routed web service receives `DEVKIT_PUBLIC_URL` automatically while shared.
+For a separate API or auth service that validates hosts or origins, merge these
+keys into its service in **both** live and review Compose:
+
+```yaml
+labels:
+  devkit.share.public-url: "true"
+environment:
+  DEVKIT_URL: ${DEVKIT_URL:?Run through devkit}
+```
+
+Derive exact allowed hostnames and trusted HTTPS origins from the private
+`DEVKIT_URL` and optional `DEVKIT_PUBLIC_URL` at process startup. Keep necessary
+loopback health checks. Avoid wildcard trust, build-time public URLs and
+request headers as sources of trusted origins. Use relative browser API URLs
+and proxy them through the web service. The label delivers an environment value;
+the app still configures its framework and the web service routes API traffic.
+Apply recipe changes to existing saved previews using the rebuild workflow.
+
 ## Register an existing Compose stack
 
 For an observed Compose project `shop-restored` whose working-directory label is

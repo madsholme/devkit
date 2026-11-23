@@ -1,7 +1,11 @@
 services:
   web:
+    # Copy this label to a separate API that needs the active share URL.
+    labels:
+      devkit.share.public-url: "true"
     image: ${DEVKIT_IMAGE:?Run devkit review}
     environment:
+      DEVKIT_URL: ${DEVKIT_URL:?Run through devkit}
       DEVKIT_MODE: review
       DATA_DIR: /data
     volumes:
