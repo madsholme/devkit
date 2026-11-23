@@ -3,7 +3,6 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChevronRight,
-  ExternalLink,
   Container as ContainerIcon,
   Search,
   MoreHorizontal,
@@ -74,6 +73,13 @@ watch(() => [state.session.signed_in, selectedSecretsCheckout.value], () => {
 function allEvents(preview: string) {
   filters.history = preview
   void router.push('/history')
+}
+function previewAddresses(preview: Preview) {
+  if (!up(preview.status)) return []
+  return [
+    { label: 'Private', url: preview.url },
+    { label: 'Public', url: preview.share?.url },
+  ].flatMap(({ label, url }) => url && safeURL(url) ? [{ label, url }] : [])
 }
 function routeLabel(url: string, preview: Preview) {
   const host = preview.url.replace(/^https?:\/\//, '')
@@ -170,6 +176,14 @@ function timeLeft(expires: string) {
                   >{{ preview.name }}</button>
               </div>
               <p class="path table-path">{{ home(preview.worktree) }}</p>
+              <div v-for="address in previewAddresses(preview)" :key="address.label"
+                class="flex min-w-0 items-center gap-1 text-xs">
+                <span class="text-muted-foreground">{{ address.label }}</span>
+                <a :href="safeURL(address.url)" target="_blank" rel="noopener"
+                  class="text-link whitespace-normal [overflow-wrap:anywhere]"
+                  :aria-label="`Open ${address.label.toLowerCase()} URL ${address.url}`">{{ address.url }}</a>
+                <CopyButton :text="address.url" :label="`Copy ${address.label.toLowerCase()} URL for ${preview.name}`" />
+              </div>
               <Badge v-if="gone.has(preview.name)" variant="warning"
                 >Worktree gone</Badge
               ></TableCell
@@ -237,21 +251,6 @@ function timeLeft(expires: string) {
                       /></div></DropdownMenuContent
                 ></DropdownMenu>
                 <Button
-                  v-if="up(preview.status) && safeURL(preview.url)"
-                  as-child
-                  size="sm"
-                  variant="ghost"
-                  ><a
-                    :href="safeURL(preview.url)"
-                    target="_blank"
-                    rel="noopener"
-                    :aria-label="`Open ${preview.name}`"
-                    ><ExternalLink :size="16" /></a></Button
-                ><CopyButton
-                  v-if="up(preview.status)"
-                  :text="preview.url"
-                  label="Copy preview URL"
-                /><Button
                   size="sm"
                   variant="ghost"
                   @click="showLogs({ preview: preview.name }, preview.name)"

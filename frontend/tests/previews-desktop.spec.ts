@@ -7,6 +7,7 @@ test('desktop previews wrap long health summaries and keep actions on screen', a
     const data = await response.json()
     const preview = data.previews[0]
     preview.name = 'atlas-codex-child-profile-controls'
+    preview.share = { url: 'https://demo-public.example.test', expires: new Date(Date.now() + 3600000).toISOString() }
     preview.branch = 'codex/a-long-feature-branch-for-desktop-layout'
     preview.worktree = '/home/demo/.t3/worktrees/Atlas/codex-child-profile-controls'
     preview.services.push(...['api-checks', 'api', 'web-checks', 'postgres'].map((name, index) => ({
@@ -23,6 +24,9 @@ test('desktop previews wrap long health summaries and keep actions on screen', a
       expect(await table.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
     }
     await expect(page.getByText('atlas-api-checks healthy', { exact: false })).toBeVisible()
+    const identity = page.locator('.preview-identity').filter({ hasText: 'atlas-codex-child-profile-controls' })
+    await expect(identity.getByRole('link', { name: /^Open public URL/ })).toHaveAttribute('href', 'https://demo-public.example.test/')
+    await expect(identity.getByRole('link', { name: /^Open private URL/ })).toBeVisible()
     const action = page.getByRole('button', { name: 'Actions for atlas-codex-child-profile-controls' })
     const box = await action.boundingBox()
     expect(box!.x + box!.width).toBeLessThanOrEqual(width)
@@ -49,7 +53,7 @@ test('preview names and arrows share the information panel while external open s
   await name.focus()
   await page.keyboard.press('Enter')
   await expect(arrow).toHaveAttribute('aria-expanded', 'true')
-  await expect(page.getByRole('link', { name: 'Open atlas-main', exact: true })).toHaveAttribute('href', 'https://atlas.example.test/')
+  await expect(page.getByRole('link', { name: /^Open private URL https:\/\/atlas\.example\.test/ })).toHaveAttribute('href', 'https://atlas.example.test/')
   await expect(page).toHaveURL(/\/previews$/)
 })
 

@@ -60,7 +60,7 @@ test('desktop keeps its table and anonymous mobile visitors have no mutation con
   await page.setViewportSize({ width: 390, height: 844 })
   await expectFits(page)
   await expect(page.getByRole('button', { name: /^Actions for / })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Open atlas-main', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^Open private URL https:\/\/atlas\.example\.test/ })).toBeVisible()
   await page.getByRole('button', { name: 'Logs', exact: true }).first().click()
   await expect(page.getByRole('dialog')).toBeVisible()
 })
