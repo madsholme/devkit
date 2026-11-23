@@ -2,8 +2,7 @@
 
 Previews are tailnet-only. `devkit share` makes one public for a while, e.g. for a
 coworker or to test SSO, through a Cloudflare Tunnel: no open ports, and nothing
-reaches the harness or the dashboard. Shares live on their own domain on Cloudflare, not on
-the preview domain. Cloudflare's free certificate only covers one level below a domain, and a
+reaches the harness or the dashboard. A separate Cloudflare domain is recommended for shares. Cloudflare's free certificate only covers one level below a domain, and a
 separate domain keeps test apps away from your main domain's cookies.
 A self-hosted alternative to Cloudflare is planned, not built: see [edge.md](edge.md).
 
@@ -40,6 +39,12 @@ A share ends when it expires, on `devkit unshare`, and before `stop`, `destroy` 
 It also removes this machine's leftover tunnels and DNS records, e.g. after a crash
 mid-share. Tunnels are named `devkit-<machine>-<preview>` and DNS records carry the
 comment `devkit share <machine>`; devkit never touches anything else in the account.
+
+When the share and private preview are under the same domain, Devkit also routes
+the exact share hostname on the private proxy for clients using split DNS. The
+private preview URL stays active. Existing private routers take precedence, so pick
+a share name distinct from other private hostnames. Removing the share removes
+its private alias. Separate-domain shares continue to use public DNS.
 
 ## Checking shares
 

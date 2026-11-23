@@ -431,20 +431,24 @@ func TestSetPublicURLChangesWebAndOptedInServices(t *testing.T) {
 	path := filepath.Join(runDir(common, "demo-main"), "compose.json")
 	os.MkdirAll(filepath.Dir(path), 0o700)
 	os.WriteFile(path, []byte(`{"services": {
-		"web": {"labels": {"traefik.enable": "true"}, "environment": {"DOMAIN": "https://demo-main.dev"}},
+		"web": {"labels": {"traefik.enable": "true", "devkit.url": "https://demo-main.share.test", "traefik.http.routers.demo-main.service": "demo-main"}, "environment": {"DOMAIN": "https://demo-main.dev"}},
 		"api": {"labels": {"devkit.share.public-url": "true"}},
 		"db": {"labels": {"traefik.enable": "false"}}}}`), 0o600)
 	ups := 0
 	swap(t, &composeRun, func(string, ...string) error { ups++; return nil })
-	if err := setPublicURL(common, "demo-main", "https://demo-main.share.test", true); err != nil {
+	if err := setPublicURL(common, "demo-main", "https://p1.share.test", true); err != nil {
 		t.Fatal(err)
 	}
 	project, _ := readCompose(path)
 	services := object(project, "services")
-	if env := object(object(services, "web"), "environment"); env["DEVKIT_PUBLIC_URL"] != "https://demo-main.share.test" || env["DEVBOX_PUBLIC_URL"] != env["DEVKIT_PUBLIC_URL"] || env["DOMAIN"] != "https://demo-main.dev" {
+	const rule = "traefik.http.routers.devkit_share_demo-main.rule"
+	if got := object(object(services, "web"), "labels")[rule]; got != "Host(`p1.share.test`)" {
+		t.Fatalf("missing LAN route: %v", got)
+	}
+	if env := object(object(services, "web"), "environment"); env["DEVKIT_PUBLIC_URL"] != "https://p1.share.test" || env["DEVBOX_PUBLIC_URL"] != env["DEVKIT_PUBLIC_URL"] || env["DOMAIN"] != "https://demo-main.dev" {
 		t.Errorf("web environment %v", env)
 	}
-	if env := object(object(services, "api"), "environment"); env["DEVKIT_PUBLIC_URL"] != "https://demo-main.share.test" {
+	if env := object(object(services, "api"), "environment"); env["DEVKIT_PUBLIC_URL"] != "https://p1.share.test" {
 		t.Fatalf("missing API share URL: %v", env)
 	}
 	if _, has := object(services, "db")["environment"]; has {
@@ -457,6 +461,9 @@ func TestSetPublicURLChangesWebAndOptedInServices(t *testing.T) {
 	project, _ = readCompose(path)
 	if _, has := object(object(object(project, "services"), "api"), "environment")["DEVKIT_PUBLIC_URL"]; has {
 		t.Fatal("API retained expired share URL")
+	}
+	if _, found := object(object(object(project, "services"), "web"), "labels")[rule]; found {
+		t.Fatal("retained LAN route")
 	}
 	env := object(object(object(project, "services"), "web"), "environment")
 	if _, has := env["DEVKIT_PUBLIC_URL"]; has || env["DEVBOX_PUBLIC_URL"] != nil || ups != 1 {
@@ -583,5 +590,29 @@ func TestDoctorChecksSharesWithoutChangingThem(t *testing.T) {
 	cf.refuse = "dns_records"
 	if checks := shareChecks(); len(checks) != 1 || checks[0].Status != "fail" || !strings.Contains(checks[0].Detail, "DNS") {
 		t.Errorf("no DNS access: %+v", checks)
+	}
+}
+
+func TestLANShareRoute(t *testing.T) {
+	labels := map[string]any{"devkit.url": "https://demo-main.dev.test", "traefik.http.routers.demo-main.service": "demo-main"}
+	const prefix = "traefik.http.routers.devkit_share_demo-main."
+	for _, tc := range []struct{ url, rule string }{
+		{"https://p1.dev.test", "Host(`p1.dev.test`)"},
+		{"https://p2.dev.test", "Host(`p2.dev.test`)"},
+		{"", ""},
+		{"https://p1.public.test", ""},
+		{"https://demo-main.dev.test", ""},
+	} {
+		setLANShareRoute(labels, "demo-main", tc.url)
+		if tc.rule != "" {
+			if labels[prefix+"rule"] != tc.rule || labels[prefix+"service"] != "demo-main" || labels[prefix+"tls"] != "true" || labels[prefix+"priority"] != "1" {
+				t.Fatal(labels)
+			}
+		} else if len(labels) != 2 {
+			t.Fatalf("stale alias for %q: %v", tc.url, labels)
+		}
+		if setLANShareRoute(labels, "demo-main", tc.url) {
+			t.Fatalf("repeated update changed %q", tc.url)
+		}
 	}
 }

@@ -102,6 +102,29 @@ func shareTarget(preview string) (container, string, error) {
 	return container{}, "", fail("No preview %s on this host (see devkit ls).", preview)
 }
 
+// setLANShareRoute lets split DNS clients use the share name covered by the
+// preview's wildcard certificate. More specific private routes keep precedence.
+func setLANShareRoute(labels map[string]any, preview, publicURL string) bool {
+	prefix := "traefik.http.routers.devkit_share_" + preview + "."
+	zone, ok := strings.CutPrefix(str(labels, "devkit.url"), "https://"+preview+".")
+	host, https := strings.CutPrefix(publicURL, "https://")
+	name, sibling := strings.CutSuffix(host, "."+zone)
+	active := ok && https && sibling && validDomain(host, 253) && domainLabel.MatchString(name) && name != preview &&
+		str(labels, "traefik.http.routers."+preview+".service") == preview
+	changed := false
+	for k, v := range map[string]string{"rule": "Host(`" + host + "`)", "tls": "true", "service": preview, "priority": "1"} {
+		key := prefix + k
+		if active && labels[key] != v {
+			labels[key] = v
+			changed = true
+		} else if _, exists := labels[key]; !active && exists {
+			delete(labels, key)
+			changed = true
+		}
+	}
+	return changed
+}
+
 // setPublicURL updates the web service and any explicitly opted-in services.
 var setPublicURL = func(common, preview, publicURL string, apply bool) error {
 	path := filepath.Join(runDir(common, preview), "compose.json")
@@ -118,6 +141,9 @@ var setPublicURL = func(common, preview, publicURL string, apply bool) error {
 		}
 		if !isWeb(labels) && labels["devkit.share.public-url"] != "true" {
 			continue
+		}
+		if isWeb(labels) && setLANShareRoute(object(service, "labels"), preview, publicURL) {
+			changed = true
 		}
 		env := ensureObject(service, "environment")
 		// DEVBOX_PUBLIC_URL is its name from before devbox became devkit; projects may still read it.
