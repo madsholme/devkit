@@ -20,6 +20,8 @@ On narrow screens, use the navigation menu beside the logo:
   folders, following SwiftConfig's host list/detail flow. Configure `projects_dir` in the host
   config to discover projects before anything runs. Open a project for **Overview**, **Documents**, **Worktrees**,
   **Containers** and **Virtual machines**. The top menu always remains global.
+  On narrow screens, each directory entry stacks its checkout details and resource counts.
+  Project and worktree menus wrap so every section is reachable without sideways scrolling.
   Overview shows project information and the main checkout. Worktrees includes the main and
   linked checkouts; selecting one opens **Information**, **Containers** and **Virtual machines**
   scoped to that checkout. Project-wide runtime tables show worktree/branch links. Search is

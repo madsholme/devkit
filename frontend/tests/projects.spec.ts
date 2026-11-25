@@ -142,3 +142,22 @@ test('actions in a selected worktree retain exact checkout, container and VM tar
   await expect(page.getByRole('dialog')).toContainText('Completed synthetic action')
   expect(actions[2]).toMatchObject({ action: 'vm-start', vm: 'vm-search' })
 })
+
+for (const width of [320, 390, 768]) {
+  test(`project directory and section links fit at ${width}px without sideways scrolling`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto('/#/projects')
+    const project = page.getByRole('link', { name: 'atlas', exact: true })
+    await expect(project).toBeVisible()
+    const fits = (element: Element) => element.scrollWidth <= element.clientWidth
+    const directory = page.locator('.project-directory [data-slot="table-container"]')
+    expect(await directory.evaluate(fits)).toBe(true)
+    await project.click()
+    const sections = page.getByRole('navigation', { name: 'Project sections' })
+    expect(await sections.evaluate(fits)).toBe(true)
+    await sections.getByRole('link', { name: /Worktrees/ }).click()
+    await page.getByRole('link', { name: 'feature/search', exact: true }).click()
+    expect(await page.getByRole('navigation', { name: 'Worktree sections' }).evaluate(fits)).toBe(true)
+    expect(await page.locator('html').evaluate(fits)).toBe(true)
+  })
+}

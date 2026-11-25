@@ -907,7 +907,7 @@
   .project-section-nav {
     display: flex;
     gap: 0.25rem;
-    overflow-x: auto;
+    flex-wrap: wrap;
     border-bottom: 1px solid var(--border);
     margin-bottom: 1.75rem;
   }
@@ -1066,6 +1066,47 @@
     margin-top: 0.35rem;
   }
   @media (max-width: 900px) {
+    .project-directory table,
+    .project-directory tbody {
+      display: block;
+    }
+    .project-directory thead {
+      position: absolute;
+      clip-path: inset(50%);
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+    .project-directory-row {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+      padding: 1rem;
+    }
+    .project-directory .project-directory-row td {
+      min-width: 0;
+      padding: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .project-directory-row td:nth-child(-n + 2) {
+      grid-column: 1 / -1;
+    }
+    .project-directory .project-directory-row td:first-child {
+      padding-right: 2.5rem;
+    }
+    .project-directory-row td:last-child {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+    }
+    .project-directory-row .inventory-count-link {
+      white-space: normal;
+    }
+    .directory-note {
+      overflow-wrap: anywhere;
+    }
     .project-overview-grid {
       grid-template-columns: minmax(0, 1fr);
     }
